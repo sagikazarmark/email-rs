@@ -1,0 +1,48 @@
+[package]
+name = "email-message"
+description = "Typed outbound email message and address model"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+keywords = { workspace = true }
+categories = { workspace = true }
+
+[dependencies]
+addr-spec = { version = "0.9", features = ["literals"] }
+arbitrary = { version = "1", features = ["derive"], optional = true }
+mail-parser = "0.11"
+schemars = { version = "1.2", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+thiserror = "2"
+time = { version = "0.3", default-features = false }
+
+[dev-dependencies]
+criterion = "0.8"
+proptest = "1"
+serde_json = "1"
+time = { version = "0.3", default-features = false, features = ["formatting", "parsing"] }
+
+[features]
+default = []
+# Enables [`mime_types::MimePart`], the multipart/leaf MIME tree used by full-
+# message rendering in `email-message-wire`. **Does not pull the third-
+# party `mime` crate**, `email-message`'s MIME types are entirely
+# in-tree. The feature gate is named for the type it exposes, not for
+# any external dependency. The value-object MIME types (`ContentType`,
+# `MediaType`, `ParameterValue`, `ContentTransferEncoding`,
+# `ContentDisposition`) are always available regardless of feature
+# flags.
+mime = []
+serde = ["dep:serde", "time/serde"]
+schemars = ["dep:schemars"]
+arbitrary = ["dep:arbitrary"]
+
+[package.metadata.docs.rs]
+all-features = true
+
+[[bench]]
+name = "parsing"
+harness = false

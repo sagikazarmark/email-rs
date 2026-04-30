@@ -1,0 +1,22 @@
+[package]
+name = "email-message-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.email-message]
+path = ".."
+features = ["arbitrary"]
+
+[[bin]]
+name = "address_list_from_str"
+path = "fuzz_targets/address_list_from_str.rs"
+test = false
+doc = false
+bench = false

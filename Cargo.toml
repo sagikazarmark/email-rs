@@ -13,6 +13,9 @@ keywords = ["email", "smtp", "mail", "async", "mailer"]
 categories = ["email", "network-programming", "asynchronous"]
 
 [workspace.dependencies]
+email-message = { version = "0.0.1", path = "crates/email-message"  }
+email-message-wire = { version = "0.0.1", path = "crates/email-message-wire"  }
+email-transport = { version = "0.0.1", path = "crates/email-transport"  }
 
 [workspace.metadata.release]
 sign-commit = true
