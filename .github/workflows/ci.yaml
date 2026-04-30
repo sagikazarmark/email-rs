@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Rust
+        uses: ./.github/actions/rust/
+
+      - name: Build
+        run: cargo build --workspace --all-targets --all-features
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Rust
+        uses: ./.github/actions/rust/
+
+      - name: Run tests
+        run: cargo test --workspace --all-features
+
+  benchmarks:
+    name: Benchmarks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Rust
+        uses: ./.github/actions/rust/
+
+      - name: Run benchmarks
+        run: cargo bench --workspace --all-features
+
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: -D warnings
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Rust
+        uses: ./.github/actions/rust/
+
+      - name: Build documentation
+        run: cargo doc --workspace --all-features --no-deps
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Rust
+        uses: ./.github/actions/rust/
+
+      - name: Run fmt
+        run: cargo fmt -- --check
+
+      - name: Run clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  audit:
+    name: Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Rust
+        uses: ./.github/actions/rust/
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Run cargo audit
+        run: cargo audit
+
+  deny:
+    name: Deny
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Rust
+        uses: ./.github/actions/rust/
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+
+      - name: Run cargo deny
+        run: cargo deny check
+
+  semver-checks:
+    name: Semver checks
+    runs-on: ubuntu-latest
+    # Only meaningful on PRs: the baseline is the PR's base branch.
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # Full history so the baseline commit is present locally.
+          fetch-depth: 0
+
+      - name: Set up Rust
+        uses: ./.github/actions/rust/
+
+      - name: Run cargo-semver-checks
+        uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2
+        with:
+          # Check the full public surface, not just default features, so
+          # feature-gated API breakage (extract, mock, tracing) is caught too.
+          feature-group: all-features
+          # Compare against the PR's merge base rather than the last published
+          # version on crates.io. The crate is pre-release; the main branch is
+          # the moving source of truth until 0.1.0 ships.
+          baseline-rev: ${{ github.event.pull_request.base.sha }}
