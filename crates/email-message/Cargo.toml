@@ -15,15 +15,15 @@ addr-spec = { version = "0.9", features = ["literals"] }
 arbitrary = { version = "1", features = ["derive"], optional = true }
 mail-parser = "0.11"
 schemars = { version = "1.2", optional = true }
-serde = { version = "1", features = ["derive"], optional = true }
-thiserror = "2"
-time = { version = "0.3", default-features = false }
+serde = { workspace = true, features = ["derive"], optional = true }
+thiserror = { workspace = true }
+time = { workspace = true }
 
 [dev-dependencies]
 criterion = "0.8"
-proptest = "1"
-serde_json = "1"
-time = { version = "0.3", default-features = false, features = ["formatting", "parsing"] }
+proptest = { workspace = true }
+serde_json = { workspace = true }
+time = { workspace = true, features = ["formatting", "parsing"] }
 
 [features]
 default = []

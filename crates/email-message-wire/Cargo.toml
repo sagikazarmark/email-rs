@@ -13,8 +13,8 @@ categories = ["email", "encoding"]
 [dependencies]
 base64 = "0.22"
 email-message = { workspace = true, features = ["mime"] }
-thiserror = "2"
-time = { version = "0.3", default-features = false, features = ["parsing", "formatting"] }
+thiserror = { workspace = true }
+time = { workspace = true, features = ["parsing", "formatting"] }
 
 [dev-dependencies]
-proptest = "1"
+proptest = { workspace = true }
