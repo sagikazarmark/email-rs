@@ -9,6 +9,7 @@
     cargo-audit
     cargo-deny
     cargo-expand
+    cargo-fuzz
     cargo-release
     cargo-watch
   ];
