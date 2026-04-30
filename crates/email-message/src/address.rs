@@ -325,7 +325,6 @@ impl From<Group> for Address {
 
 impl Address {
     /// Returns the mailbox entries represented by this address item.
-    #[must_use]
     pub fn mailboxes(&self) -> impl Iterator<Item = &Mailbox> {
         match self {
             Self::Mailbox(mailbox) => std::slice::from_ref(mailbox).iter(),
