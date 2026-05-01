@@ -279,6 +279,7 @@ pub enum StructuredSendCapability {
     RequiresTransportOptions,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct SendReport {
@@ -777,7 +778,7 @@ mod tests {
     use email_message::{Address, Body, EmailAddress, Envelope, Message};
 
     use super::{
-        Capabilities, ErrorKind, SendOptions, StructuredSendCapability, TransportError,
+        Capabilities, ErrorKind, SendOptions, SendReport, StructuredSendCapability, TransportError,
         structured_accepted_for,
     };
 
@@ -842,6 +843,29 @@ mod tests {
         let accepted = structured_accepted_for(&message, &options, capabilities);
 
         assert_eq!(accepted_strings(&accepted), vec!["envelope@example.com"]);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn send_report_round_trips_through_serde() {
+        let report = SendReport::new("postmark")
+            .with_provider_message_id("message-id")
+            .with_accepted(["recipient@example.com"
+                .parse::<EmailAddress>()
+                .expect("recipient parses")]);
+
+        let json = serde_json::to_value(&report).expect("send report serializes");
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "provider": "postmark",
+                "provider_message_id": "message-id",
+                "accepted": ["recipient@example.com"],
+            })
+        );
+
+        let back: SendReport = serde_json::from_value(json).expect("send report deserializes");
+        assert_eq!(back, report);
     }
 
     #[test]
