@@ -13,9 +13,10 @@ keywords = ["email", "smtp", "mail", "async", "mailer"]
 categories = ["email", "network-programming", "asynchronous"]
 
 [workspace.dependencies]
-email-message = { version = "0.5.0", path = "crates/email-message" }
-email-message-wire = { version = "0.5.0", path = "crates/email-message-wire" }
-email-transport = { version = "0.5.0", path = "crates/email-transport" }
+email-kit = { version = "0.5.0", path = "crates/email-kit", default-features = false }
+email-message = { version = "0.5.0", path = "crates/email-message", default-features = false }
+email-message-wire = { version = "0.5.0", path = "crates/email-message-wire", default-features = false }
+email-transport = { version = "0.5.0", path = "crates/email-transport", default-features = false }
 proptest = "1"
 schemars = "1.2"
 serde = "1"

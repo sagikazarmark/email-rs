@@ -1,0 +1,27 @@
+[package]
+name = "email-kit"
+description = "Convenience facade for the email-rs crates"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+keywords = { workspace = true }
+categories = { workspace = true }
+
+[dependencies]
+email-message = { workspace = true, default-features = false }
+email-message-wire = { workspace = true, default-features = false, optional = true }
+email-transport = { workspace = true, default-features = false }
+
+[features]
+default = ["email-message/default", "email-message-wire?/default", "email-transport/default"]
+arbitrary = ["email-message/arbitrary"]
+schemars = ["email-message/schemars", "email-transport/schemars"]
+serde = ["email-message/serde", "email-transport/serde"]
+tracing = ["email-transport/tracing"]
+wire = ["dep:email-message-wire"]
+
+[package.metadata.docs.rs]
+all-features = true
