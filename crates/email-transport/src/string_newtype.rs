@@ -113,7 +113,8 @@ pub fn __validate_string_newtype(value: &str) -> Result<(), StringNewtypeError> 
 ///   `new` constructor (validating), `from_str` / `try_from` /
 ///   `into_inner` / `as_str` / `Display`, plus `Clone` / `Debug` /
 ///   `PartialEq` / `Eq` / `Hash`. With the default-enabled `serde`
-///   feature, it also generates `Serialize` / `Deserialize`.
+///   feature, it also generates `Serialize` / `Deserialize`; with the
+///   `schemars` feature, it generates `JsonSchema`.
 /// - **`string_newtype! { @unchecked Name }`**, adds an additional
 ///   `pub fn new_unchecked` that skips validation. Reserved for trusted
 ///   inputs only (internal constants in trusted code paths). The
@@ -228,6 +229,7 @@ macro_rules! __string_newtype_impls {
         }
 
         $crate::__string_newtype_serde_impls!($name);
+        $crate::__string_newtype_schemars_impls!($name);
     };
 }
 
@@ -271,6 +273,48 @@ macro_rules! __string_newtype_serde_impls {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __string_newtype_serde_impls {
+    ($name:ident) => {};
+}
+
+/// Internal helper of [`string_newtype!`], emits schemars impls when the
+/// `schemars` feature is enabled. Not part of the public surface.
+#[cfg(feature = "schemars")]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __string_newtype_schemars_impls {
+    ($name:ident) => {
+        impl $crate::__macro_schemars::JsonSchema for $name {
+            fn inline_schema() -> bool {
+                true
+            }
+
+            fn schema_name() -> ::std::borrow::Cow<'static, str> {
+                stringify!($name).into()
+            }
+
+            fn schema_id() -> ::std::borrow::Cow<'static, str> {
+                concat!(module_path!(), "::", stringify!($name)).into()
+            }
+
+            fn json_schema(
+                _generator: &mut $crate::__macro_schemars::SchemaGenerator,
+            ) -> $crate::__macro_schemars::Schema {
+                $crate::__macro_schemars::json_schema!({
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": $crate::STRING_NEWTYPE_MAX_BYTES,
+                })
+            }
+        }
+    };
+}
+
+/// Internal helper of [`string_newtype!`], intentionally no-ops when the
+/// `schemars` feature is disabled. Not part of the public surface.
+#[cfg(not(feature = "schemars"))]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __string_newtype_schemars_impls {
     ($name:ident) => {};
 }
 

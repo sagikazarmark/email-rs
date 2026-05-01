@@ -12,6 +12,7 @@ categories = { workspace = true }
 
 [dependencies]
 email-message = { workspace = true }
+schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
@@ -28,6 +29,7 @@ tracing-subscriber = "0.3"
 
 [features]
 default = ["serde"]
+schemars = ["dep:schemars", "email-message/schemars"]
 serde = ["dep:serde", "dep:serde_json", "email-message/serde"]
 tracing = ["dep:tracing", "dep:web-time"]
 

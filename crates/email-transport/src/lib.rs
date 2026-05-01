@@ -51,3 +51,12 @@ pub use email_message;
 #[cfg(feature = "serde")]
 #[doc(hidden)]
 pub use serde as __macro_serde;
+
+/// Re-export of the `schemars` crate so the [`string_newtype!`] macro can
+/// generate [`schemars::JsonSchema`] impls without requiring downstream macro
+/// users to declare `schemars` as a direct dependency.
+///
+/// Not part of the curated rustdoc surface; do not name directly.
+#[cfg(feature = "schemars")]
+#[doc(hidden)]
+pub use schemars as __macro_schemars;

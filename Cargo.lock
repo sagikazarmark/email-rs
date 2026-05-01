@@ -302,6 +302,7 @@ version = "0.4.1"
 dependencies = [
  "email-message",
  "proptest",
+ "schemars",
  "serde",
  "serde_json",
  "thiserror",
