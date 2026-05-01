@@ -1,0 +1,26 @@
+[package]
+name = "email-transport-test"
+description = "First-party test transports and conformance helpers for email-transport"
+publish = false
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+keywords = ["email", "transport", "testing"]
+categories = ["email", "development-tools::testing"]
+
+[dependencies]
+email-message = { workspace = true }
+email-message-wire = { workspace = true }
+email-transport = { workspace = true }
+time = { workspace = true, features = ["formatting"], optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[features]
+default = []
+conformance = ["dep:time"]

@@ -14,13 +14,15 @@ categories = { workspace = true }
 email-message = { workspace = true, default-features = false }
 email-message-wire = { workspace = true, default-features = false, optional = true }
 email-transport = { workspace = true, default-features = false }
+email-transport-resend = { workspace = true, default-features = false, optional = true }
 
 [features]
-default = ["email-message/default", "email-message-wire?/default", "email-transport/default"]
+default = ["email-message/default", "email-message-wire?/default", "email-transport/default", "email-transport-resend?/default"]
 arbitrary = ["email-message/arbitrary"]
 schemars = ["email-message/schemars", "email-transport/schemars"]
-serde = ["email-message/serde", "email-transport/serde"]
+serde = ["email-message/serde", "email-transport/serde", "email-transport-resend?/serde"]
 tracing = ["email-transport/tracing"]
+transport-resend = ["dep:email-transport-resend"]
 wire = ["dep:email-message-wire"]
 
 [package.metadata.docs.rs]
