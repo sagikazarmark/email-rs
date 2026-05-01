@@ -270,6 +270,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
 
 [[package]]
+name = "email-kit"
+version = "0.5.0"
+dependencies = [
+ "email-message",
+ "email-message-wire",
+ "email-transport",
+]
+
+[[package]]
 name = "email-message"
 version = "0.5.0"
 dependencies = [
