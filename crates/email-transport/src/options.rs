@@ -7,8 +7,19 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use email_message::Envelope;
+#[cfg(feature = "serde")]
+use thiserror::Error;
 
-#[derive(Default)]
+/// Per-send controls shared by structured and raw transport sends.
+///
+/// With the `serde` feature enabled, this serializes as a sparse object:
+/// absent options are omitted, [`TransportOptions`] uses its provider-keyed
+/// representation, and `timeout` is encoded as `{ "secs": u64, "nanos": u32 }`.
+/// Deserialization is intentionally registry-driven and not implemented on this
+/// type because provider-specific options need a [`TransportOptionRegistry`];
+/// use [`TransportOptionRegistry::deserialize_send_options`] instead.
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[derive(Debug, Default)]
 #[non_exhaustive]
 pub struct SendOptions {
     /// Optional custom SMTP envelope for structured [`crate::Transport`] sends.
@@ -17,21 +28,28 @@ pub struct SendOptions {
     /// [`crate::Capabilities::custom_envelope`]. Other structured transports may ignore
     /// it. [`crate::RawTransport`] methods take an explicit [`Envelope`] argument, and
     /// that argument is authoritative; raw transports ignore this field.
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub envelope: Option<Envelope>,
     /// Typed, in-process provider-specific controls.
     ///
     /// With the `serde` feature enabled, [`TransportOptions`] serializes as a
     /// provider-keyed JSON object and can be hydrated through
     /// `TransportOptionRegistry`.
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "TransportOptions::is_empty")
+    )]
     pub transport_options: TransportOptions,
     /// Upper bound on provider-call duration for this send attempt. Transports
     /// advertising `Capabilities::timeout` must honor it; others should ignore it.
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub timeout: Option<Duration>,
     /// Provider-level idempotency token for this attempt. Transports advertising
     /// `Capabilities::idempotency_key` must forward it; others should ignore it.
     ///
     /// Validated at construction (rejects empty, NUL, CR/LF, non-tab control
     /// characters, and values longer than 1 KiB), see [`IdempotencyKey`].
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub idempotency_key: Option<IdempotencyKey>,
     /// Opaque correlation identifier carried end-to-end from queue to transport.
     /// Built-in transports do not automatically expose it to providers; it is
@@ -40,6 +58,7 @@ pub struct SendOptions {
     ///
     /// Validated at construction with the same rules as
     /// [`IdempotencyKey`], see [`CorrelationId`].
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub correlation_id: Option<CorrelationId>,
 }
 
@@ -332,6 +351,51 @@ impl TransportOptionRegistry {
         Ok(())
     }
 
+    /// Deserialize [`SendOptions`] from its queue/wire JSON representation.
+    ///
+    /// Unknown top-level fields are ignored for forward compatibility. Unknown
+    /// provider keys inside `transport_options` are rejected because they would
+    /// otherwise be silently dropped when converting into typed slots. Callers
+    /// that intentionally tolerate unknown provider options can use
+    /// [`SendOptionsDeserializeError::ignore_unknown_transport_option`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SendOptionsDeserializeError`] when the payload shape is
+    /// malformed, a registered provider option fails to deserialize, or
+    /// `transport_options` contains an unregistered provider key.
+    pub fn deserialize_send_options(
+        &self,
+        value: serde_json::Value,
+    ) -> Result<SendOptions, SendOptionsDeserializeError> {
+        let wire: SendOptionsWire = serde_json::from_value(value)?;
+        let mut options = SendOptions {
+            envelope: wire.envelope,
+            transport_options: TransportOptions::default(),
+            timeout: wire.timeout,
+            idempotency_key: wire.idempotency_key,
+            correlation_id: wire.correlation_id,
+        };
+        let mut unknown_provider_key = None;
+
+        for (provider_key, value) in wire.transport_options {
+            if self.hydrate_into(&provider_key, &value, &mut options.transport_options)? {
+                continue;
+            }
+
+            unknown_provider_key.get_or_insert(provider_key);
+        }
+
+        if let Some(provider_key) = unknown_provider_key {
+            return Err(SendOptionsDeserializeError::UnknownTransportOption {
+                provider_key,
+                options,
+            });
+        }
+
+        Ok(options)
+    }
+
     /// Deserialize `value` for `provider_key` and overwrite the matching typed
     /// slot in `options` when the provider key is registered.
     ///
@@ -360,6 +424,46 @@ impl TransportOptionRegistry {
 }
 
 #[cfg(feature = "serde")]
+#[derive(Debug, Error)]
+#[non_exhaustive]
+pub enum SendOptionsDeserializeError {
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+    /// A provider option was present in the wire payload, but no matching
+    /// [`TransportOption`] type was registered for `provider_key`.
+    #[error("unknown TransportOption provider key `{provider_key}`")]
+    UnknownTransportOption {
+        provider_key: String,
+        options: SendOptions,
+    },
+}
+
+#[cfg(feature = "serde")]
+impl SendOptionsDeserializeError {
+    /// Recover the partially hydrated [`SendOptions`] when the only failure was
+    /// an unknown provider option.
+    ///
+    /// Malformed JSON and malformed registered provider options stay errors.
+    pub fn ignore_unknown_transport_option(self) -> Result<SendOptions, Self> {
+        match self {
+            Self::UnknownTransportOption { options, .. } => Ok(options),
+            error => Err(error),
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+#[derive(Default, serde::Deserialize)]
+#[serde(default)]
+struct SendOptionsWire {
+    envelope: Option<Envelope>,
+    transport_options: serde_json::Map<String, serde_json::Value>,
+    timeout: Option<Duration>,
+    idempotency_key: Option<IdempotencyKey>,
+    correlation_id: Option<CorrelationId>,
+}
+
+#[cfg(feature = "serde")]
 fn decode_transport_option<T>(
     value: &serde_json::Value,
     options: &mut TransportOptions,
@@ -372,7 +476,7 @@ where
 }
 
 #[cfg(feature = "serde")]
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum TransportOptionRegistryError {
     #[error(
@@ -401,10 +505,15 @@ mod tests {
     use crate::{STRING_NEWTYPE_MAX_BYTES, StringNewtypeError};
 
     #[cfg(feature = "serde")]
-    use super::CorrelationId;
+    use email_message::Envelope;
+
+    #[cfg(feature = "serde")]
+    use super::{CorrelationId, SendOptions};
     use super::{IdempotencyKey, TransportOption, TransportOptions};
     #[cfg(feature = "serde")]
-    use super::{TransportOptionRegistry, TransportOptionRegistryError};
+    use super::{
+        SendOptionsDeserializeError, TransportOptionRegistry, TransportOptionRegistryError,
+    };
 
     #[derive(Debug, PartialEq, Eq)]
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -507,6 +616,186 @@ mod tests {
         // Deserialize routes through the generated new constructor, so validation runs.
         let result: Result<CorrelationId, _> = serde_json::from_str("\"hi\\r\\nbad\"");
         assert!(result.is_err());
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn send_options_serialize_empty_as_empty_object() {
+        let json = serde_json::to_value(SendOptions::default()).expect("send options serialize");
+
+        assert_eq!(json, serde_json::json!({}));
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn send_options_serialize_sparse_provider_keyed_payload() {
+        let mut transport_options = TransportOptions::default();
+        transport_options.insert(TestOption(String::from("value")));
+
+        let options = SendOptions::new()
+            .with_transport_options(transport_options)
+            .with_timeout(std::time::Duration::new(3, 25))
+            .with_idempotency_key(IdempotencyKey::new("idem-123").unwrap())
+            .with_correlation_id(CorrelationId::new("corr-456").unwrap());
+
+        let json = serde_json::to_value(options).expect("send options serialize");
+
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "transport_options": {"test": "value"},
+                "timeout": {"secs": 3, "nanos": 25},
+                "idempotency_key": "idem-123",
+                "correlation_id": "corr-456"
+            })
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn send_options_serialize_envelope() {
+        let envelope = Envelope::new(
+            Some("sender@example.com".parse().unwrap()),
+            vec!["recipient@example.com".parse().unwrap()],
+        );
+        let options = SendOptions::new().with_envelope(envelope);
+
+        let json = serde_json::to_value(options).expect("send options serialize");
+
+        assert_eq!(json["envelope"]["mail_from"], "sender@example.com");
+        assert_eq!(
+            json["envelope"]["rcpt_to"],
+            serde_json::json!(["recipient@example.com"])
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn send_options_deserialize_hydrates_registered_transport_options() {
+        let mut registry = TransportOptionRegistry::new();
+        registry
+            .register::<TestOption>()
+            .expect("register succeeds");
+
+        let options = registry
+            .deserialize_send_options(serde_json::json!({
+                "envelope": {
+                    "mail_from": "sender@example.com",
+                    "rcpt_to": ["recipient@example.com"]
+                },
+                "transport_options": {"test": "value"},
+                "timeout": {"secs": 3, "nanos": 25},
+                "idempotency_key": "idem-123",
+                "correlation_id": "corr-456",
+                "future_field": "ignored"
+            }))
+            .expect("send options deserialize");
+
+        let envelope = options.envelope.as_ref().expect("envelope hydrates");
+        assert_eq!(
+            envelope
+                .mail_from()
+                .map(email_message::EmailAddress::as_str),
+            Some("sender@example.com")
+        );
+        assert_eq!(
+            envelope
+                .rcpt_to()
+                .iter()
+                .map(email_message::EmailAddress::as_str)
+                .collect::<Vec<_>>(),
+            vec!["recipient@example.com"]
+        );
+        assert_eq!(options.timeout, Some(std::time::Duration::new(3, 25)));
+        assert_eq!(
+            options.idempotency_key.as_ref().map(IdempotencyKey::as_str),
+            Some("idem-123")
+        );
+        assert_eq!(
+            options.correlation_id.as_ref().map(CorrelationId::as_str),
+            Some("corr-456")
+        );
+        assert_eq!(
+            options
+                .transport_options
+                .get::<TestOption>()
+                .map(|value| value.0.as_str()),
+            Some("value")
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn send_options_deserialize_rejects_unknown_transport_options_by_default() {
+        let registry = TransportOptionRegistry::new();
+
+        let result = registry.deserialize_send_options(serde_json::json!({
+            "transport_options": {"unknown": {"value": 1}}
+        }));
+
+        match result {
+            Ok(_) => panic!("unknown provider key should fail"),
+            Err(SendOptionsDeserializeError::UnknownTransportOption {
+                provider_key,
+                options,
+            }) => {
+                assert_eq!(provider_key, "unknown");
+                assert!(options.transport_options.is_empty());
+            }
+            Err(error) => panic!("got {error}"),
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn send_options_deserialize_can_explicitly_ignore_unknown_transport_option() {
+        let mut registry = TransportOptionRegistry::new();
+        registry
+            .register::<TestOption>()
+            .expect("register succeeds");
+
+        let error = registry
+            .deserialize_send_options(serde_json::json!({
+                "transport_options": {
+                    "test": "value",
+                    "unknown": {"value": 1}
+                }
+            }))
+            .expect_err("unknown provider key should fail");
+
+        match &error {
+            SendOptionsDeserializeError::UnknownTransportOption { provider_key, .. } => {
+                assert_eq!(provider_key, "unknown");
+            }
+            error => panic!("got {error}"),
+        }
+
+        let options = error
+            .ignore_unknown_transport_option()
+            .expect("unknown provider key can be ignored");
+
+        assert_eq!(
+            options
+                .transport_options
+                .get::<TestOption>()
+                .map(|value| value.0.as_str()),
+            Some("value")
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn send_options_deserialize_rejects_malformed_known_transport_options() {
+        let mut registry = TransportOptionRegistry::new();
+        registry
+            .register::<OtherTestOption>()
+            .expect("register succeeds");
+
+        let result = registry.deserialize_send_options(serde_json::json!({
+            "transport_options": {"other": "not-an-object"}
+        }));
+
+        assert!(matches!(result, Err(SendOptionsDeserializeError::Json(_))));
     }
 
     #[test]
