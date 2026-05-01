@@ -64,13 +64,7 @@ pub use email_message as message;
 #[cfg(feature = "wire")]
 pub use email_message_wire as wire;
 
-/// Core transport APIs and optional provider transports.
-pub mod transport {
-    pub use email_transport::*;
-
-    #[cfg(feature = "transport-resend")]
-    pub use email_transport_resend as resend;
-}
+pub mod transport;
 
 /// Common imports for applications using the email-rs crate family.
 pub mod prelude {
