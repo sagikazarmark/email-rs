@@ -3,7 +3,7 @@ members = ["crates/*"]
 resolver = "2"
 
 [workspace.package]
-version = "0.4.0"
+version = "0.4.1"
 edition = "2024"
 rust-version = "1.92"
 license = "MIT"
@@ -13,9 +13,9 @@ keywords = ["email", "smtp", "mail", "async", "mailer"]
 categories = ["email", "network-programming", "asynchronous"]
 
 [workspace.dependencies]
-email-message = { version = "0.4.0", path = "crates/email-message" }
-email-message-wire = { version = "0.4.0", path = "crates/email-message-wire" }
-email-transport = { version = "0.4.0", path = "crates/email-transport" }
+email-message = { version = "0.4.1", path = "crates/email-message" }
+email-message-wire = { version = "0.4.1", path = "crates/email-message-wire" }
+email-transport = { version = "0.4.1", path = "crates/email-transport" }
 proptest = "1"
 serde = "1"
 serde_json = "1"
