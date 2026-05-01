@@ -280,6 +280,7 @@ pub enum StructuredSendCapability {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct SendReport {
@@ -777,8 +778,10 @@ pub fn standard_message_headers(message: &Message) -> Result<Vec<Header>, Transp
 mod tests {
     use email_message::{Address, Body, EmailAddress, Envelope, Message};
 
+    #[cfg(any(feature = "serde", feature = "schemars"))]
+    use super::SendReport;
     use super::{
-        Capabilities, ErrorKind, SendOptions, SendReport, StructuredSendCapability, TransportError,
+        Capabilities, ErrorKind, SendOptions, StructuredSendCapability, TransportError,
         structured_accepted_for,
     };
 
@@ -866,6 +869,17 @@ mod tests {
 
         let back: SendReport = serde_json::from_value(json).expect("send report deserializes");
         assert_eq!(back, report);
+    }
+
+    #[cfg(feature = "schemars")]
+    #[test]
+    fn send_report_schema_includes_public_wire_fields() {
+        let schema = schemars::schema_for!(SendReport);
+        let value = schema.as_value();
+
+        assert!(value.pointer("/properties/provider").is_some());
+        assert!(value.pointer("/properties/provider_message_id").is_some());
+        assert!(value.pointer("/properties/accepted").is_some());
     }
 
     #[test]

@@ -19,6 +19,7 @@ use thiserror::Error;
 /// type because provider-specific options need a [`TransportOptionRegistry`];
 /// use [`TransportOptionRegistry::deserialize_send_options`] instead.
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[derive(Debug, Default)]
 #[non_exhaustive]
 pub struct SendOptions {
@@ -38,6 +39,10 @@ pub struct SendOptions {
     #[cfg_attr(
         feature = "serde",
         serde(skip_serializing_if = "TransportOptions::is_empty")
+    )]
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(default, skip_serializing_if = "TransportOptions::is_empty")
     )]
     pub transport_options: TransportOptions,
     /// Upper bound on provider-call duration for this send attempt. Transports
@@ -292,6 +297,24 @@ impl serde::Serialize for TransportOptions {
     }
 }
 
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for TransportOptions {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "TransportOptions".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::TransportOptions").into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "object",
+            "additionalProperties": true,
+        })
+    }
+}
+
 /// Registry of queue/wire codecs for concrete [`TransportOption`] types.
 ///
 /// Serialization does not need a registry because every typed slot stores its
@@ -508,7 +531,9 @@ mod tests {
     use email_message::Envelope;
 
     #[cfg(feature = "serde")]
-    use super::{CorrelationId, SendOptions};
+    use super::CorrelationId;
+    #[cfg(any(feature = "serde", feature = "schemars"))]
+    use super::SendOptions;
     use super::{IdempotencyKey, TransportOption, TransportOptions};
     #[cfg(feature = "serde")]
     use super::{
@@ -667,6 +692,40 @@ mod tests {
             json["envelope"]["rcpt_to"],
             serde_json::json!(["recipient@example.com"])
         );
+    }
+
+    #[test]
+    #[cfg(feature = "schemars")]
+    fn transport_options_schema_is_provider_keyed_object() {
+        let schema = schemars::schema_for!(TransportOptions);
+        let value = schema.as_value();
+
+        assert_eq!(
+            value.get("type").and_then(|value| value.as_str()),
+            Some("object")
+        );
+        assert_eq!(
+            value
+                .get("additionalProperties")
+                .and_then(|value| value.as_bool()),
+            Some(true)
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "schemars")]
+    fn send_options_schema_allows_omitting_transport_options() {
+        let schema = schemars::schema_for!(SendOptions);
+        let value = schema.as_value();
+
+        assert!(value.pointer("/properties/transport_options").is_some());
+        if let Some(required) = value.get("required").and_then(|value| value.as_array()) {
+            assert!(
+                !required
+                    .iter()
+                    .any(|value| value.as_str() == Some("transport_options"))
+            );
+        }
     }
 
     #[test]
