@@ -6,6 +6,7 @@ Convenience facade for the email-rs crates.
 
 - `email-message` as `email_kit::message`
 - `email-transport` as `email_kit::transport`
+- `email-transport-resend` as `email_kit::transport::resend` when the `transport-resend` feature is enabled
 - `email-message-wire` as `email_kit::wire` when the `wire` feature is enabled
 
 Use `email_kit::prelude::*` for common message types and transport traits. With the `wire` feature enabled, the prelude also includes wire helpers.
@@ -17,6 +18,7 @@ Use `email_kit::prelude::*` for common message types and transport traits. With 
 - `schemars`: enables JSON Schema support for message and transport types.
 - `arbitrary`: enables property-test generation support for message types.
 - `tracing`: enables `email-transport` tracing instrumentation.
+- `transport-resend`: enables Resend transport support through `email_kit::transport::resend`.
 - `wire`: enables RFC822/MIME parsing and rendering through `email-message-wire`.
 
 ## Development

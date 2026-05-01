@@ -1,0 +1,39 @@
+[package]
+name = "email-transport-resend"
+description = "Resend transport implementation for email-transport"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+keywords = ["email", "resend", "transactional"]
+categories = ["email", "network-programming"]
+
+[dependencies]
+email-message = { workspace = true }
+email-transport = { workspace = true }
+reqwest = { workspace = true }
+resend-rs = { version = "0.25", default-features = false }
+serde = { workspace = true, features = ["derive"], optional = true }
+serde_json = { workspace = true }
+url = "2"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true, features = ["time"] }
+
+[dev-dependencies]
+email-transport-test = { workspace = true, features = ["conformance"] }
+time = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+wiremock = "0.6"
+
+[features]
+default = ["resend-rs/default", "serde"]
+serde = ["dep:serde", "email-transport/serde"]
+
+[[example]]
+name = "resend_send"
+
+[package.metadata.docs.rs]
+all-features = true

@@ -5,6 +5,8 @@
 //!
 //! - `message` re-exports `email-message`.
 //! - `transport` re-exports `email-transport`.
+//! - Enable the `transport-resend` feature for `transport::resend`, which
+//!   re-exports `email-transport-resend`.
 //! - Enable the `wire` feature for `wire`, which re-exports
 //!   `email-message-wire`.
 //!
@@ -41,11 +43,34 @@
 //! # fn wire_example() {}
 //! # wire_example();
 //! ```
+//!
+//! With the `transport-resend` feature enabled, Resend-specific transport
+//! types are available through `email_kit::transport::resend`:
+//!
+//! ```rust
+//! # #[cfg(feature = "transport-resend")]
+//! # fn resend_example() {
+//! use email_kit::transport::resend::ResendTransport;
+//!
+//! let transport = ResendTransport::new("re_...");
+//! # let _ = transport;
+//! # }
+//! # #[cfg(not(feature = "transport-resend"))]
+//! # fn resend_example() {}
+//! # resend_example();
+//! ```
 
 pub use email_message as message;
 #[cfg(feature = "wire")]
 pub use email_message_wire as wire;
-pub use email_transport as transport;
+
+/// Core transport APIs and optional provider transports.
+pub mod transport {
+    pub use email_transport::*;
+
+    #[cfg(feature = "transport-resend")]
+    pub use email_transport_resend as resend;
+}
 
 /// Common imports for applications using the email-rs crate family.
 pub mod prelude {
