@@ -271,7 +271,7 @@ checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
 
 [[package]]
 name = "email-message"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "addr-spec",
  "arbitrary",
@@ -287,7 +287,7 @@ dependencies = [
 
 [[package]]
 name = "email-message-wire"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "base64",
  "email-message",
@@ -298,7 +298,7 @@ dependencies = [
 
 [[package]]
 name = "email-transport"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "email-message",
  "proptest",
