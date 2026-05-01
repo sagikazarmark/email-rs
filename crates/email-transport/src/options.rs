@@ -389,7 +389,7 @@ impl TransportOptionRegistry {
         if let Some(provider_key) = unknown_provider_key {
             return Err(SendOptionsDeserializeError::UnknownTransportOption {
                 provider_key,
-                options,
+                options: Box::new(options),
             });
         }
 
@@ -434,7 +434,7 @@ pub enum SendOptionsDeserializeError {
     #[error("unknown TransportOption provider key `{provider_key}`")]
     UnknownTransportOption {
         provider_key: String,
-        options: SendOptions,
+        options: Box<SendOptions>,
     },
 }
 
@@ -446,7 +446,7 @@ impl SendOptionsDeserializeError {
     /// Malformed JSON and malformed registered provider options stay errors.
     pub fn ignore_unknown_transport_option(self) -> Result<SendOptions, Self> {
         match self {
-            Self::UnknownTransportOption { options, .. } => Ok(options),
+            Self::UnknownTransportOption { options, .. } => Ok(*options),
             error => Err(error),
         }
     }
