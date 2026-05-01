@@ -44,7 +44,7 @@ impl<T> TracingTransport<T> {
 
     /// Add a low-cardinality provider label to emitted spans.
     ///
-    /// This identifies the configured transport provider before the wrapped
+    /// This identifies the configured provider label before the wrapped
     /// transport returns a [`SendReport`], so failures and cancellations can be
     /// attributed too. Prefer stable values such as `"resend"`, `"postmark"`,
     /// or `"smtp"`.

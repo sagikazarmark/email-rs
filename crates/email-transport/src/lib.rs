@@ -1,9 +1,18 @@
 //! Core transport traits and per-send option types.
 //!
-//! `Transport` models providers that accept structured [`email_message::Message`] values,
-//! while `RawTransport` is for providers such as SMTP that send an explicit envelope plus
-//! RFC822 bytes. Provider-specific options are carried through [`TransportOptions`] so the
+//! `Transport` models implementations that accept structured
+//! [`email_message::Message`] values, while `RawTransport` models
+//! implementations that send an explicit envelope plus RFC822 bytes.
+//! Provider-specific options are carried through [`TransportOptions`] so the
 //! core API stays transport-agnostic.
+//!
+//! Terminology:
+//!
+//! - A *transport* is the Rust abstraction/implementation used to send mail.
+//! - A *provider* is the external service or protocol identity behind a
+//!   transport, such as `"resend"`, `"postmark"`, or `"smtp"`.
+//! - An *instance* is one configured use of a provider, such as
+//!   `"transactional"` or `"marketing"`.
 //!
 //! # Adapter helpers (public API)
 //!

@@ -14,7 +14,7 @@ pub use crate::options::{
     SendOptionsDeserializeError, TransportOptionRegistry, TransportOptionRegistryError,
 };
 
-/// Transport for providers that accept structured [`OutboundMessage`] values.
+/// Transport for implementations that accept structured [`OutboundMessage`] values.
 ///
 /// # Method discipline
 ///
@@ -74,8 +74,8 @@ pub trait Transport: RuntimeBound {
     }
 }
 
-/// Transport for providers that accept a pre-rendered RFC822 message and an
-/// explicit envelope (typically SMTP).
+/// Transport for implementations that accept a pre-rendered RFC822 message and
+/// an explicit envelope (typically SMTP).
 ///
 /// # Envelope source
 ///
