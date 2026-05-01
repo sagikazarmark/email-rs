@@ -10,7 +10,9 @@ pub use crate::options::{
     CorrelationId, IdempotencyKey, SendOptions, TransportOption, TransportOptions,
 };
 #[cfg(feature = "serde")]
-pub use crate::options::{TransportOptionRegistry, TransportOptionRegistryError};
+pub use crate::options::{
+    SendOptionsDeserializeError, TransportOptionRegistry, TransportOptionRegistryError,
+};
 
 /// Transport for providers that accept structured [`OutboundMessage`] values.
 ///
