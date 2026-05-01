@@ -23,6 +23,7 @@
 //!
 //! [`Message`]: email_message::Message
 
+pub mod options;
 pub mod string_newtype;
 #[cfg(feature = "tracing")]
 pub mod tracing;
