@@ -25,6 +25,7 @@ arbitrary = ["email-message/arbitrary"]
 schemars = ["email-message/schemars", "email-transport/schemars"]
 serde = ["email-message/serde", "email-transport/serde", "email-transport-resend?/serde"]
 tracing = ["email-transport/tracing"]
+transport-all = ["transport-resend"]
 transport-resend = ["dep:email-transport-resend"]
 wire = ["dep:email-message-wire"]
 
