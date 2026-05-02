@@ -1,0 +1,46 @@
+[package]
+name = "restate-email"
+description = "Restate email worker contracts and service adapter"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+keywords = ["email", "worker", "restate", "queue"]
+categories = ["email", "asynchronous"]
+
+[dependencies]
+email-kit = { workspace = true, features = ["serde"] }
+email-message = { workspace = true, features = ["serde"] }
+email-transport = { workspace = true }
+restate-sdk = { workspace = true }
+schemars = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"] }
+serde-value = "0.7"
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+bytes = "1"
+email-message = { workspace = true, features = ["mime", "serde"] }
+http = "1"
+http-body-util = "0.1"
+prost = "0.14"
+reqwest = { workspace = true, features = ["json"], default-features = false }
+restate-sdk-shared-core = "0.10"
+tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
+
+[features]
+default = ["reqwest/default"]
+# Provider-option deserialization is delegated to email-kit.
+resend = ["email-kit/transport-resend"]
+# Derive JSON Schema for public queue payload types.
+schemars = ["dep:schemars", "email-kit/schemars", "email-message/schemars", "email-transport/schemars"]
+
+[[example]]
+name = "restate_resend_worker"
+required-features = ["resend"]
+
+[package.metadata.docs.rs]
+all-features = true

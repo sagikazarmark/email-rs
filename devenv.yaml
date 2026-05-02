@@ -2,3 +2,7 @@
 inputs:
   nixpkgs:
     url: github:cachix/devenv-nixpkgs/rolling
+  dagger:
+    url: github:dagger/nix
+    overlays:
+      - default
