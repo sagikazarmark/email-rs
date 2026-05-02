@@ -1374,18 +1374,12 @@ mod tests {
             .expect("register succeeds");
 
         let rendered = format!("{registry:?}");
-        assert!(
-            rendered.contains("test"),
-            "expected `test` key in {rendered}"
-        );
-        assert!(
-            rendered.contains("other"),
-            "expected `other` key in {rendered}"
-        );
-        assert!(
-            rendered.contains("TestOption"),
-            "expected `TestOption` type name in {rendered}"
-        );
+        for needle in ["test", "other", "TestOption", "OtherTestOption"] {
+            assert!(
+                rendered.contains(needle),
+                "expected `{needle}` in {rendered}"
+            );
+        }
     }
 
     #[test]
