@@ -1062,7 +1062,10 @@ mod tests {
             "timeout did not round-trip"
         );
         assert_eq!(
-            hydrated.idempotency_key.as_ref().map(IdempotencyKey::as_str),
+            hydrated
+                .idempotency_key
+                .as_ref()
+                .map(IdempotencyKey::as_str),
             Some("idem-99"),
             "idempotency_key did not round-trip"
         );
