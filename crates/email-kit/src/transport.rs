@@ -49,37 +49,15 @@ pub fn register_transport_options(registry: &mut TransportOptionRegistry) {
         .expect("resend provider key should be unique");
 }
 
-/// Process-wide [`TransportOptionRegistry`] populated by
-/// [`register_transport_options`], lazily initialized on first access.
-///
-/// Workers that build one registry at startup and reuse it across sends should
-/// prefer this over calling [`transport_option_registry`] each time.
-#[cfg(feature = "serde")]
-#[must_use]
-pub fn default_transport_option_registry() -> &'static TransportOptionRegistry {
-    static REGISTRY: std::sync::OnceLock<TransportOptionRegistry> = std::sync::OnceLock::new();
-    REGISTRY.get_or_init(transport_option_registry)
-}
-
 #[cfg(all(test, feature = "serde"))]
 mod tests {
-    use super::{
-        TransportOptionRegistry, default_transport_option_registry, register_transport_options,
-        transport_option_registry,
-    };
+    use super::{TransportOptionRegistry, register_transport_options, transport_option_registry};
 
     #[test]
     fn registry_helpers_are_idempotent() {
         let mut registry = TransportOptionRegistry::new();
         register_transport_options(&mut registry);
         register_transport_options(&mut registry);
-    }
-
-    #[test]
-    fn default_registry_returns_stable_reference() {
-        let first = default_transport_option_registry();
-        let second = default_transport_option_registry();
-        assert!(std::ptr::eq(first, second));
     }
 
     #[test]
