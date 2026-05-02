@@ -648,6 +648,26 @@ struct SendOptionsVisitor<'a> {
     ignore_unknown: bool,
 }
 
+/// Compile-time field identifier for [`SendOptions`].
+///
+/// Adding a field to [`SendOptions`] without adding a variant here means the
+/// new field never reaches the typed value through the seed; the round-trip
+/// test in this module's `tests` will catch that. Adding a variant here without
+/// extending the `match` in [`SendOptionsVisitor::visit_map`] is a compile
+/// error.
+#[cfg(feature = "serde")]
+#[derive(serde::Deserialize)]
+#[serde(field_identifier, rename_all = "snake_case")]
+enum SendOptionsField {
+    Envelope,
+    TransportOptions,
+    Timeout,
+    IdempotencyKey,
+    CorrelationId,
+    #[serde(other)]
+    Other,
+}
+
 #[cfg(feature = "serde")]
 impl<'de, 'a> serde::de::Visitor<'de> for SendOptionsVisitor<'a> {
     type Value = SendOptions;
@@ -661,19 +681,23 @@ impl<'de, 'a> serde::de::Visitor<'de> for SendOptionsVisitor<'a> {
         A: serde::de::MapAccess<'de>,
     {
         let mut options = SendOptions::default();
-        while let Some(key) = map.next_key::<String>()? {
-            match key.as_str() {
-                "envelope" => options.envelope = map.next_value()?,
-                "transport_options" => {
+        while let Some(field) = map.next_key::<SendOptionsField>()? {
+            match field {
+                SendOptionsField::Envelope => options.envelope = map.next_value()?,
+                SendOptionsField::TransportOptions => {
                     options.transport_options = map.next_value_seed(TransportOptionsSeed {
                         registry: self.registry,
                         ignore_unknown: self.ignore_unknown,
                     })?;
                 }
-                "timeout" => options.timeout = map.next_value()?,
-                "idempotency_key" => options.idempotency_key = map.next_value()?,
-                "correlation_id" => options.correlation_id = map.next_value()?,
-                _ => {
+                SendOptionsField::Timeout => options.timeout = map.next_value()?,
+                SendOptionsField::IdempotencyKey => {
+                    options.idempotency_key = map.next_value()?;
+                }
+                SendOptionsField::CorrelationId => {
+                    options.correlation_id = map.next_value()?;
+                }
+                SendOptionsField::Other => {
                     map.next_value::<serde::de::IgnoredAny>()?;
                 }
             }
@@ -978,6 +1002,74 @@ mod tests {
         assert!(
             error.to_string().contains("unknown"),
             "error should name the unknown provider key, got `{error}`"
+        );
+    }
+
+    /// Drift guard for [`SendOptionsField`]/[`SendOptionsVisitor`].
+    ///
+    /// Every public field on [`SendOptions`] must round-trip through the seed
+    /// with a non-default value; if a new field is added to the struct but not
+    /// wired through the visitor's `match`, the corresponding assertion below
+    /// fails and surfaces the drift.
+    #[test]
+    #[cfg(feature = "serde")]
+    fn send_options_seed_round_trip_covers_every_field() {
+        let mut transport_options = TransportOptions::default();
+        transport_options.insert(TestOption(String::from("typed")));
+
+        let original = SendOptions::new()
+            .with_envelope(Envelope::new(
+                Some("sender@example.com".parse().unwrap()),
+                vec!["recipient@example.com".parse().unwrap()],
+            ))
+            .with_transport_options(transport_options)
+            .with_timeout(std::time::Duration::new(7, 11))
+            .with_idempotency_key(IdempotencyKey::new("idem-99").unwrap())
+            .with_correlation_id(CorrelationId::new("corr-77").unwrap());
+
+        let json = serde_json::to_value(&original).expect("serialize");
+
+        let mut registry = TransportOptionRegistry::new();
+        registry
+            .register::<TestOption>()
+            .expect("register succeeds");
+
+        let hydrated = registry
+            .deserialize_send_options(json)
+            .expect("deserialize");
+
+        assert_eq!(
+            hydrated
+                .envelope
+                .as_ref()
+                .and_then(|envelope| envelope.mail_from())
+                .map(email_message::EmailAddress::as_str),
+            Some("sender@example.com"),
+            "envelope did not round-trip — did you add a field to SendOptions \
+             without extending SendOptionsField/SendOptionsVisitor?"
+        );
+        assert_eq!(
+            hydrated
+                .transport_options
+                .get::<TestOption>()
+                .map(|value| value.0.as_str()),
+            Some("typed"),
+            "transport_options did not round-trip"
+        );
+        assert_eq!(
+            hydrated.timeout,
+            Some(std::time::Duration::new(7, 11)),
+            "timeout did not round-trip"
+        );
+        assert_eq!(
+            hydrated.idempotency_key.as_ref().map(IdempotencyKey::as_str),
+            Some("idem-99"),
+            "idempotency_key did not round-trip"
+        );
+        assert_eq!(
+            hydrated.correlation_id.as_ref().map(CorrelationId::as_str),
+            Some("corr-77"),
+            "correlation_id did not round-trip"
         );
     }
 
