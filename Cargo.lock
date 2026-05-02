@@ -409,6 +409,7 @@ dependencies = [
  "email-message-wire",
  "email-transport",
  "email-transport-resend",
+ "serde_json",
 ]
 
 [[package]]

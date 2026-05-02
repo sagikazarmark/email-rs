@@ -11,17 +11,35 @@ pub use email_transport_resend as resend;
 /// The registry is what
 /// [`TransportOptionRegistry::deserialize_send_options`] consults to map a
 /// provider key like `"resend"` back to the concrete Rust option type that
-/// owns that JSON shape. Workers that hydrate [`SendOptions`] from queue or
+/// owns that wire shape. Workers that hydrate [`SendOptions`] from queue or
 /// wire payloads typically want this exact set of registrations.
 ///
 /// # Examples
 ///
 /// ```rust
 /// # #[cfg(feature = "serde")]
-/// # fn example() {
+/// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// use email_kit::transport::SendOptions;
+///
 /// let registry = email_kit::transport::transport_option_registry();
-/// # let _ = registry;
+///
+/// let payload = r#"{
+///     "envelope": {
+///         "mail_from": "sender@example.com",
+///         "rcpt_to": ["recipient@example.com"]
+///     },
+///     "timeout": {"secs": 5, "nanos": 0}
+/// }"#;
+/// let mut deserializer = serde_json::Deserializer::from_str(payload);
+/// let options: SendOptions = registry.deserialize_send_options(&mut deserializer)?;
+///
+/// assert!(options.envelope.is_some());
+/// assert_eq!(options.timeout, Some(std::time::Duration::from_secs(5)));
+/// # Ok(())
 /// # }
+/// # #[cfg(not(feature = "serde"))]
+/// # fn example() -> Result<(), Box<dyn std::error::Error>> { Ok(()) }
+/// # example().unwrap();
 /// ```
 #[cfg(feature = "serde")]
 #[must_use]

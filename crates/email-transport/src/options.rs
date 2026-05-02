@@ -374,6 +374,22 @@ pub struct TransportOptionRegistry {
 }
 
 #[cfg(feature = "serde")]
+impl std::fmt::Debug for TransportOptionRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut registered: Vec<(&str, &'static str)> = self
+            .decoders
+            .iter()
+            .map(|(provider_key, decoder)| (*provider_key, decoder.type_name))
+            .collect();
+        registered.sort_unstable_by_key(|(provider_key, _)| *provider_key);
+
+        f.debug_struct("TransportOptionRegistry")
+            .field("registered", &registered)
+            .finish()
+    }
+}
+
+#[cfg(feature = "serde")]
 struct TransportOptionDecoder {
     type_name: &'static str,
     decode: for<'de> fn(
@@ -427,7 +443,7 @@ impl TransportOptionRegistry {
     /// [`TransportOptions`] map from any serde deserializer.
     ///
     /// Unknown provider keys are rejected by default. Use
-    /// [`TransportOptionsSeed::ignore_unknown_transport_options`] to skip them.
+    /// [`TransportOptionsSeed::ignore_unknown_provider_keys`] to skip them.
     #[must_use]
     pub fn transport_options_seed(&self) -> TransportOptionsSeed<'_> {
         TransportOptionsSeed {
@@ -471,10 +487,19 @@ impl TransportOptionRegistry {
     /// Deserialize a single provider option for `provider_key` and overwrite the
     /// matching typed slot in `options` when the provider key is registered.
     ///
+    /// This is the per-key dispatch primitive that callers iterating over a
+    /// pre-decoded provider map (for example, a `BTreeMap<String, Value>` wire
+    /// staging type built by a downstream crate that cannot drive
+    /// [`SendOptionsSeed`] directly) reach for. For deserializing a whole
+    /// [`SendOptions`] or [`TransportOptions`] from a serde format, prefer
+    /// [`Self::send_options_seed`] / [`Self::transport_options_seed`] — those
+    /// have a richer strict-vs-ignore policy via builder methods.
+    ///
     /// Returns `Ok(true)` when a registered option type consumed the value and
     /// `Ok(false)` for unknown provider keys. Unknown keys are intentionally not
     /// errors so queue payloads can be forwarded across workers with different
-    /// provider feature sets.
+    /// provider feature sets — the caller is expected to either propagate or
+    /// suppress that signal as the surrounding context requires.
     ///
     /// # Errors
     ///
@@ -514,7 +539,10 @@ where
 
 /// [`DeserializeSeed`](serde::de::DeserializeSeed) for [`TransportOptions`].
 ///
-/// Built through [`TransportOptionRegistry::transport_options_seed`].
+/// Built through [`TransportOptionRegistry::transport_options_seed`]. This is
+/// the only way to deserialize a [`TransportOptions`] map, since the type
+/// cannot have a plain `Deserialize` impl (the registry has to map provider
+/// keys back to typed slot types at runtime).
 #[cfg(feature = "serde")]
 pub struct TransportOptionsSeed<'a> {
     registry: &'a TransportOptionRegistry,
@@ -527,7 +555,7 @@ impl<'a> TransportOptionsSeed<'a> {
     /// erroring, so payloads can flow across workers compiled with different
     /// adapter feature sets.
     #[must_use]
-    pub fn ignore_unknown_transport_options(mut self) -> Self {
+    pub fn ignore_unknown_provider_keys(mut self) -> Self {
         self.ignore_unknown = true;
         self
     }
@@ -610,6 +638,12 @@ impl<'de, 'a> serde::de::DeserializeSeed<'de> for TransportOptionDecoderSeed<'a>
 /// [`DeserializeSeed`](serde::de::DeserializeSeed) for [`SendOptions`].
 ///
 /// Built through [`TransportOptionRegistry::send_options_seed`].
+///
+/// Use this when [`SendOptions`] is a field of another `DeserializeSeed`
+/// value and the parent visitor needs to thread a registry through. For the
+/// typical "deserialize a `SendOptions` from a queue payload" case, prefer the
+/// thinner [`TransportOptionRegistry::deserialize_send_options`] convenience
+/// wrapper.
 #[cfg(feature = "serde")]
 pub struct SendOptionsSeed<'a> {
     registry: &'a TransportOptionRegistry,
@@ -619,7 +653,7 @@ pub struct SendOptionsSeed<'a> {
 #[cfg(feature = "serde")]
 impl<'a> SendOptionsSeed<'a> {
     /// Skip unknown provider keys inside `transport_options` instead of
-    /// erroring. See [`TransportOptionsSeed::ignore_unknown_transport_options`].
+    /// erroring. See [`TransportOptionsSeed::ignore_unknown_provider_keys`].
     #[must_use]
     pub fn ignore_unknown_transport_options(mut self) -> Self {
         self.ignore_unknown = true;
@@ -744,7 +778,7 @@ mod tests {
     use super::SendOptions;
     use super::{IdempotencyKey, TransportOption, TransportOptions};
     #[cfg(feature = "serde")]
-    use super::{TransportOptionRegistry, TransportOptionRegistryError};
+    use super::{SendOptionsSeed, TransportOptionRegistry, TransportOptionRegistryError};
 
     #[derive(Debug, PartialEq, Eq)]
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -995,22 +1029,31 @@ mod tests {
         let registry = TransportOptionRegistry::new();
 
         let result = registry.deserialize_send_options(serde_json::json!({
-            "transport_options": {"unknown": {"value": 1}}
+            "transport_options": {"missing-provider": {"value": 1}}
         }));
 
         let error = result.expect_err("unknown provider key should fail");
+        let rendered = error.to_string();
         assert!(
-            error.to_string().contains("unknown"),
-            "error should name the unknown provider key, got `{error}`"
+            rendered.contains("missing-provider"),
+            "error should name the unknown provider key, got `{rendered}`"
         );
     }
 
     /// Drift guard for [`SendOptionsField`]/[`SendOptionsVisitor`].
     ///
-    /// Every public field on [`SendOptions`] must round-trip through the seed
-    /// with a non-default value; if a new field is added to the struct but not
-    /// wired through the visitor's `match`, the corresponding assertion below
-    /// fails and surfaces the drift.
+    /// Two layers protect against silent drift when a new field is added to
+    /// [`SendOptions`]:
+    ///
+    /// 1. The destructure below uses no rest pattern, so adding a sixth field
+    ///    to `SendOptions` is a **compile error** here until the test is
+    ///    updated.
+    /// 2. Each named binding is asserted against a non-default value the
+    ///    `with_*` builder set on `original`. Even if the destructure is
+    ///    extended without wiring the new field through `SendOptionsField` /
+    ///    `SendOptionsVisitor`, the assertion for the new field fails at
+    ///    runtime (`SendOptionsField::Other` would silently route the
+    ///    serialized key to `IgnoredAny`).
     #[test]
     #[cfg(feature = "serde")]
     fn send_options_seed_round_trip_covers_every_field() {
@@ -1038,39 +1081,43 @@ mod tests {
             .deserialize_send_options(json)
             .expect("deserialize");
 
+        // Exhaustive destructure, intentionally without `..` — adding a field
+        // to `SendOptions` is a compile error here until this test is updated.
+        let SendOptions {
+            envelope,
+            transport_options,
+            timeout,
+            idempotency_key,
+            correlation_id,
+        } = &hydrated;
+
         assert_eq!(
-            hydrated
-                .envelope
+            envelope
                 .as_ref()
                 .and_then(|envelope| envelope.mail_from())
                 .map(email_message::EmailAddress::as_str),
             Some("sender@example.com"),
-            "envelope did not round-trip — did you add a field to SendOptions \
-             without extending SendOptionsField/SendOptionsVisitor?"
+            "envelope did not round-trip"
         );
         assert_eq!(
-            hydrated
-                .transport_options
+            transport_options
                 .get::<TestOption>()
                 .map(|value| value.0.as_str()),
             Some("typed"),
             "transport_options did not round-trip"
         );
         assert_eq!(
-            hydrated.timeout,
+            *timeout,
             Some(std::time::Duration::new(7, 11)),
             "timeout did not round-trip"
         );
         assert_eq!(
-            hydrated
-                .idempotency_key
-                .as_ref()
-                .map(IdempotencyKey::as_str),
+            idempotency_key.as_ref().map(IdempotencyKey::as_str),
             Some("idem-99"),
             "idempotency_key did not round-trip"
         );
         assert_eq!(
-            hydrated.correlation_id.as_ref().map(CorrelationId::as_str),
+            correlation_id.as_ref().map(CorrelationId::as_str),
             Some("corr-77"),
             "correlation_id did not round-trip"
         );
@@ -1148,6 +1195,196 @@ mod tests {
         assert_eq!(
             hydrated.get::<TestOption>().map(|value| value.0.as_str()),
             Some("round-trip")
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn transport_options_seed_hydrates_multiple_providers_in_one_payload() {
+        use serde::de::DeserializeSeed as _;
+
+        let mut registry = TransportOptionRegistry::new();
+        registry
+            .register::<TestOption>()
+            .expect("register TestOption");
+        registry
+            .register::<OtherTestOption>()
+            .expect("register OtherTestOption");
+
+        let payload = serde_json::json!({
+            "test": "first",
+            "other": {"value": 42},
+        });
+        let hydrated = registry
+            .transport_options_seed()
+            .deserialize(payload)
+            .expect("hydrate succeeds");
+
+        assert_eq!(
+            hydrated.get::<TestOption>().map(|value| value.0.as_str()),
+            Some("first")
+        );
+        assert_eq!(
+            hydrated.get::<OtherTestOption>().map(|value| value.value),
+            Some(42)
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn transport_options_seed_can_ignore_unknown_provider_keys() {
+        use serde::de::DeserializeSeed as _;
+
+        let mut registry = TransportOptionRegistry::new();
+        registry
+            .register::<TestOption>()
+            .expect("register succeeds");
+
+        let payload = serde_json::json!({
+            "test": "value",
+            "missing-provider": {"anything": 1},
+        });
+        let hydrated = registry
+            .transport_options_seed()
+            .ignore_unknown_provider_keys()
+            .deserialize(payload)
+            .expect("ignore_unknown succeeds");
+
+        assert_eq!(
+            hydrated.get::<TestOption>().map(|value| value.0.as_str()),
+            Some("value")
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn send_options_seed_works_when_nested_inside_another_seed() {
+        // Exercises the composability case `SendOptionsSeed` exists for: a
+        // parent custom visitor threads the registry into a nested
+        // `SendOptionsSeed` via `next_value_seed`, the way a downstream
+        // `SendEmailRequestSeed` would.
+        use serde::de::{DeserializeSeed, MapAccess, Visitor};
+
+        struct WrapperSeed<'a> {
+            registry: &'a TransportOptionRegistry,
+        }
+        struct WrapperVisitor<'a> {
+            registry: &'a TransportOptionRegistry,
+        }
+
+        impl<'de, 'a> DeserializeSeed<'de> for WrapperSeed<'a> {
+            type Value = SendOptions;
+            fn deserialize<D>(self, deserializer: D) -> Result<SendOptions, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                deserializer.deserialize_map(WrapperVisitor {
+                    registry: self.registry,
+                })
+            }
+        }
+
+        impl<'de, 'a> Visitor<'de> for WrapperVisitor<'a> {
+            type Value = SendOptions;
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("a wrapper map containing a `send_options` field")
+            }
+            fn visit_map<A>(self, mut map: A) -> Result<SendOptions, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                let mut found = None;
+                while let Some(key) = map.next_key::<String>()? {
+                    if key == "send_options" {
+                        found = Some(map.next_value_seed(SendOptionsSeed {
+                            registry: self.registry,
+                            ignore_unknown: false,
+                        })?);
+                    } else {
+                        map.next_value::<serde::de::IgnoredAny>()?;
+                    }
+                }
+                found.ok_or_else(|| serde::de::Error::missing_field("send_options"))
+            }
+        }
+
+        let mut registry = TransportOptionRegistry::new();
+        registry
+            .register::<TestOption>()
+            .expect("register succeeds");
+
+        let payload = serde_json::json!({
+            "send_options": {
+                "transport_options": {"test": "nested"},
+                "timeout": {"secs": 1, "nanos": 0}
+            }
+        });
+        let send_options = WrapperSeed {
+            registry: &registry,
+        }
+        .deserialize(payload)
+        .expect("nested seed succeeds");
+
+        assert_eq!(
+            send_options
+                .transport_options
+                .get::<TestOption>()
+                .map(|value| value.0.as_str()),
+            Some("nested")
+        );
+        assert_eq!(
+            send_options.timeout,
+            Some(std::time::Duration::from_secs(1))
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn empty_send_options_round_trip_through_seed() {
+        let registry = TransportOptionRegistry::new();
+        let json = serde_json::to_value(SendOptions::default()).expect("serialize");
+        let hydrated = registry
+            .deserialize_send_options(json)
+            .expect("deserialize empty");
+
+        let SendOptions {
+            envelope,
+            transport_options,
+            timeout,
+            idempotency_key,
+            correlation_id,
+        } = &hydrated;
+
+        assert!(envelope.is_none());
+        assert!(transport_options.is_empty());
+        assert!(timeout.is_none());
+        assert!(idempotency_key.is_none());
+        assert!(correlation_id.is_none());
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn transport_option_registry_debug_lists_registered_provider_keys() {
+        let mut registry = TransportOptionRegistry::new();
+        registry
+            .register::<TestOption>()
+            .expect("register succeeds");
+        registry
+            .register::<OtherTestOption>()
+            .expect("register succeeds");
+
+        let rendered = format!("{registry:?}");
+        assert!(
+            rendered.contains("test"),
+            "expected `test` key in {rendered}"
+        );
+        assert!(
+            rendered.contains("other"),
+            "expected `other` key in {rendered}"
+        );
+        assert!(
+            rendered.contains("TestOption"),
+            "expected `TestOption` type name in {rendered}"
         );
     }
 

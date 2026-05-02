@@ -16,6 +16,9 @@ email-message-wire = { workspace = true, default-features = false, optional = tr
 email-transport = { workspace = true, default-features = false }
 email-transport-resend = { workspace = true, default-features = false, optional = true }
 
+[dev-dependencies]
+serde_json = { workspace = true }
+
 [features]
 default = ["email-message/default", "email-message-wire?/default", "email-transport/default", "email-transport-resend?/default"]
 arbitrary = ["email-message/arbitrary"]
