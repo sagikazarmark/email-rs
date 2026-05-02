@@ -403,7 +403,7 @@ checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
 
 [[package]]
 name = "email-kit"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "email-message",
  "email-message-wire",
@@ -414,7 +414,7 @@ dependencies = [
 
 [[package]]
 name = "email-message"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "addr-spec",
  "arbitrary",
@@ -430,7 +430,7 @@ dependencies = [
 
 [[package]]
 name = "email-message-wire"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "base64",
  "email-message",
@@ -441,7 +441,7 @@ dependencies = [
 
 [[package]]
 name = "email-transport"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "email-message",
  "erased-serde",
@@ -459,7 +459,7 @@ dependencies = [
 
 [[package]]
 name = "email-transport-resend"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "email-message",
  "email-transport",
@@ -476,7 +476,7 @@ dependencies = [
 
 [[package]]
 name = "email-transport-test"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "email-message",
  "email-message-wire",
