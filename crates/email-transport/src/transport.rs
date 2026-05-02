@@ -11,7 +11,7 @@ pub use crate::options::{
 };
 #[cfg(feature = "serde")]
 pub use crate::options::{
-    SendOptionsDeserializeError, TransportOptionRegistry, TransportOptionRegistryError,
+    SendOptionsSeed, TransportOptionRegistry, TransportOptionRegistryError, TransportOptionsSeed,
 };
 
 /// Transport for implementations that accept structured [`OutboundMessage`] values.

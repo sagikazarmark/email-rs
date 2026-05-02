@@ -19,6 +19,7 @@ email-message-wire = { version = "0.5.0", path = "crates/email-message-wire", de
 email-transport = { version = "0.5.0", path = "crates/email-transport", default-features = false }
 email-transport-resend = { version = "0.5.0", path = "crates/email-transport-resend", default-features = false }
 email-transport-test = { path = "crates/email-transport-test", default-features = false }
+erased-serde = "0.4"
 proptest = "1"
 reqwest = { version = "0.13", default-features = false }
 schemars = "1.2"

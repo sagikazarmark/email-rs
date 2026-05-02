@@ -12,9 +12,9 @@ categories = { workspace = true }
 
 [dependencies]
 email-message = { workspace = true }
+erased-serde = { workspace = true, optional = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
-serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
 time = { workspace = true, features = ["formatting"] }
 tracing = { version = "0.1", default-features = false, features = ["std"], optional = true }
@@ -24,13 +24,14 @@ web-time = { version = "1", optional = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
+serde_json = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tracing-subscriber = "0.3"
 
 [features]
 default = ["serde"]
 schemars = ["dep:schemars", "email-message/schemars"]
-serde = ["dep:serde", "dep:serde_json", "email-message/serde"]
+serde = ["dep:erased-serde", "dep:serde", "email-message/serde"]
 tracing = ["dep:tracing", "dep:web-time"]
 
 [package.metadata.docs.rs]
