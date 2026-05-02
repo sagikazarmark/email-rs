@@ -12,6 +12,7 @@
     cargo-fuzz
     cargo-release
     cargo-watch
+    dagger
   ];
 
   languages = {

@@ -2,6 +2,9 @@
 all-features = true
 
 [advisories]
+ignore = [
+  { id = "RUSTSEC-2023-0071", reason = "No fixed upgrade is available; rsa is pulled transitively via jsonwebtoken/restate. Revisit when upstream releases a fix." },
+]
 
 [licenses]
 allow = [

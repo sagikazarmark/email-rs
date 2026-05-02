@@ -13,7 +13,7 @@ categories = ["email", "network-programming"]
 [dependencies]
 email-message = { workspace = true }
 email-transport = { workspace = true }
-reqwest = { workspace = true }
+reqwest = { workspace = true, default-features = false }
 resend-rs = { version = "0.25", default-features = false }
 serde = { workspace = true, features = ["derive"], optional = true }
 serde_json = { workspace = true }
@@ -29,7 +29,7 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 wiremock = "0.6"
 
 [features]
-default = ["resend-rs/default", "serde"]
+default = ["reqwest/default", "serde"]
 serde = ["dep:serde", "email-transport/serde"]
 
 [[example]]
