@@ -5,8 +5,8 @@
 //!
 //! - `message` re-exports `email-message`.
 //! - `transport` re-exports `email-transport`.
-//! - Enable the `transport-resend` feature for `transport::resend`, which
-//!   re-exports `email-transport-resend`.
+//! - Enable the `transport-resend` or `transport-all` feature for
+//!   `transport::resend`, which re-exports `email-transport-resend`.
 //! - Enable the `wire` feature for `wire`, which re-exports
 //!   `email-message-wire`.
 //!
@@ -44,18 +44,19 @@
 //! # wire_example();
 //! ```
 //!
-//! With the `transport-resend` feature enabled, Resend-specific transport
-//! types are available through `email_kit::transport::resend`:
+//! With the `transport-resend` or `transport-all` feature enabled,
+//! Resend-specific transport types are available through
+//! `email_kit::transport::resend`:
 //!
 //! ```rust
-//! # #[cfg(feature = "transport-resend")]
+//! # #[cfg(any(feature = "transport-resend", feature = "transport-all"))]
 //! # fn resend_example() {
 //! use email_kit::transport::resend::ResendTransport;
 //!
 //! let transport = ResendTransport::new("re_...");
 //! # let _ = transport;
 //! # }
-//! # #[cfg(not(feature = "transport-resend"))]
+//! # #[cfg(not(any(feature = "transport-resend", feature = "transport-all")))]
 //! # fn resend_example() {}
 //! # resend_example();
 //! ```

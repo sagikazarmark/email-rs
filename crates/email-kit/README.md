@@ -18,6 +18,7 @@ Use `email_kit::prelude::*` for common message types and transport traits. With 
 - `schemars`: enables JSON Schema support for message and transport types.
 - `arbitrary`: enables property-test generation support for message types.
 - `tracing`: enables `email-transport` tracing instrumentation.
+- `transport-all`: enables every transport feature currently provided by `email-kit`
 - `transport-resend`: enables Resend transport support through `email_kit::transport::resend`.
 - `wire`: enables RFC822/MIME parsing and rendering through `email-message-wire`.
 
