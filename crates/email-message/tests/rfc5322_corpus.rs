@@ -1076,6 +1076,73 @@ fn serde_accepts_per_element_string_in_list_under_compat() {
     ));
 }
 
+/// Migration roundtrip: take a typed value, render it as the RFC 5322
+/// string an old producer would have emitted, then deserialize that
+/// string under `rfc5322-string-compat`. This is exactly what a
+/// consumer reading legacy queue payloads will do during a rolling
+/// upgrade.
+#[cfg(all(feature = "serde", feature = "rfc5322-string-compat"))]
+#[test]
+fn serde_compat_roundtrip_typed_via_rfc5322_string() {
+    for fixture in RFC_VALID_NAME_ADDR_FIXTURES
+        .iter()
+        .chain(RFC_VALID_ADDR_SPEC_FIXTURES.iter())
+    {
+        let typed: Mailbox = fixture
+            .input
+            .parse()
+            .unwrap_or_else(|_| panic!("{} fixture should parse", fixture.id));
+        let rendered = typed.to_string();
+        let from_string: Mailbox = serde_json::from_value(serde_json::json!(rendered))
+            .unwrap_or_else(|err| panic!("{} compat string deserialize failed: {err}", fixture.id));
+        assert_eq!(
+            from_string, typed,
+            "{} mailbox typed → Display → compat-string-deserialize must roundtrip",
+            fixture.id
+        );
+    }
+
+    for fixture in RFC_VALID_GROUP_FIXTURES {
+        let typed: Group = fixture
+            .input
+            .parse()
+            .unwrap_or_else(|_| panic!("{} fixture should parse", fixture.id));
+        let rendered = typed.to_string();
+        let from_string: Group = serde_json::from_value(serde_json::json!(rendered))
+            .unwrap_or_else(|err| panic!("{} compat string deserialize failed: {err}", fixture.id));
+        assert_eq!(
+            from_string, typed,
+            "{} group typed → Display → compat-string-deserialize must roundtrip",
+            fixture.id
+        );
+    }
+
+    let address_list: AddressList =
+        "Mary Smith <mary@x.test>, jdoe@one.test, A Group:Ed Jones <c@a.test>,joe@where.test;"
+            .parse()
+            .expect("mixed list should parse");
+    let rendered = address_list.to_string();
+    let from_string: AddressList = serde_json::from_value(serde_json::json!(rendered))
+        .expect("address list compat string deserialize should succeed");
+    assert_eq!(
+        from_string.as_slice(),
+        address_list.as_slice(),
+        "AddressList typed → Display → compat-string-deserialize must roundtrip",
+    );
+
+    let mailbox_list: MailboxList = "Mary Smith <mary@x.test>, jdoe@one.test"
+        .parse()
+        .expect("mailbox list should parse");
+    let rendered = mailbox_list.to_string();
+    let from_string: MailboxList = serde_json::from_value(serde_json::json!(rendered))
+        .expect("mailbox list compat string deserialize should succeed");
+    assert_eq!(
+        from_string.as_slice(),
+        mailbox_list.as_slice(),
+        "MailboxList typed → Display → compat-string-deserialize must roundtrip",
+    );
+}
+
 #[cfg(all(feature = "serde", feature = "rfc5322-string-compat"))]
 #[test]
 fn serde_compat_object_error_keeps_field_provenance() {
@@ -1104,7 +1171,8 @@ fn serde_omits_null_optional_fields_in_mailbox() {
         "Mailbox without a display name should not emit `name`: {value}"
     );
 
-    let mailbox: email_message::Mailbox = "Mary <mary@example.com>".parse().expect("mailbox parses");
+    let mailbox: email_message::Mailbox =
+        "Mary <mary@example.com>".parse().expect("mailbox parses");
     let value = serde_json::to_value(&mailbox).expect("mailbox serializes");
     assert_eq!(value["name"], "Mary");
 }
@@ -1114,11 +1182,8 @@ fn serde_omits_null_optional_fields_in_mailbox() {
 fn serde_omits_empty_collections_in_message() {
     let from: Mailbox = "alice@example.com".parse().expect("mailbox parses");
     let to: Address = "bob@example.com".parse().expect("address parses");
-    let message = email_message::Message::new(
-        from,
-        vec![to],
-        email_message::Body::Text("hi".to_string()),
-    );
+    let message =
+        email_message::Message::new(from, vec![to], email_message::Body::Text("hi".to_string()));
     let value = serde_json::to_value(&message).expect("message serializes");
 
     for absent in ["cc", "bcc", "reply_to", "headers", "attachments", "sender"] {
@@ -1185,7 +1250,10 @@ fn serde_mime_part_uses_internal_tag_with_snake_case() {
         value["type"], "leaf",
         "MimePart should use internally-tagged snake_case discriminator, not the derived externally-tagged PascalCase shape: {value}"
     );
-    assert_eq!(value["body"], "aGk=", "MIME body should serialize as base64");
+    assert_eq!(
+        value["body"], "aGk=",
+        "MIME body should serialize as base64"
+    );
     assert!(
         value.get("content_transfer_encoding").is_none(),
         "absent optional fields should not emit null"

@@ -928,6 +928,11 @@ impl schemars::JsonSchema for MimePart {
         concat!(module_path!(), "::MimePart").into()
     }
 
+    /// MIME parts have no RFC 5322 string form, so this schema is *not*
+    /// wrapped in an `rfc5322-string-compat` `oneOf: [object, string]`
+    /// the way `Mailbox` / `Group` / `Address` are. The asymmetry is
+    /// deliberate: there is no producer-side wire shape for "MIME part
+    /// as a header-like string" to migrate from.
     fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
         let recursive = generator.subschema_for::<MimePart>();
         schemars::json_schema!({
