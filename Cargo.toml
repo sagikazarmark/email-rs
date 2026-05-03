@@ -3,7 +3,7 @@ members = ["crates/*"]
 resolver = "2"
 
 [workspace.package]
-version = "0.6.1"
+version = "0.7.0"
 edition = "2024"
 rust-version = "1.92"
 license = "MIT"
@@ -13,16 +13,16 @@ keywords = ["email", "smtp", "mail", "async", "mailer"]
 categories = ["email", "network-programming", "asynchronous"]
 
 [workspace.dependencies]
-email-kit = { version = "0.6.1", path = "crates/email-kit", default-features = false }
-email-message = { version = "0.6.1", path = "crates/email-message", default-features = false }
-email-message-wire = { version = "0.6.1", path = "crates/email-message-wire", default-features = false }
-email-transport = { version = "0.6.1", path = "crates/email-transport", default-features = false }
-email-transport-resend = { version = "0.6.1", path = "crates/email-transport-resend", default-features = false }
+email-kit = { version = "0.7.0", path = "crates/email-kit", default-features = false }
+email-message = { version = "0.7.0", path = "crates/email-message", default-features = false }
+email-message-wire = { version = "0.7.0", path = "crates/email-message-wire", default-features = false }
+email-transport = { version = "0.7.0", path = "crates/email-transport", default-features = false }
+email-transport-resend = { version = "0.7.0", path = "crates/email-transport-resend", default-features = false }
 email-transport-test = { path = "crates/email-transport-test", default-features = false }
 erased-serde = "0.4"
 proptest = "1"
 reqwest = { version = "0.13", default-features = false }
-restate-email = { version = "0.6.1", path = "crates/restate-email", default-features = false }
+restate-email = { version = "0.7.0", path = "crates/restate-email", default-features = false }
 restate-sdk = "0.10"
 schemars = "1.2"
 serde = "1"

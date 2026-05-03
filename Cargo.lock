@@ -769,7 +769,7 @@ dependencies = [
 
 [[package]]
 name = "email-kit"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "email-message",
  "email-message-wire",
@@ -780,7 +780,7 @@ dependencies = [
 
 [[package]]
 name = "email-message"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "addr-spec",
  "arbitrary",
@@ -797,7 +797,7 @@ dependencies = [
 
 [[package]]
 name = "email-message-wire"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "base64",
  "email-message",
@@ -808,7 +808,7 @@ dependencies = [
 
 [[package]]
 name = "email-transport"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "email-message",
  "erased-serde",
@@ -826,7 +826,7 @@ dependencies = [
 
 [[package]]
 name = "email-transport-resend"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "email-message",
  "email-transport",
@@ -843,7 +843,7 @@ dependencies = [
 
 [[package]]
 name = "email-transport-test"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "email-message",
  "email-message-wire",
@@ -2493,7 +2493,7 @@ dependencies = [
 
 [[package]]
 name = "restate-email"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "bytes",
  "email-kit",
@@ -2515,7 +2515,7 @@ dependencies = [
 
 [[package]]
 name = "restate-email-bin"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "clap",
