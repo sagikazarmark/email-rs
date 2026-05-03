@@ -36,7 +36,9 @@ default = ["reqwest/default"]
 # Provider-option deserialization is delegated to email-kit.
 resend = ["email-kit/transport-resend"]
 # Derive JSON Schema for public queue payload types.
-schemars = ["dep:schemars", "email-kit/schemars", "email-message/schemars", "email-transport/schemars"]
+schemars = ["dep:schemars", "restate-sdk/schemars", "email-kit/schemars", "email-message/schemars", "email-transport/schemars"]
+# Forward email-message's RFC 5322 string address compatibility into queue schemas.
+rfc5322-string-compat = ["email-message/rfc5322-string-compat"]
 
 [[example]]
 name = "restate_resend_worker"

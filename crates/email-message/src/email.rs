@@ -21,7 +21,6 @@ use std::str::FromStr;
 /// recipients. Callers who need byte-faithful preservation of the
 /// original input should keep the source `String` separately; this
 /// type is the SMTP-equivalence value.
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct EmailAddress {
     value: String,
@@ -112,6 +111,28 @@ impl<'de> serde::Deserialize<'de> for EmailAddress {
     {
         let value = String::deserialize(deserializer)?;
         value.parse().map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for EmailAddress {
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "EmailAddress".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::EmailAddress").into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "RFC 5322 addr-spec email address"
+        })
     }
 }
 

@@ -1,36 +1,29 @@
 {
   "transport": "transactional",
   "message": {
-    "from": "from@example.com",
-    "sender": null,
+    "from": {
+      "type": "mailbox",
+      "email": "from@example.com"
+    },
     "to": [
-      "to@example.com"
+      {
+        "type": "mailbox",
+        "email": "to@example.com"
+      }
     ],
-    "cc": [],
-    "bcc": [],
-    "reply_to": [],
     "subject": "Release fixture",
-    "date": null,
-    "message_id": null,
-    "headers": [],
     "body": {
-      "Text": "hello"
+      "type": "text",
+      "text": "hello"
     },
     "attachments": [
       {
         "filename": "report.txt",
         "content_type": "text/plain",
-        "content_id": null,
         "disposition": "attachment",
         "body": {
-          "Bytes": [
-            114,
-            101,
-            112,
-            111,
-            114,
-            116
-          ]
+          "type": "bytes",
+          "bytes": "cmVwb3J0"
         }
       }
     ]

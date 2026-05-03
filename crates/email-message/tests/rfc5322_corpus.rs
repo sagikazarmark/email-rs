@@ -764,6 +764,230 @@ fn schemars_generates_message_schema() {
     );
 }
 
+#[cfg(all(feature = "schemars", not(feature = "rfc5322-string-compat")))]
+fn assert_root_type<T: schemars::JsonSchema>(expected_type: &str) {
+    let schema = schema_for!(T);
+    let value = schema.as_value();
+
+    assert_eq!(
+        value.get("type").and_then(|value| value.as_str()),
+        Some(expected_type),
+        "schema should have expected root type: {value}"
+    );
+}
+
+#[cfg(all(feature = "schemars", not(feature = "rfc5322-string-compat")))]
+#[test]
+fn schemars_value_objects_match_serde_shape() {
+    assert_root_type::<email_message::EmailAddress>("string");
+    assert_root_type::<email_message::Mailbox>("object");
+    assert_root_type::<email_message::Group>("object");
+    assert_root_type::<email_message::AddressList>("array");
+    assert_root_type::<email_message::MailboxList>("array");
+    assert_root_type::<email_message::MessageId>("string");
+    assert_root_type::<email_message::ContentType>("string");
+    assert_root_type::<email_message::ContentTransferEncoding>("string");
+    assert_root_type::<email_message::ContentDisposition>("string");
+
+    let address_schema = schema_for!(email_message::Address);
+    let address_value = address_schema.as_value().to_string();
+    assert!(address_value.contains("mailbox"));
+    assert!(address_value.contains("group"));
+
+    let body_schema = schema_for!(email_message::Body);
+    let body_value = body_schema.as_value().to_string();
+    assert!(body_value.contains("text_and_html"));
+}
+
+#[cfg(all(feature = "schemars", feature = "rfc5322-string-compat"))]
+fn assert_one_of_has_string<T: schemars::JsonSchema>() {
+    let schema = schema_for!(T);
+    let value = schema.as_value();
+    let one_of = value
+        .get("oneOf")
+        .and_then(|value| value.as_array())
+        .unwrap_or_else(|| panic!("schema should have oneOf: {value}"));
+
+    assert!(
+        one_of
+            .iter()
+            .any(|value| value.get("type").and_then(|value| value.as_str()) == Some("string")),
+        "schema should advertise string compatibility: {value}"
+    );
+}
+
+#[cfg(all(feature = "schemars", feature = "rfc5322-string-compat"))]
+#[test]
+fn schemars_rfc5322_string_compat_advertises_string_alternatives() {
+    assert_one_of_has_string::<email_message::Mailbox>();
+    assert_one_of_has_string::<email_message::Group>();
+    assert_one_of_has_string::<email_message::Address>();
+    assert_one_of_has_string::<email_message::AddressList>();
+    assert_one_of_has_string::<email_message::MailboxList>();
+}
+
+#[cfg(all(feature = "schemars", feature = "rfc5322-string-compat"))]
+#[test]
+fn schemars_address_compat_keeps_typed_variants_top_level() {
+    let schema = schema_for!(email_message::Address);
+    let value = schema.as_value();
+    let one_of = value
+        .get("oneOf")
+        .and_then(|value| value.as_array())
+        .unwrap_or_else(|| panic!("Address schema should have oneOf: {value}"));
+
+    assert!(
+        one_of.iter().any(|value| value
+            .get("properties")
+            .and_then(|value| value.get("type"))
+            .and_then(|value| value.get("const"))
+            .and_then(|value| value.as_str())
+            == Some("mailbox")),
+        "Address schema should advertise mailbox as a top-level alternative: {value}"
+    );
+    assert!(
+        one_of.iter().any(|value| value
+            .get("properties")
+            .and_then(|value| value.get("type"))
+            .and_then(|value| value.get("const"))
+            .and_then(|value| value.as_str())
+            == Some("group")),
+        "Address schema should advertise group as a top-level alternative: {value}"
+    );
+    assert!(
+        one_of
+            .iter()
+            .any(|value| value.get("type").and_then(|value| value.as_str()) == Some("string")),
+        "Address schema should advertise string compatibility: {value}"
+    );
+    assert!(
+        !one_of.iter().any(|value| value.get("oneOf").is_some()),
+        "Address schema should not nest typed alternatives under another oneOf: {value}"
+    );
+}
+
+#[cfg(feature = "schemars")]
+#[test]
+fn schemars_body_schema_is_tagged() {
+    let body_schema = schema_for!(email_message::Body);
+    let body_value = body_schema.as_value().to_string();
+
+    assert!(body_value.contains("text"));
+    assert!(body_value.contains("html"));
+    assert!(body_value.contains("text_and_html"));
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn serde_uses_tagged_address_and_body_shapes() {
+    let address = "Team: alice@example.com;"
+        .parse::<email_message::Address>()
+        .expect("group address parses");
+    let address_json = serde_json::to_value(&address).expect("address serializes");
+    assert_eq!(address_json["type"], "group");
+    assert_eq!(address_json["name"], "Team");
+    assert_eq!(address_json["members"][0]["type"], "mailbox");
+    assert_eq!(address_json["members"][0]["email"], "alice@example.com");
+
+    let decoded: email_message::Address =
+        serde_json::from_value(address_json).expect("address deserializes");
+    assert_eq!(decoded, address);
+
+    let body = email_message::Body::text_and_html("plain", "<p>html</p>");
+    let body_json = serde_json::to_value(&body).expect("body serializes");
+    assert_eq!(body_json["type"], "text_and_html");
+    assert_eq!(body_json["text"], "plain");
+    assert_eq!(body_json["html"], "<p>html</p>");
+
+    let decoded: email_message::Body =
+        serde_json::from_value(body_json).expect("body deserializes");
+    assert_eq!(decoded, body);
+}
+
+#[cfg(all(feature = "serde", not(feature = "rfc5322-string-compat")))]
+#[test]
+fn serde_rejects_rfc5322_string_addresses_without_compat() {
+    assert!(
+        serde_json::from_value::<email_message::Mailbox>(serde_json::json!("alice@example.com"))
+            .is_err()
+    );
+    assert!(
+        serde_json::from_value::<email_message::Group>(serde_json::json!(
+            "Team: alice@example.com;"
+        ))
+        .is_err()
+    );
+    assert!(
+        serde_json::from_value::<email_message::Address>(serde_json::json!(
+            "Team: alice@example.com;"
+        ))
+        .is_err()
+    );
+    assert!(
+        serde_json::from_value::<email_message::AddressList>(serde_json::json!(
+            "alice@example.com, Team: bob@example.com;"
+        ))
+        .is_err()
+    );
+    assert!(
+        serde_json::from_value::<email_message::MailboxList>(serde_json::json!(
+            "alice@example.com, bob@example.com"
+        ))
+        .is_err()
+    );
+}
+
+#[cfg(all(feature = "serde", feature = "rfc5322-string-compat"))]
+#[test]
+fn serde_accepts_rfc5322_string_addresses_with_compat() {
+    let mailbox: email_message::Mailbox =
+        serde_json::from_value(serde_json::json!("Mary Smith <mary@example.com>"))
+            .expect("mailbox string should deserialize with compat");
+    assert_eq!(mailbox.name(), Some("Mary Smith"));
+    assert_eq!(mailbox.email().as_str(), "mary@example.com");
+
+    let group: email_message::Group =
+        serde_json::from_value(serde_json::json!("Team: alice@example.com;"))
+            .expect("group string should deserialize with compat");
+    assert_eq!(group.name(), "Team");
+    assert_eq!(group.members().len(), 1);
+
+    let address: email_message::Address =
+        serde_json::from_value(serde_json::json!("Team: alice@example.com;"))
+            .expect("address string should deserialize with compat");
+    assert!(matches!(address, email_message::Address::Group(_)));
+
+    let address_list: email_message::AddressList = serde_json::from_value(serde_json::json!(
+        "alice@example.com, Team: bob@example.com;"
+    ))
+    .expect("address list string should deserialize with compat");
+    assert_eq!(address_list.len(), 2);
+
+    let mailbox_list: email_message::MailboxList =
+        serde_json::from_value(serde_json::json!("alice@example.com, bob@example.com"))
+            .expect("mailbox list string should deserialize with compat");
+    assert_eq!(mailbox_list.len(), 2);
+}
+
+#[cfg(feature = "schemars")]
+#[test]
+fn schemars_message_schema_allows_omitting_defaulted_collections() {
+    let schema = schema_for!(email_message::Message);
+    let value = schema.as_value();
+    let required = value
+        .get("required")
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    for field in ["to", "cc", "bcc", "reply_to", "headers", "attachments"] {
+        assert!(
+            !required.iter().any(|value| value.as_str() == Some(field)),
+            "field `{field}` should not be required: {value}"
+        );
+    }
+}
+
 #[cfg(feature = "schemars")]
 #[test]
 fn schemars_outbound_message_schema_matches_message_schema() {
@@ -779,4 +1003,273 @@ fn schemars_outbound_message_schema_matches_message_schema() {
         serde_json::to_string(&message_schema).expect("Message schema serializes"),
         "OutboundMessage JsonSchema must match Message's"
     );
+}
+
+/// `mail_parser` switches the entire To-header to the group-shape as soon
+/// as any group syntax appears, wrapping flat mailboxes that appear
+/// before/between/after named groups into synthetic nameless groups.
+/// Pin that the parser flattens those back so the documented
+/// `address.rs` flatten-path produces the obvious result: an in-order
+/// mix of mailboxes and named groups.
+#[test]
+fn address_list_flattens_mailboxes_around_named_group() {
+    let parsed = "alice@example.com, Team: bob@example.com;, dave@example.com"
+        .parse::<AddressList>()
+        .expect("mixed mailbox + group list should parse");
+
+    assert_eq!(parsed.len(), 3, "expected three address items in order");
+
+    match &parsed.as_slice()[0] {
+        Address::Mailbox(mailbox) => assert_eq!(mailbox.email().as_str(), "alice@example.com"),
+        other => panic!("index 0: expected Mailbox(alice), got {other:?}"),
+    }
+
+    match &parsed.as_slice()[1] {
+        Address::Group(group) => {
+            assert_eq!(group.name(), "Team");
+            assert_eq!(group.members().len(), 1);
+            assert_eq!(group.members()[0].email().as_str(), "bob@example.com");
+        }
+        other => panic!("index 1: expected Group(Team, [bob]), got {other:?}"),
+    }
+
+    match &parsed.as_slice()[2] {
+        Address::Mailbox(mailbox) => assert_eq!(mailbox.email().as_str(), "dave@example.com"),
+        other => panic!("index 2: expected Mailbox(dave), got {other:?}"),
+    }
+}
+
+#[cfg(all(feature = "serde", feature = "rfc5322-string-compat"))]
+#[test]
+fn serde_accepts_per_element_string_in_list_under_compat() {
+    // Per-element RFC 5322 strings inside a `MailboxList`/`AddressList`
+    // array are accepted by design (compat applies to each element
+    // independently). Pin the behaviour so it doesn't drift.
+    let mailbox_list: email_message::MailboxList = serde_json::from_value(serde_json::json!([
+        "alice@example.com",
+        {"type": "mailbox", "email": "bob@example.com"},
+    ]))
+    .expect("mixed string/object mailbox list should deserialize under compat");
+    assert_eq!(mailbox_list.len(), 2);
+    assert_eq!(
+        mailbox_list.as_slice()[0].email().as_str(),
+        "alice@example.com"
+    );
+    assert_eq!(
+        mailbox_list.as_slice()[1].email().as_str(),
+        "bob@example.com"
+    );
+
+    let address_list: email_message::AddressList = serde_json::from_value(serde_json::json!([
+        "alice@example.com",
+        {"type": "group", "name": "Team", "members": [{"type": "mailbox", "email": "bob@example.com"}]},
+    ]))
+    .expect("mixed string/object address list should deserialize under compat");
+    assert_eq!(address_list.len(), 2);
+    assert!(matches!(
+        &address_list.as_slice()[0],
+        email_message::Address::Mailbox(_)
+    ));
+    assert!(matches!(
+        &address_list.as_slice()[1],
+        email_message::Address::Group(_)
+    ));
+}
+
+/// Migration roundtrip: take a typed value, render it as the RFC 5322
+/// string an old producer would have emitted, then deserialize that
+/// string under `rfc5322-string-compat`. This is exactly what a
+/// consumer reading legacy queue payloads will do during a rolling
+/// upgrade.
+#[cfg(all(feature = "serde", feature = "rfc5322-string-compat"))]
+#[test]
+fn serde_compat_roundtrip_typed_via_rfc5322_string() {
+    for fixture in RFC_VALID_NAME_ADDR_FIXTURES
+        .iter()
+        .chain(RFC_VALID_ADDR_SPEC_FIXTURES.iter())
+    {
+        let typed: Mailbox = fixture
+            .input
+            .parse()
+            .unwrap_or_else(|_| panic!("{} fixture should parse", fixture.id));
+        let rendered = typed.to_string();
+        let from_string: Mailbox = serde_json::from_value(serde_json::json!(rendered))
+            .unwrap_or_else(|err| panic!("{} compat string deserialize failed: {err}", fixture.id));
+        assert_eq!(
+            from_string, typed,
+            "{} mailbox typed → Display → compat-string-deserialize must roundtrip",
+            fixture.id
+        );
+    }
+
+    for fixture in RFC_VALID_GROUP_FIXTURES {
+        let typed: Group = fixture
+            .input
+            .parse()
+            .unwrap_or_else(|_| panic!("{} fixture should parse", fixture.id));
+        let rendered = typed.to_string();
+        let from_string: Group = serde_json::from_value(serde_json::json!(rendered))
+            .unwrap_or_else(|err| panic!("{} compat string deserialize failed: {err}", fixture.id));
+        assert_eq!(
+            from_string, typed,
+            "{} group typed → Display → compat-string-deserialize must roundtrip",
+            fixture.id
+        );
+    }
+
+    let address_list: AddressList =
+        "Mary Smith <mary@x.test>, jdoe@one.test, A Group:Ed Jones <c@a.test>,joe@where.test;"
+            .parse()
+            .expect("mixed list should parse");
+    let rendered = address_list.to_string();
+    let from_string: AddressList = serde_json::from_value(serde_json::json!(rendered))
+        .expect("address list compat string deserialize should succeed");
+    assert_eq!(
+        from_string.as_slice(),
+        address_list.as_slice(),
+        "AddressList typed → Display → compat-string-deserialize must roundtrip",
+    );
+
+    let mailbox_list: MailboxList = "Mary Smith <mary@x.test>, jdoe@one.test"
+        .parse()
+        .expect("mailbox list should parse");
+    let rendered = mailbox_list.to_string();
+    let from_string: MailboxList = serde_json::from_value(serde_json::json!(rendered))
+        .expect("mailbox list compat string deserialize should succeed");
+    assert_eq!(
+        from_string.as_slice(),
+        mailbox_list.as_slice(),
+        "MailboxList typed → Display → compat-string-deserialize must roundtrip",
+    );
+}
+
+#[cfg(all(feature = "serde", feature = "rfc5322-string-compat"))]
+#[test]
+fn serde_compat_object_error_keeps_field_provenance() {
+    // Regression guard for the Visitor-based compat dispatch (vs the
+    // older `#[serde(untagged)]` shape, which collapsed all errors to
+    // "did not match any variant"). A typed-object input with a missing
+    // required field must surface a field-level diagnostic.
+    let err = serde_json::from_value::<email_message::Mailbox>(serde_json::json!({
+        "name": "Mary"
+    }))
+    .expect_err("missing email field should fail");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("email") || msg.contains("missing field"),
+        "expected field-level error mentioning the missing field, got: {msg}"
+    );
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn serde_omits_null_optional_fields_in_mailbox() {
+    let mailbox: email_message::Mailbox = "alice@example.com".parse().expect("mailbox parses");
+    let value = serde_json::to_value(&mailbox).expect("mailbox serializes");
+    assert!(
+        value.get("name").is_none(),
+        "Mailbox without a display name should not emit `name`: {value}"
+    );
+
+    let mailbox: email_message::Mailbox =
+        "Mary <mary@example.com>".parse().expect("mailbox parses");
+    let value = serde_json::to_value(&mailbox).expect("mailbox serializes");
+    assert_eq!(value["name"], "Mary");
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn serde_omits_empty_collections_in_message() {
+    let from: Mailbox = "alice@example.com".parse().expect("mailbox parses");
+    let to: Address = "bob@example.com".parse().expect("address parses");
+    let message =
+        email_message::Message::new(from, vec![to], email_message::Body::Text("hi".to_string()));
+    let value = serde_json::to_value(&message).expect("message serializes");
+
+    for absent in ["cc", "bcc", "reply_to", "headers", "attachments", "sender"] {
+        assert!(
+            value.get(absent).is_none(),
+            "field `{absent}` should be omitted when empty/none, got: {value}"
+        );
+    }
+    assert_eq!(value["to"][0]["email"], "bob@example.com");
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn serde_attachment_bytes_round_trip_as_base64() {
+    use email_message::{Attachment, AttachmentBody, ContentType};
+
+    let attachment = Attachment::bytes(
+        ContentType::try_from("text/plain").expect("content type parses"),
+        b"report".to_vec(),
+    );
+    let value = serde_json::to_value(&attachment).expect("attachment serializes");
+    assert_eq!(value["body"]["type"], "bytes");
+    assert_eq!(
+        value["body"]["bytes"], "cmVwb3J0",
+        "Bytes payload must serialize as RFC 4648 base64 (with padding)"
+    );
+
+    let decoded: Attachment =
+        serde_json::from_value(value).expect("attachment deserializes from base64 form");
+    match decoded.body() {
+        AttachmentBody::Bytes(bytes) => assert_eq!(bytes.as_slice(), b"report"),
+        other => panic!("expected Bytes after roundtrip, got {other:?}"),
+    }
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn serde_attachment_bytes_rejects_invalid_base64() {
+    let err = serde_json::from_value::<email_message::Attachment>(serde_json::json!({
+        "content_type": "text/plain",
+        "disposition": "attachment",
+        "body": {"type": "bytes", "bytes": "!!! not base64 !!!"}
+    }))
+    .expect_err("garbage base64 should fail to deserialize");
+    assert!(
+        err.to_string().contains("base64"),
+        "expected base64 diagnostic, got: {err}"
+    );
+}
+
+#[cfg(all(feature = "serde", feature = "mime"))]
+#[test]
+fn serde_mime_part_uses_internal_tag_with_snake_case() {
+    use email_message::{ContentType, MimePart};
+
+    let leaf = MimePart::Leaf {
+        content_type: ContentType::try_from("text/plain").expect("ct parses"),
+        content_transfer_encoding: None,
+        content_disposition: None,
+        body: b"hi".to_vec(),
+    };
+    let value = serde_json::to_value(&leaf).expect("leaf serializes");
+    assert_eq!(
+        value["type"], "leaf",
+        "MimePart should use internally-tagged snake_case discriminator, not the derived externally-tagged PascalCase shape: {value}"
+    );
+    assert_eq!(
+        value["body"], "aGk=",
+        "MIME body should serialize as base64"
+    );
+    assert!(
+        value.get("content_transfer_encoding").is_none(),
+        "absent optional fields should not emit null"
+    );
+
+    let multipart = MimePart::Multipart {
+        content_type: ContentType::try_from("multipart/mixed; boundary=abc").expect("ct parses"),
+        boundary: Some("abc".to_string()),
+        parts: vec![leaf.clone()],
+    };
+    let value = serde_json::to_value(&multipart).expect("multipart serializes");
+    assert_eq!(value["type"], "multipart");
+    assert_eq!(value["boundary"], "abc");
+    assert_eq!(value["parts"][0]["type"], "leaf");
+
+    let decoded: MimePart =
+        serde_json::from_value(value).expect("multipart roundtrips back through deserialize");
+    assert_eq!(decoded, multipart);
 }

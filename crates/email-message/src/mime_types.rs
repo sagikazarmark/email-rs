@@ -23,7 +23,6 @@ use std::str::FromStr;
 /// the parameter (`boundary` is case-sensitive per RFC 2046 §5.1.1;
 /// `charset` is case-insensitive per RFC 2046 §4.1.2 but the kernel
 /// leaves the caller's bytes intact for round-trip fidelity).
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ContentType(String);
 
@@ -336,6 +335,28 @@ impl<'de> serde::Deserialize<'de> for ContentType {
     }
 }
 
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for ContentType {
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "ContentType".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::ContentType").into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "MIME Content-Type field value"
+        })
+    }
+}
+
 #[cfg(feature = "arbitrary")]
 impl<'a> arbitrary::Arbitrary<'a> for ContentType {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
@@ -366,7 +387,6 @@ impl<'a> arbitrary::Arbitrary<'a> for ContentType {
 ///
 /// [`Base64`]: Self::Base64
 /// [`Other`]: Self::Other
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum ContentTransferEncoding {
@@ -455,6 +475,28 @@ impl<'de> serde::Deserialize<'de> for ContentTransferEncoding {
     }
 }
 
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for ContentTransferEncoding {
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "ContentTransferEncoding".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::ContentTransferEncoding").into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "RFC 2045 Content-Transfer-Encoding token"
+        })
+    }
+}
+
 #[cfg(feature = "arbitrary")]
 impl<'a> arbitrary::Arbitrary<'a> for ContentTransferEncoding {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
@@ -480,7 +522,6 @@ impl<'a> arbitrary::Arbitrary<'a> for ContentTransferEncoding {
 /// dependent on the parameter. The kernel preserves parameter values
 /// verbatim; for semantic comparison route through the disposition's
 /// accessors rather than comparing raw input strings.
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ContentDisposition(String);
 
@@ -661,6 +702,28 @@ impl<'de> serde::Deserialize<'de> for ContentDisposition {
     }
 }
 
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for ContentDisposition {
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "ContentDisposition".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::ContentDisposition").into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "RFC 2183 Content-Disposition field value"
+        })
+    }
+}
+
 #[cfg(feature = "arbitrary")]
 impl<'a> arbitrary::Arbitrary<'a> for ContentDisposition {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
@@ -721,26 +784,199 @@ impl<'a> arbitrary::Arbitrary<'a> for ContentDisposition {
 /// `MimePart` (e.g. arbitrary caller code that walks the tree) must
 /// defend themselves.
 #[cfg(feature = "mime")]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MimePart {
     Leaf {
-        #[cfg_attr(feature = "schemars", schemars(with = "String"))]
         content_type: ContentType,
-        #[cfg_attr(feature = "schemars", schemars(with = "Option<String>"))]
         content_transfer_encoding: Option<ContentTransferEncoding>,
-        #[cfg_attr(feature = "schemars", schemars(with = "Option<String>"))]
         content_disposition: Option<ContentDisposition>,
         body: Vec<u8>,
     },
     Multipart {
-        #[cfg_attr(feature = "schemars", schemars(with = "String"))]
         content_type: ContentType,
         boundary: Option<String>,
         parts: Vec<Self>,
     },
+}
+
+#[cfg(all(feature = "mime", feature = "serde"))]
+impl serde::Serialize for MimePart {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use base64::Engine as _;
+        use serde::ser::SerializeStruct as _;
+
+        match self {
+            Self::Leaf {
+                content_type,
+                content_transfer_encoding,
+                content_disposition,
+                body,
+            } => {
+                let mut len = 3; // type + content_type + body
+                if content_transfer_encoding.is_some() {
+                    len += 1;
+                }
+                if content_disposition.is_some() {
+                    len += 1;
+                }
+                let encoded = base64::engine::general_purpose::STANDARD.encode(body);
+                let mut value = serializer.serialize_struct("MimePart", len)?;
+                value.serialize_field("type", "leaf")?;
+                value.serialize_field("content_type", content_type)?;
+                if let Some(cte) = content_transfer_encoding {
+                    value.serialize_field("content_transfer_encoding", cte)?;
+                }
+                if let Some(cd) = content_disposition {
+                    value.serialize_field("content_disposition", cd)?;
+                }
+                value.serialize_field("body", &encoded)?;
+                value.end()
+            }
+            Self::Multipart {
+                content_type,
+                boundary,
+                parts,
+            } => {
+                let mut len = 3; // type + content_type + parts
+                if boundary.is_some() {
+                    len += 1;
+                }
+                let mut value = serializer.serialize_struct("MimePart", len)?;
+                value.serialize_field("type", "multipart")?;
+                value.serialize_field("content_type", content_type)?;
+                if let Some(b) = boundary {
+                    value.serialize_field("boundary", b)?;
+                }
+                value.serialize_field("parts", parts)?;
+                value.end()
+            }
+        }
+    }
+}
+
+#[cfg(all(feature = "mime", feature = "serde"))]
+impl<'de> serde::Deserialize<'de> for MimePart {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use base64::Engine as _;
+
+        #[derive(serde::Deserialize)]
+        #[serde(tag = "type", rename_all = "snake_case")]
+        enum RawMimePart {
+            Leaf {
+                content_type: ContentType,
+                #[serde(default)]
+                content_transfer_encoding: Option<ContentTransferEncoding>,
+                #[serde(default)]
+                content_disposition: Option<ContentDisposition>,
+                body: String,
+            },
+            Multipart {
+                content_type: ContentType,
+                #[serde(default)]
+                boundary: Option<String>,
+                #[serde(default)]
+                parts: Vec<MimePart>,
+            },
+        }
+
+        Ok(match RawMimePart::deserialize(deserializer)? {
+            RawMimePart::Leaf {
+                content_type,
+                content_transfer_encoding,
+                content_disposition,
+                body,
+            } => {
+                let decoded = base64::engine::general_purpose::STANDARD
+                    .decode(body.as_bytes())
+                    .map_err(|err| {
+                        serde::de::Error::custom(format!("invalid base64 MIME body: {err}"))
+                    })?;
+                Self::Leaf {
+                    content_type,
+                    content_transfer_encoding,
+                    content_disposition,
+                    body: decoded,
+                }
+            }
+            RawMimePart::Multipart {
+                content_type,
+                boundary,
+                parts,
+            } => Self::Multipart {
+                content_type,
+                boundary,
+                parts,
+            },
+        })
+    }
+}
+
+#[cfg(all(feature = "mime", feature = "schemars"))]
+impl schemars::JsonSchema for MimePart {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "MimePart".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::MimePart").into()
+    }
+
+    /// MIME parts have no RFC 5322 string form, so this schema is *not*
+    /// wrapped in an `rfc5322-string-compat` `oneOf: [object, string]`
+    /// the way `Mailbox` / `Group` / `Address` are. The asymmetry is
+    /// deliberate: there is no producer-side wire shape for "MIME part
+    /// as a header-like string" to migrate from.
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        let recursive = generator.subschema_for::<MimePart>();
+        schemars::json_schema!({
+            "oneOf": [
+                {
+                    "type": "object",
+                    "properties": {
+                        "type": {"const": "leaf"},
+                        "content_type": {
+                            "type": "string",
+                            "description": "MIME Content-Type field value"
+                        },
+                        "content_transfer_encoding": {
+                            "type": "string",
+                            "description": "RFC 2045 Content-Transfer-Encoding token"
+                        },
+                        "content_disposition": {
+                            "type": "string",
+                            "description": "RFC 2183 Content-Disposition field value"
+                        },
+                        "body": {
+                            "type": "string",
+                            "contentEncoding": "base64",
+                            "description": "Base64-encoded MIME part body (RFC 4648, with padding)"
+                        }
+                    },
+                    "required": ["type", "content_type", "body"]
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "type": {"const": "multipart"},
+                        "content_type": {
+                            "type": "string",
+                            "description": "MIME Content-Type field value"
+                        },
+                        "boundary": {"type": "string"},
+                        "parts": {"type": "array", "items": recursive}
+                    },
+                    "required": ["type", "content_type", "parts"]
+                }
+            ]
+        })
+    }
 }
 
 #[cfg(test)]

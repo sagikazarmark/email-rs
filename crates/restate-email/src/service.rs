@@ -35,6 +35,7 @@ pub trait Service {
 /// deserialize it later with the configured provider-option registry.
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(example = example_send_request()))]
 pub struct SendRequest {
     /// Configured transport profile to use for this send.
     pub transport: TransportKey,
@@ -42,7 +43,63 @@ pub struct SendRequest {
     pub message: OutboundMessage,
     /// Send-time metadata and raw provider-specific transport options.
     #[serde(default)]
+    #[cfg_attr(feature = "schemars", schemars(default))]
     pub options: RawSendOptions,
+}
+
+#[cfg(feature = "schemars")]
+fn example_send_request() -> serde_json::Value {
+    serde_json::json!({
+        "transport": "your-transport",
+        "options": {
+            "idempotency_key": "foo",
+            "transport_options": {
+                "your-transport": {
+                    "tags": [
+                        {
+                            "name": "campaign",
+                            "value": "test"
+                        }
+                    ]
+                }
+            },
+        },
+        "message": {
+            "from": {
+                "type": "mailbox",
+                "name": "Alice",
+                "email": "alice@example.com"
+            },
+            "to": [
+                {
+                    "type": "mailbox",
+                    "name": "Bob",
+                    "email": "bob@example.com"
+                },
+                {
+                    "type": "mailbox",
+                    "name": "Carol",
+                    "email": "carol@example.com"
+                },
+                {
+                    "type": "group",
+                    "name": "Managers",
+                    "members": [
+                        {
+                            "type": "mailbox",
+                            "name": "Dave",
+                            "email": "dave@example.com"
+                        },
+                    ],
+                },
+            ],
+            "subject": "Test email",
+            "body": {
+                "type": "text",
+                "text": "Hello everyone! This is a test email.",
+            },
+        },
+    })
 }
 
 /// Wire-friendly send options whose provider-specific slots are still raw.
@@ -64,7 +121,7 @@ pub struct RawSendOptions {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     #[cfg_attr(
         feature = "schemars",
-        schemars(with = "BTreeMap<String, serde_json::Value>")
+        schemars(default, with = "BTreeMap<String, serde_json::Value>")
     )]
     pub transport_options: BTreeMap<String, serde_value::Value>,
     /// Per-send timeout forwarded to transports that honor timeout metadata.
@@ -139,6 +196,8 @@ impl RawSendOptions {
 /// Wire-stable response shape returned by the Restate `Email.send`
 /// handler.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(example = example_send_response()))]
 #[non_exhaustive]
 pub struct SendResponse {
     /// Provider send report returned by the selected transport.
@@ -149,6 +208,22 @@ impl From<SendReport> for SendResponse {
     fn from(report: SendReport) -> Self {
         Self { report }
     }
+}
+
+#[cfg(feature = "schemars")]
+fn example_send_response() -> serde_json::Value {
+    serde_json::json!({
+        "report": {
+            "provider": "your-provider",
+            "provider_message_id": "184fa9a3-f967-4a98-9d8f-57152e7cbe64",
+            "accepted": [
+                "alice@example.com",
+                "bob@example.com",
+                "carol@example.com",
+                "dave@example.com",
+            ],
+        },
+    })
 }
 
 /// Concrete Restate service implementation over a transport resolver.
@@ -549,6 +624,21 @@ mod tests {
         assert_eq!(response.report.provider, "resend");
         assert_eq!(response.report.provider_message_id.as_deref(), Some("id-1"));
         assert_eq!(response.report.accepted[0].as_str(), "to@example.com");
+    }
+
+    #[cfg(feature = "schemars")]
+    #[test]
+    fn example_send_request_matches_wire_shape() {
+        let value = example_send_request();
+
+        assert!(
+            value
+                .pointer("/options/transport_options")
+                .and_then(serde_json::Value::as_object)
+                .is_some(),
+            "transport_options should be a provider-keyed object: {value}"
+        );
+        serde_json::from_value::<SendRequest>(value).expect("example should deserialize");
     }
 
     #[test]

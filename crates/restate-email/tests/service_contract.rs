@@ -180,10 +180,32 @@ fn send_request_schema_uses_send_options_shape() {
     let value = schema.as_value();
 
     assert!(value.pointer("/properties/options").is_some());
+    if let Some(required) = value.get("required").and_then(|value| value.as_array()) {
+        assert!(
+            !required
+                .iter()
+                .any(|value| value.as_str() == Some("options")),
+            "SendRequest options default to empty and should be optional: {value}"
+        );
+    }
     assert!(
         value.to_string().contains("transport_options"),
         "SendRequest schema should expose SendOptions transport_options"
     );
+
+    let raw_options_schema = schemars::schema_for!(RawSendOptions);
+    let raw_options_value = raw_options_schema.as_value();
+    if let Some(required) = raw_options_value
+        .get("required")
+        .and_then(|value| value.as_array())
+    {
+        assert!(
+            !required
+                .iter()
+                .any(|value| value.as_str() == Some("transport_options")),
+            "RawSendOptions transport_options default to empty and should be optional: {raw_options_value}"
+        );
+    }
 }
 
 #[tokio::test]

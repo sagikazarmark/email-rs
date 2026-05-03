@@ -784,6 +784,7 @@ version = "0.6.1"
 dependencies = [
  "addr-spec",
  "arbitrary",
+ "base64",
  "criterion",
  "mail-parser",
  "proptest",
@@ -2549,6 +2550,7 @@ dependencies = [
  "regress 0.10.5",
  "restate-sdk-macros",
  "restate-sdk-shared-core",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "syn",
