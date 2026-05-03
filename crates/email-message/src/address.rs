@@ -162,9 +162,12 @@ impl serde::Serialize for Mailbox {
     {
         use serde::ser::SerializeStruct as _;
 
-        let mut value = serializer.serialize_struct("Mailbox", 3)?;
+        let len = 2 + usize::from(self.name.is_some());
+        let mut value = serializer.serialize_struct("Mailbox", len)?;
         value.serialize_field("type", "mailbox")?;
-        value.serialize_field("name", &self.name)?;
+        if let Some(name) = &self.name {
+            value.serialize_field("name", name)?;
+        }
         value.serialize_field("email", &self.email)?;
         value.end()
     }
@@ -200,17 +203,45 @@ impl<'de> serde::Deserialize<'de> for Mailbox {
 
         #[cfg(feature = "rfc5322-string-compat")]
         {
-            #[derive(serde::Deserialize)]
-            #[serde(untagged)]
-            enum Compat {
-                Raw(RawMailbox),
-                String(String),
+            // A bespoke `Visitor` (rather than `#[serde(untagged)]`) so
+            // typed-shape errors keep their field-level provenance, e.g.
+            // `missing field "type"` instead of the generic "did not match
+            // any variant" produced by `untagged`.
+            struct MailboxVisitor;
+
+            impl<'de> serde::de::Visitor<'de> for MailboxVisitor {
+                type Value = Mailbox;
+
+                fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    f.write_str("a typed mailbox object or an RFC 5322 mailbox string")
+                }
+
+                fn visit_str<E>(self, value: &str) -> Result<Mailbox, E>
+                where
+                    E: serde::de::Error,
+                {
+                    value.parse().map_err(E::custom)
+                }
+
+                fn visit_string<E>(self, value: String) -> Result<Mailbox, E>
+                where
+                    E: serde::de::Error,
+                {
+                    value.parse().map_err(E::custom)
+                }
+
+                fn visit_map<A>(self, map: A) -> Result<Mailbox, A::Error>
+                where
+                    A: serde::de::MapAccess<'de>,
+                {
+                    let raw = <RawMailbox as serde::Deserialize<'de>>::deserialize(
+                        serde::de::value::MapAccessDeserializer::new(map),
+                    )?;
+                    from_raw(raw)
+                }
             }
 
-            return match Compat::deserialize(deserializer)? {
-                Compat::Raw(raw) => from_raw(raw),
-                Compat::String(value) => value.parse().map_err(serde::de::Error::custom),
-            };
+            deserializer.deserialize_any(MailboxVisitor)
         }
 
         #[cfg(not(feature = "rfc5322-string-compat"))]
@@ -233,7 +264,7 @@ impl schemars::JsonSchema for Mailbox {
 
         #[cfg(feature = "rfc5322-string-compat")]
         {
-            return schemars::json_schema!({
+            schemars::json_schema!({
                 "oneOf": [
                     typed,
                     {
@@ -241,7 +272,7 @@ impl schemars::JsonSchema for Mailbox {
                         "description": "RFC 5322 mailbox string"
                     }
                 ]
-            });
+            })
         }
 
         #[cfg(not(feature = "rfc5322-string-compat"))]
@@ -376,10 +407,13 @@ impl serde::Serialize for Group {
     {
         use serde::ser::SerializeStruct as _;
 
-        let mut value = serializer.serialize_struct("Group", 3)?;
+        let len = 2 + usize::from(!self.members.is_empty());
+        let mut value = serializer.serialize_struct("Group", len)?;
         value.serialize_field("type", "group")?;
         value.serialize_field("name", &self.name)?;
-        value.serialize_field("members", &self.members)?;
+        if !self.members.is_empty() {
+            value.serialize_field("members", &self.members)?;
+        }
         value.end()
     }
 }
@@ -414,17 +448,41 @@ impl<'de> serde::Deserialize<'de> for Group {
 
         #[cfg(feature = "rfc5322-string-compat")]
         {
-            #[derive(serde::Deserialize)]
-            #[serde(untagged)]
-            enum Compat {
-                Raw(RawGroup),
-                String(String),
+            struct GroupVisitor;
+
+            impl<'de> serde::de::Visitor<'de> for GroupVisitor {
+                type Value = Group;
+
+                fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    f.write_str("a typed group object or an RFC 5322 group string")
+                }
+
+                fn visit_str<E>(self, value: &str) -> Result<Group, E>
+                where
+                    E: serde::de::Error,
+                {
+                    value.parse().map_err(E::custom)
+                }
+
+                fn visit_string<E>(self, value: String) -> Result<Group, E>
+                where
+                    E: serde::de::Error,
+                {
+                    value.parse().map_err(E::custom)
+                }
+
+                fn visit_map<A>(self, map: A) -> Result<Group, A::Error>
+                where
+                    A: serde::de::MapAccess<'de>,
+                {
+                    let raw = <RawGroup as serde::Deserialize<'de>>::deserialize(
+                        serde::de::value::MapAccessDeserializer::new(map),
+                    )?;
+                    from_raw(raw)
+                }
             }
 
-            return match Compat::deserialize(deserializer)? {
-                Compat::Raw(raw) => from_raw(raw),
-                Compat::String(value) => value.parse().map_err(serde::de::Error::custom),
-            };
+            deserializer.deserialize_any(GroupVisitor)
         }
 
         #[cfg(not(feature = "rfc5322-string-compat"))]
@@ -447,7 +505,7 @@ impl schemars::JsonSchema for Group {
 
         #[cfg(feature = "rfc5322-string-compat")]
         {
-            return schemars::json_schema!({
+            schemars::json_schema!({
                 "oneOf": [
                     typed,
                     {
@@ -455,7 +513,7 @@ impl schemars::JsonSchema for Group {
                         "description": "RFC 5322 group string"
                     }
                 ]
-            });
+            })
         }
 
         #[cfg(not(feature = "rfc5322-string-compat"))]
@@ -619,17 +677,41 @@ impl<'de> serde::Deserialize<'de> for Address {
 
         #[cfg(feature = "rfc5322-string-compat")]
         {
-            #[derive(serde::Deserialize)]
-            #[serde(untagged)]
-            enum Compat {
-                Raw(RawAddress),
-                String(String),
+            struct AddressVisitor;
+
+            impl<'de> serde::de::Visitor<'de> for AddressVisitor {
+                type Value = Address;
+
+                fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    f.write_str("a typed address object or an RFC 5322 address string")
+                }
+
+                fn visit_str<E>(self, value: &str) -> Result<Address, E>
+                where
+                    E: serde::de::Error,
+                {
+                    value.parse().map_err(E::custom)
+                }
+
+                fn visit_string<E>(self, value: String) -> Result<Address, E>
+                where
+                    E: serde::de::Error,
+                {
+                    value.parse().map_err(E::custom)
+                }
+
+                fn visit_map<A>(self, map: A) -> Result<Address, A::Error>
+                where
+                    A: serde::de::MapAccess<'de>,
+                {
+                    let raw = <RawAddress as serde::Deserialize<'de>>::deserialize(
+                        serde::de::value::MapAccessDeserializer::new(map),
+                    )?;
+                    Ok(from_raw(raw))
+                }
             }
 
-            return match Compat::deserialize(deserializer)? {
-                Compat::Raw(raw) => Ok(from_raw(raw)),
-                Compat::String(value) => value.parse().map_err(serde::de::Error::custom),
-            };
+            deserializer.deserialize_any(AddressVisitor)
         }
 
         #[cfg(not(feature = "rfc5322-string-compat"))]
@@ -653,7 +735,7 @@ impl schemars::JsonSchema for Address {
 
         #[cfg(feature = "rfc5322-string-compat")]
         {
-            return schemars::json_schema!({
+            schemars::json_schema!({
                 "oneOf": [
                     mailbox,
                     group,
@@ -662,7 +744,7 @@ impl schemars::JsonSchema for Address {
                         "description": "RFC 5322 address string"
                     }
                 ]
-            });
+            })
         }
 
         #[cfg(not(feature = "rfc5322-string-compat"))]
@@ -708,7 +790,7 @@ macro_rules! impl_address_collection {
 
                 #[cfg(feature = "rfc5322-string-compat")]
                 {
-                    return schemars::json_schema!({
+                    schemars::json_schema!({
                         "oneOf": [
                             typed,
                             {
@@ -716,7 +798,7 @@ macro_rules! impl_address_collection {
                                 "description": "RFC 5322 comma-separated address list string"
                             }
                         ]
-                    });
+                    })
                 }
 
                 #[cfg(not(feature = "rfc5322-string-compat"))]
@@ -861,17 +943,49 @@ macro_rules! impl_address_collection {
             {
                 #[cfg(feature = "rfc5322-string-compat")]
                 {
-                    #[derive(serde::Deserialize)]
-                    #[serde(untagged)]
-                    enum Compat<T> {
-                        Items(Vec<T>),
-                        String(String),
+                    struct CollectionVisitor;
+
+                    impl<'de> serde::de::Visitor<'de> for CollectionVisitor {
+                        type Value = $name;
+
+                        fn expecting(
+                            &self,
+                            f: &mut std::fmt::Formatter<'_>,
+                        ) -> std::fmt::Result {
+                            f.write_str(concat!(
+                                "a ",
+                                stringify!($name),
+                                " array or an RFC 5322 list string",
+                            ))
+                        }
+
+                        fn visit_str<E>(self, value: &str) -> Result<$name, E>
+                        where
+                            E: serde::de::Error,
+                        {
+                            value.parse().map_err(E::custom)
+                        }
+
+                        fn visit_string<E>(self, value: String) -> Result<$name, E>
+                        where
+                            E: serde::de::Error,
+                        {
+                            value.parse().map_err(E::custom)
+                        }
+
+                        fn visit_seq<A>(self, mut seq: A) -> Result<$name, A::Error>
+                        where
+                            A: serde::de::SeqAccess<'de>,
+                        {
+                            let mut items = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+                            while let Some(item) = seq.next_element::<$item>()? {
+                                items.push(item);
+                            }
+                            Ok($name { items })
+                        }
                     }
 
-                    return match Compat::<$item>::deserialize(deserializer)? {
-                        Compat::Items(items) => Ok(Self { items }),
-                        Compat::String(value) => value.parse().map_err(serde::de::Error::custom),
-                    };
+                    deserializer.deserialize_any(CollectionVisitor)
                 }
 
                 #[cfg(not(feature = "rfc5322-string-compat"))]

@@ -1004,3 +1004,204 @@ fn schemars_outbound_message_schema_matches_message_schema() {
         "OutboundMessage JsonSchema must match Message's"
     );
 }
+
+/// `mail_parser` switches the entire To-header to the group-shape as soon
+/// as any group syntax appears, wrapping flat mailboxes that appear
+/// before/between/after named groups into synthetic nameless groups.
+/// Pin that the parser flattens those back so the documented
+/// `address.rs` flatten-path produces the obvious result: an in-order
+/// mix of mailboxes and named groups.
+#[test]
+fn address_list_flattens_mailboxes_around_named_group() {
+    let parsed = "alice@example.com, Team: bob@example.com;, dave@example.com"
+        .parse::<AddressList>()
+        .expect("mixed mailbox + group list should parse");
+
+    assert_eq!(parsed.len(), 3, "expected three address items in order");
+
+    match &parsed.as_slice()[0] {
+        Address::Mailbox(mailbox) => assert_eq!(mailbox.email().as_str(), "alice@example.com"),
+        other => panic!("index 0: expected Mailbox(alice), got {other:?}"),
+    }
+
+    match &parsed.as_slice()[1] {
+        Address::Group(group) => {
+            assert_eq!(group.name(), "Team");
+            assert_eq!(group.members().len(), 1);
+            assert_eq!(group.members()[0].email().as_str(), "bob@example.com");
+        }
+        other => panic!("index 1: expected Group(Team, [bob]), got {other:?}"),
+    }
+
+    match &parsed.as_slice()[2] {
+        Address::Mailbox(mailbox) => assert_eq!(mailbox.email().as_str(), "dave@example.com"),
+        other => panic!("index 2: expected Mailbox(dave), got {other:?}"),
+    }
+}
+
+#[cfg(all(feature = "serde", feature = "rfc5322-string-compat"))]
+#[test]
+fn serde_accepts_per_element_string_in_list_under_compat() {
+    // Per-element RFC 5322 strings inside a `MailboxList`/`AddressList`
+    // array are accepted by design (compat applies to each element
+    // independently). Pin the behaviour so it doesn't drift.
+    let mailbox_list: email_message::MailboxList = serde_json::from_value(serde_json::json!([
+        "alice@example.com",
+        {"type": "mailbox", "email": "bob@example.com"},
+    ]))
+    .expect("mixed string/object mailbox list should deserialize under compat");
+    assert_eq!(mailbox_list.len(), 2);
+    assert_eq!(
+        mailbox_list.as_slice()[0].email().as_str(),
+        "alice@example.com"
+    );
+    assert_eq!(
+        mailbox_list.as_slice()[1].email().as_str(),
+        "bob@example.com"
+    );
+
+    let address_list: email_message::AddressList = serde_json::from_value(serde_json::json!([
+        "alice@example.com",
+        {"type": "group", "name": "Team", "members": [{"type": "mailbox", "email": "bob@example.com"}]},
+    ]))
+    .expect("mixed string/object address list should deserialize under compat");
+    assert_eq!(address_list.len(), 2);
+    assert!(matches!(
+        &address_list.as_slice()[0],
+        email_message::Address::Mailbox(_)
+    ));
+    assert!(matches!(
+        &address_list.as_slice()[1],
+        email_message::Address::Group(_)
+    ));
+}
+
+#[cfg(all(feature = "serde", feature = "rfc5322-string-compat"))]
+#[test]
+fn serde_compat_object_error_keeps_field_provenance() {
+    // Regression guard for the Visitor-based compat dispatch (vs the
+    // older `#[serde(untagged)]` shape, which collapsed all errors to
+    // "did not match any variant"). A typed-object input with a missing
+    // required field must surface a field-level diagnostic.
+    let err = serde_json::from_value::<email_message::Mailbox>(serde_json::json!({
+        "name": "Mary"
+    }))
+    .expect_err("missing email field should fail");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("email") || msg.contains("missing field"),
+        "expected field-level error mentioning the missing field, got: {msg}"
+    );
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn serde_omits_null_optional_fields_in_mailbox() {
+    let mailbox: email_message::Mailbox = "alice@example.com".parse().expect("mailbox parses");
+    let value = serde_json::to_value(&mailbox).expect("mailbox serializes");
+    assert!(
+        value.get("name").is_none(),
+        "Mailbox without a display name should not emit `name`: {value}"
+    );
+
+    let mailbox: email_message::Mailbox = "Mary <mary@example.com>".parse().expect("mailbox parses");
+    let value = serde_json::to_value(&mailbox).expect("mailbox serializes");
+    assert_eq!(value["name"], "Mary");
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn serde_omits_empty_collections_in_message() {
+    let from: Mailbox = "alice@example.com".parse().expect("mailbox parses");
+    let to: Address = "bob@example.com".parse().expect("address parses");
+    let message = email_message::Message::new(
+        from,
+        vec![to],
+        email_message::Body::Text("hi".to_string()),
+    );
+    let value = serde_json::to_value(&message).expect("message serializes");
+
+    for absent in ["cc", "bcc", "reply_to", "headers", "attachments", "sender"] {
+        assert!(
+            value.get(absent).is_none(),
+            "field `{absent}` should be omitted when empty/none, got: {value}"
+        );
+    }
+    assert_eq!(value["to"][0]["email"], "bob@example.com");
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn serde_attachment_bytes_round_trip_as_base64() {
+    use email_message::{Attachment, AttachmentBody, ContentType};
+
+    let attachment = Attachment::bytes(
+        ContentType::try_from("text/plain").expect("content type parses"),
+        b"report".to_vec(),
+    );
+    let value = serde_json::to_value(&attachment).expect("attachment serializes");
+    assert_eq!(value["body"]["type"], "bytes");
+    assert_eq!(
+        value["body"]["bytes"], "cmVwb3J0",
+        "Bytes payload must serialize as RFC 4648 base64 (with padding)"
+    );
+
+    let decoded: Attachment =
+        serde_json::from_value(value).expect("attachment deserializes from base64 form");
+    match decoded.body() {
+        AttachmentBody::Bytes(bytes) => assert_eq!(bytes.as_slice(), b"report"),
+        other => panic!("expected Bytes after roundtrip, got {other:?}"),
+    }
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn serde_attachment_bytes_rejects_invalid_base64() {
+    let err = serde_json::from_value::<email_message::Attachment>(serde_json::json!({
+        "content_type": "text/plain",
+        "disposition": "attachment",
+        "body": {"type": "bytes", "bytes": "!!! not base64 !!!"}
+    }))
+    .expect_err("garbage base64 should fail to deserialize");
+    assert!(
+        err.to_string().contains("base64"),
+        "expected base64 diagnostic, got: {err}"
+    );
+}
+
+#[cfg(all(feature = "serde", feature = "mime"))]
+#[test]
+fn serde_mime_part_uses_internal_tag_with_snake_case() {
+    use email_message::{ContentType, MimePart};
+
+    let leaf = MimePart::Leaf {
+        content_type: ContentType::try_from("text/plain").expect("ct parses"),
+        content_transfer_encoding: None,
+        content_disposition: None,
+        body: b"hi".to_vec(),
+    };
+    let value = serde_json::to_value(&leaf).expect("leaf serializes");
+    assert_eq!(
+        value["type"], "leaf",
+        "MimePart should use internally-tagged snake_case discriminator, not the derived externally-tagged PascalCase shape: {value}"
+    );
+    assert_eq!(value["body"], "aGk=", "MIME body should serialize as base64");
+    assert!(
+        value.get("content_transfer_encoding").is_none(),
+        "absent optional fields should not emit null"
+    );
+
+    let multipart = MimePart::Multipart {
+        content_type: ContentType::try_from("multipart/mixed; boundary=abc").expect("ct parses"),
+        boundary: Some("abc".to_string()),
+        parts: vec![leaf.clone()],
+    };
+    let value = serde_json::to_value(&multipart).expect("multipart serializes");
+    assert_eq!(value["type"], "multipart");
+    assert_eq!(value["boundary"], "abc");
+    assert_eq!(value["parts"][0]["type"], "leaf");
+
+    let decoded: MimePart =
+        serde_json::from_value(value).expect("multipart roundtrips back through deserialize");
+    assert_eq!(decoded, multipart);
+}

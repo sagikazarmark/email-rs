@@ -10,7 +10,15 @@ use time::OffsetDateTime;
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Envelope {
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     mail_from: Option<EmailAddress>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Vec::is_empty")
+    )]
     rcpt_to: Vec<EmailAddress>,
 }
 
@@ -202,13 +210,15 @@ impl serde::Serialize for AttachmentBody {
     where
         S: serde::Serializer,
     {
+        use base64::Engine as _;
         use serde::ser::SerializeStruct as _;
 
         match self {
             Self::Bytes(bytes) => {
+                let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
                 let mut value = serializer.serialize_struct("AttachmentBody", 2)?;
                 value.serialize_field("type", "bytes")?;
-                value.serialize_field("bytes", bytes)?;
+                value.serialize_field("bytes", &encoded)?;
                 value.end()
             }
             Self::Reference(reference) => {
@@ -227,15 +237,24 @@ impl<'de> serde::Deserialize<'de> for AttachmentBody {
     where
         D: serde::Deserializer<'de>,
     {
+        use base64::Engine as _;
+
         #[derive(serde::Deserialize)]
         #[serde(tag = "type", rename_all = "snake_case")]
         enum RawAttachmentBody {
-            Bytes { bytes: Vec<u8> },
+            Bytes { bytes: String },
             Reference { uri: String },
         }
 
         Ok(match RawAttachmentBody::deserialize(deserializer)? {
-            RawAttachmentBody::Bytes { bytes } => Self::Bytes(bytes),
+            RawAttachmentBody::Bytes { bytes } => {
+                let decoded = base64::engine::general_purpose::STANDARD
+                    .decode(bytes.as_bytes())
+                    .map_err(|err| {
+                        serde::de::Error::custom(format!("invalid base64 attachment bytes: {err}"))
+                    })?;
+                Self::Bytes(decoded)
+            }
             RawAttachmentBody::Reference { uri } => Self::Reference(AttachmentReference::new(uri)),
         })
     }
@@ -259,8 +278,9 @@ impl schemars::JsonSchema for AttachmentBody {
                     "properties": {
                         "type": {"const": "bytes"},
                         "bytes": {
-                            "type": "array",
-                            "items": {"type": "integer", "format": "uint8", "minimum": 0, "maximum": 255}
+                            "type": "string",
+                            "contentEncoding": "base64",
+                            "description": "Base64-encoded attachment bytes (RFC 4648, with padding)"
                         }
                     },
                     "required": ["type", "bytes"]
@@ -306,12 +326,20 @@ impl Disposition {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Attachment {
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     filename: Option<String>,
     #[cfg_attr(
         feature = "schemars",
         schemars(with = "String", description = "MIME content type")
     )]
     content_type: ContentType,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     content_id: Option<String>,
     /// Reads the legacy `"inline": true|false` field via `alias`, with a
     /// custom deserializer that converts a bool into `Disposition` for one
@@ -641,32 +669,70 @@ impl Body {
 #[allow(clippy::struct_field_names)]
 #[non_exhaustive]
 pub struct Message {
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     from: Option<Mailbox>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     sender: Option<Mailbox>,
-    #[cfg_attr(feature = "serde", serde(default))]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Vec::is_empty")
+    )]
     #[cfg_attr(feature = "schemars", schemars(default))]
     to: Vec<Address>,
-    #[cfg_attr(feature = "serde", serde(default))]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Vec::is_empty")
+    )]
     #[cfg_attr(feature = "schemars", schemars(default))]
     cc: Vec<Address>,
-    #[cfg_attr(feature = "serde", serde(default))]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Vec::is_empty")
+    )]
     #[cfg_attr(feature = "schemars", schemars(default))]
     bcc: Vec<Address>,
-    #[cfg_attr(feature = "serde", serde(default))]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Vec::is_empty")
+    )]
     #[cfg_attr(feature = "schemars", schemars(default))]
     reply_to: Vec<Address>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     subject: Option<String>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     #[cfg_attr(
         feature = "schemars",
         schemars(with = "Option<String>", description = "RFC 2822 date-time")
     )]
     date: Option<OffsetDateTime>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     message_id: Option<MessageId>,
-    #[cfg_attr(feature = "serde", serde(default))]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Vec::is_empty")
+    )]
     #[cfg_attr(feature = "schemars", schemars(default))]
     headers: Vec<Header>,
     body: Body,
-    #[cfg_attr(feature = "serde", serde(default))]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Vec::is_empty")
+    )]
     #[cfg_attr(feature = "schemars", schemars(default))]
     attachments: Vec<Attachment>,
 }

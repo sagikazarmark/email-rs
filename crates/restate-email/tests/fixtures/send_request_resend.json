@@ -3,24 +3,15 @@
   "message": {
     "from": {
       "type": "mailbox",
-      "name": null,
       "email": "from@example.com"
     },
-    "sender": null,
     "to": [
       {
         "type": "mailbox",
-        "name": null,
         "email": "to@example.com"
       }
     ],
-    "cc": [],
-    "bcc": [],
-    "reply_to": [],
     "subject": "Release fixture",
-    "date": null,
-    "message_id": null,
-    "headers": [],
     "body": {
       "type": "text",
       "text": "hello"
@@ -29,18 +20,10 @@
       {
         "filename": "report.txt",
         "content_type": "text/plain",
-        "content_id": null,
         "disposition": "attachment",
         "body": {
           "type": "bytes",
-          "bytes": [
-            114,
-            101,
-            112,
-            111,
-            114,
-            116
-          ]
+          "bytes": "cmVwb3J0"
         }
       }
     ]
