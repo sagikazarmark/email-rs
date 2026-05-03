@@ -1,10 +1,18 @@
 {
   "transport": "transactional",
   "message": {
-    "from": "from@example.com",
+    "from": {
+      "type": "mailbox",
+      "name": null,
+      "email": "from@example.com"
+    },
     "sender": null,
     "to": [
-      "to@example.com"
+      {
+        "type": "mailbox",
+        "name": null,
+        "email": "to@example.com"
+      }
     ],
     "cc": [],
     "bcc": [],
@@ -14,7 +22,8 @@
     "message_id": null,
     "headers": [],
     "body": {
-      "Text": "hello"
+      "type": "text",
+      "text": "hello"
     },
     "attachments": [
       {
@@ -23,7 +32,8 @@
         "content_id": null,
         "disposition": "attachment",
         "body": {
-          "Bytes": [
+          "type": "bytes",
+          "bytes": [
             114,
             101,
             112,

@@ -4,7 +4,6 @@ use std::str::FromStr;
 use crate::email::EmailAddressParseError;
 
 /// A validated RFC 5322 `Message-ID` field value.
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MessageId(String);
 
@@ -18,6 +17,28 @@ impl MessageId {
 impl Display for MessageId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_str())
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for MessageId {
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "MessageId".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::MessageId").into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "RFC 5322 Message-ID field value, including angle brackets"
+        })
     }
 }
 

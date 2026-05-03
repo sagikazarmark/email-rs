@@ -23,7 +23,6 @@ use std::str::FromStr;
 /// the parameter (`boundary` is case-sensitive per RFC 2046 §5.1.1;
 /// `charset` is case-insensitive per RFC 2046 §4.1.2 but the kernel
 /// leaves the caller's bytes intact for round-trip fidelity).
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ContentType(String);
 
@@ -336,6 +335,28 @@ impl<'de> serde::Deserialize<'de> for ContentType {
     }
 }
 
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for ContentType {
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "ContentType".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::ContentType").into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "MIME Content-Type field value"
+        })
+    }
+}
+
 #[cfg(feature = "arbitrary")]
 impl<'a> arbitrary::Arbitrary<'a> for ContentType {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
@@ -366,7 +387,6 @@ impl<'a> arbitrary::Arbitrary<'a> for ContentType {
 ///
 /// [`Base64`]: Self::Base64
 /// [`Other`]: Self::Other
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum ContentTransferEncoding {
@@ -455,6 +475,28 @@ impl<'de> serde::Deserialize<'de> for ContentTransferEncoding {
     }
 }
 
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for ContentTransferEncoding {
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "ContentTransferEncoding".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::ContentTransferEncoding").into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "RFC 2045 Content-Transfer-Encoding token"
+        })
+    }
+}
+
 #[cfg(feature = "arbitrary")]
 impl<'a> arbitrary::Arbitrary<'a> for ContentTransferEncoding {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
@@ -480,7 +522,6 @@ impl<'a> arbitrary::Arbitrary<'a> for ContentTransferEncoding {
 /// dependent on the parameter. The kernel preserves parameter values
 /// verbatim; for semantic comparison route through the disposition's
 /// accessors rather than comparing raw input strings.
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ContentDisposition(String);
 
@@ -658,6 +699,28 @@ impl<'de> serde::Deserialize<'de> for ContentDisposition {
     {
         let value = String::deserialize(deserializer)?;
         value.parse().map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for ContentDisposition {
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "ContentDisposition".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::ContentDisposition").into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "RFC 2183 Content-Disposition field value"
+        })
     }
 }
 

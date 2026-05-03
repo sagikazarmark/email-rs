@@ -7,7 +7,6 @@ use crate::email::{EmailAddress, EmailAddressParseError};
 static ADDRESS_PARSER: OnceLock<mail_parser::MessageParser> = OnceLock::new();
 
 /// A mailbox address with optional display name.
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Mailbox {
     name: Option<String>,
@@ -134,12 +133,40 @@ impl Display for Mailbox {
 }
 
 #[cfg(feature = "serde")]
+#[derive(serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum AddressKind {
+    Mailbox,
+    Group,
+}
+
+#[cfg(feature = "schemars")]
+fn mailbox_typed_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    let email = generator.subschema_for::<EmailAddress>();
+    schemars::json_schema!({
+        "type": "object",
+        "properties": {
+            "type": {"const": "mailbox"},
+            "name": {"type": ["string", "null"]},
+            "email": email
+        },
+        "required": ["type", "email"]
+    })
+}
+
+#[cfg(feature = "serde")]
 impl serde::Serialize for Mailbox {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        serializer.serialize_str(&self.to_string())
+        use serde::ser::SerializeStruct as _;
+
+        let mut value = serializer.serialize_struct("Mailbox", 3)?;
+        value.serialize_field("type", "mailbox")?;
+        value.serialize_field("name", &self.name)?;
+        value.serialize_field("email", &self.email)?;
+        value.end()
     }
 }
 
@@ -149,8 +176,76 @@ impl<'de> serde::Deserialize<'de> for Mailbox {
     where
         D: serde::Deserializer<'de>,
     {
-        let value = String::deserialize(deserializer)?;
-        value.parse().map_err(serde::de::Error::custom)
+        #[derive(serde::Deserialize)]
+        struct RawMailbox {
+            #[serde(rename = "type")]
+            type_: AddressKind,
+            #[serde(default)]
+            name: Option<String>,
+            email: EmailAddress,
+        }
+
+        fn from_raw<E>(raw: RawMailbox) -> Result<Mailbox, E>
+        where
+            E: serde::de::Error,
+        {
+            if raw.type_ != AddressKind::Mailbox {
+                return Err(E::custom("expected mailbox address type"));
+            }
+            Ok(Mailbox {
+                name: raw.name,
+                email: raw.email,
+            })
+        }
+
+        #[cfg(feature = "rfc5322-string-compat")]
+        {
+            #[derive(serde::Deserialize)]
+            #[serde(untagged)]
+            enum Compat {
+                Raw(RawMailbox),
+                String(String),
+            }
+
+            return match Compat::deserialize(deserializer)? {
+                Compat::Raw(raw) => from_raw(raw),
+                Compat::String(value) => value.parse().map_err(serde::de::Error::custom),
+            };
+        }
+
+        #[cfg(not(feature = "rfc5322-string-compat"))]
+        from_raw(RawMailbox::deserialize(deserializer)?)
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for Mailbox {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Mailbox".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::Mailbox").into()
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        let typed = mailbox_typed_schema(generator);
+
+        #[cfg(feature = "rfc5322-string-compat")]
+        {
+            return schemars::json_schema!({
+                "oneOf": [
+                    typed,
+                    {
+                        "type": "string",
+                        "description": "RFC 5322 mailbox string"
+                    }
+                ]
+            });
+        }
+
+        #[cfg(not(feature = "rfc5322-string-compat"))]
+        typed
     }
 }
 
@@ -171,7 +266,6 @@ impl<'a> arbitrary::Arbitrary<'a> for Mailbox {
 }
 
 /// A named address group containing mailbox members.
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Group {
     name: String,
@@ -260,13 +354,33 @@ impl Display for Group {
     }
 }
 
+#[cfg(feature = "schemars")]
+fn group_typed_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    let members = <Vec<Mailbox> as schemars::JsonSchema>::json_schema(generator);
+    schemars::json_schema!({
+        "type": "object",
+        "properties": {
+            "type": {"const": "group"},
+            "name": {"type": "string"},
+            "members": members
+        },
+        "required": ["type", "name"]
+    })
+}
+
 #[cfg(feature = "serde")]
 impl serde::Serialize for Group {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        serializer.serialize_str(&self.to_string())
+        use serde::ser::SerializeStruct as _;
+
+        let mut value = serializer.serialize_struct("Group", 3)?;
+        value.serialize_field("type", "group")?;
+        value.serialize_field("name", &self.name)?;
+        value.serialize_field("members", &self.members)?;
+        value.end()
     }
 }
 
@@ -276,8 +390,76 @@ impl<'de> serde::Deserialize<'de> for Group {
     where
         D: serde::Deserializer<'de>,
     {
-        let value = String::deserialize(deserializer)?;
-        value.parse().map_err(serde::de::Error::custom)
+        #[derive(serde::Deserialize)]
+        struct RawGroup {
+            #[serde(rename = "type")]
+            type_: AddressKind,
+            name: String,
+            #[serde(default)]
+            members: Vec<Mailbox>,
+        }
+
+        fn from_raw<E>(raw: RawGroup) -> Result<Group, E>
+        where
+            E: serde::de::Error,
+        {
+            if raw.type_ != AddressKind::Group {
+                return Err(E::custom("expected group address type"));
+            }
+            Ok(Group {
+                name: raw.name,
+                members: raw.members,
+            })
+        }
+
+        #[cfg(feature = "rfc5322-string-compat")]
+        {
+            #[derive(serde::Deserialize)]
+            #[serde(untagged)]
+            enum Compat {
+                Raw(RawGroup),
+                String(String),
+            }
+
+            return match Compat::deserialize(deserializer)? {
+                Compat::Raw(raw) => from_raw(raw),
+                Compat::String(value) => value.parse().map_err(serde::de::Error::custom),
+            };
+        }
+
+        #[cfg(not(feature = "rfc5322-string-compat"))]
+        from_raw(RawGroup::deserialize(deserializer)?)
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for Group {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Group".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::Group").into()
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        let typed = group_typed_schema(generator);
+
+        #[cfg(feature = "rfc5322-string-compat")]
+        {
+            return schemars::json_schema!({
+                "oneOf": [
+                    typed,
+                    {
+                        "type": "string",
+                        "description": "RFC 5322 group string"
+                    }
+                ]
+            });
+        }
+
+        #[cfg(not(feature = "rfc5322-string-compat"))]
+        typed
     }
 }
 
@@ -304,7 +486,6 @@ impl<'a> arbitrary::Arbitrary<'a> for Group {
 /// derive-required exhaustive `match` lets downstream callers branch
 /// on every variant without an `_ =>` arm, useful when an extension
 /// crate wants type-safe coverage of the address space.
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Address {
     Mailbox(Mailbox),
@@ -401,7 +582,10 @@ impl serde::Serialize for Address {
     where
         S: serde::Serializer,
     {
-        serializer.serialize_str(&self.to_string())
+        match self {
+            Self::Mailbox(mailbox) => serde::Serialize::serialize(mailbox, serializer),
+            Self::Group(group) => serde::Serialize::serialize(group, serializer),
+        }
     }
 }
 
@@ -411,8 +595,78 @@ impl<'de> serde::Deserialize<'de> for Address {
     where
         D: serde::Deserializer<'de>,
     {
-        let value = String::deserialize(deserializer)?;
-        value.parse().map_err(serde::de::Error::custom)
+        #[derive(serde::Deserialize)]
+        #[serde(tag = "type", rename_all = "snake_case")]
+        enum RawAddress {
+            Mailbox {
+                #[serde(default)]
+                name: Option<String>,
+                email: EmailAddress,
+            },
+            Group {
+                name: String,
+                #[serde(default)]
+                members: Vec<Mailbox>,
+            },
+        }
+
+        fn from_raw(raw: RawAddress) -> Address {
+            match raw {
+                RawAddress::Mailbox { name, email } => Address::Mailbox(Mailbox { name, email }),
+                RawAddress::Group { name, members } => Address::Group(Group { name, members }),
+            }
+        }
+
+        #[cfg(feature = "rfc5322-string-compat")]
+        {
+            #[derive(serde::Deserialize)]
+            #[serde(untagged)]
+            enum Compat {
+                Raw(RawAddress),
+                String(String),
+            }
+
+            return match Compat::deserialize(deserializer)? {
+                Compat::Raw(raw) => Ok(from_raw(raw)),
+                Compat::String(value) => value.parse().map_err(serde::de::Error::custom),
+            };
+        }
+
+        #[cfg(not(feature = "rfc5322-string-compat"))]
+        Ok(from_raw(RawAddress::deserialize(deserializer)?))
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for Address {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Address".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::Address").into()
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        let mailbox = mailbox_typed_schema(generator);
+        let group = group_typed_schema(generator);
+
+        #[cfg(feature = "rfc5322-string-compat")]
+        {
+            return schemars::json_schema!({
+                "oneOf": [
+                    mailbox,
+                    group,
+                    {
+                        "type": "string",
+                        "description": "RFC 5322 address string"
+                    }
+                ]
+            });
+        }
+
+        #[cfg(not(feature = "rfc5322-string-compat"))]
+        schemars::json_schema!({"oneOf": [mailbox, group]})
     }
 }
 
@@ -431,9 +685,43 @@ macro_rules! impl_address_collection {
     ($(#[$meta:meta])* $name:ident, $item:ty, $error:ty, $parse_fn:expr) => {
         $(#[$meta])*
         #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-        #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
         pub struct $name {
             items: Vec<$item>,
+        }
+
+        #[cfg(feature = "schemars")]
+        impl schemars::JsonSchema for $name {
+            fn inline_schema() -> bool {
+                true
+            }
+
+            fn schema_name() -> std::borrow::Cow<'static, str> {
+                stringify!($name).into()
+            }
+
+            fn schema_id() -> std::borrow::Cow<'static, str> {
+                concat!(module_path!(), "::", stringify!($name)).into()
+            }
+
+            fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+                let typed = <Vec<$item> as schemars::JsonSchema>::json_schema(generator);
+
+                #[cfg(feature = "rfc5322-string-compat")]
+                {
+                    return schemars::json_schema!({
+                        "oneOf": [
+                            typed,
+                            {
+                                "type": "string",
+                                "description": "RFC 5322 comma-separated address list string"
+                            }
+                        ]
+                    });
+                }
+
+                #[cfg(not(feature = "rfc5322-string-compat"))]
+                typed
+            }
         }
 
         impl $name {
@@ -561,7 +849,7 @@ macro_rules! impl_address_collection {
             where
                 S: serde::Serializer,
             {
-                serializer.serialize_str(&self.to_string())
+                serde::Serialize::serialize(&self.items, serializer)
             }
         }
 
@@ -571,8 +859,26 @@ macro_rules! impl_address_collection {
             where
                 D: serde::Deserializer<'de>,
             {
-                let value = String::deserialize(deserializer)?;
-                value.parse().map_err(serde::de::Error::custom)
+                #[cfg(feature = "rfc5322-string-compat")]
+                {
+                    #[derive(serde::Deserialize)]
+                    #[serde(untagged)]
+                    enum Compat<T> {
+                        Items(Vec<T>),
+                        String(String),
+                    }
+
+                    return match Compat::<$item>::deserialize(deserializer)? {
+                        Compat::Items(items) => Ok(Self { items }),
+                        Compat::String(value) => value.parse().map_err(serde::de::Error::custom),
+                    };
+                }
+
+                #[cfg(not(feature = "rfc5322-string-compat"))]
+                {
+                    let items = <Vec<$item> as serde::Deserialize>::deserialize(deserializer)?;
+                    Ok(Self { items })
+                }
             }
         }
 

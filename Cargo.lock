@@ -2549,6 +2549,7 @@ dependencies = [
  "regress 0.10.5",
  "restate-sdk-macros",
  "restate-sdk-shared-core",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "syn",

@@ -188,14 +188,94 @@ impl AttachmentReference {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum AttachmentBody {
     Bytes(Vec<u8>),
     Reference(AttachmentReference),
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for AttachmentBody {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct as _;
+
+        match self {
+            Self::Bytes(bytes) => {
+                let mut value = serializer.serialize_struct("AttachmentBody", 2)?;
+                value.serialize_field("type", "bytes")?;
+                value.serialize_field("bytes", bytes)?;
+                value.end()
+            }
+            Self::Reference(reference) => {
+                let mut value = serializer.serialize_struct("AttachmentBody", 2)?;
+                value.serialize_field("type", "reference")?;
+                value.serialize_field("uri", reference.uri())?;
+                value.end()
+            }
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for AttachmentBody {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        #[serde(tag = "type", rename_all = "snake_case")]
+        enum RawAttachmentBody {
+            Bytes { bytes: Vec<u8> },
+            Reference { uri: String },
+        }
+
+        Ok(match RawAttachmentBody::deserialize(deserializer)? {
+            RawAttachmentBody::Bytes { bytes } => Self::Bytes(bytes),
+            RawAttachmentBody::Reference { uri } => Self::Reference(AttachmentReference::new(uri)),
+        })
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for AttachmentBody {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "AttachmentBody".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::AttachmentBody").into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "oneOf": [
+                {
+                    "type": "object",
+                    "properties": {
+                        "type": {"const": "bytes"},
+                        "bytes": {
+                            "type": "array",
+                            "items": {"type": "integer", "format": "uint8", "minimum": 0, "maximum": 255}
+                        }
+                    },
+                    "required": ["type", "bytes"]
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "type": {"const": "reference"},
+                        "uri": {"type": "string"}
+                    },
+                    "required": ["type", "uri"]
+                }
+            ]
+        })
+    }
 }
 
 /// How a recipient's mail client should present an attachment, per RFC 2183.
@@ -244,6 +324,7 @@ pub struct Attachment {
             deserialize_with = "deserialize_disposition_compat"
         )
     )]
+    #[cfg_attr(feature = "schemars", schemars(default))]
     disposition: Disposition,
     body: AttachmentBody,
 }
@@ -368,8 +449,6 @@ impl Attachment {
 /// (caller code that walks the tree itself) must defend themselves.
 /// See [`MimePart`] for the matching caveat on the
 /// leaf type.
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -382,6 +461,138 @@ pub enum Body {
     },
     #[cfg(feature = "mime")]
     Mime(MimePart),
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for Body {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct as _;
+
+        match self {
+            Self::Text(text) => {
+                let mut value = serializer.serialize_struct("Body", 2)?;
+                value.serialize_field("type", "text")?;
+                value.serialize_field("text", text)?;
+                value.end()
+            }
+            Self::Html(html) => {
+                let mut value = serializer.serialize_struct("Body", 2)?;
+                value.serialize_field("type", "html")?;
+                value.serialize_field("html", html)?;
+                value.end()
+            }
+            Self::TextAndHtml { text, html } => {
+                let mut value = serializer.serialize_struct("Body", 3)?;
+                value.serialize_field("type", "text_and_html")?;
+                value.serialize_field("text", text)?;
+                value.serialize_field("html", html)?;
+                value.end()
+            }
+            #[cfg(feature = "mime")]
+            Self::Mime(part) => {
+                let mut value = serializer.serialize_struct("Body", 2)?;
+                value.serialize_field("type", "mime")?;
+                value.serialize_field("part", part)?;
+                value.end()
+            }
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Body {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        #[serde(tag = "type", rename_all = "snake_case")]
+        enum RawBody {
+            Text {
+                text: String,
+            },
+            Html {
+                html: String,
+            },
+            TextAndHtml {
+                text: String,
+                html: String,
+            },
+            #[cfg(feature = "mime")]
+            Mime {
+                part: MimePart,
+            },
+        }
+
+        Ok(match RawBody::deserialize(deserializer)? {
+            RawBody::Text { text } => Self::Text(text),
+            RawBody::Html { html } => Self::Html(html),
+            RawBody::TextAndHtml { text, html } => Self::TextAndHtml { text, html },
+            #[cfg(feature = "mime")]
+            RawBody::Mime { part } => Self::Mime(part),
+        })
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for Body {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Body".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::Body").into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        let variants = vec![
+            schemars::json_schema!({
+                "type": "object",
+                "properties": {
+                    "type": {"const": "text"},
+                    "text": {"type": "string"}
+                },
+                "required": ["type", "text"]
+            }),
+            schemars::json_schema!({
+                "type": "object",
+                "properties": {
+                    "type": {"const": "html"},
+                    "html": {"type": "string"}
+                },
+                "required": ["type", "html"]
+            }),
+            schemars::json_schema!({
+                "type": "object",
+                "properties": {
+                    "type": {"const": "text_and_html"},
+                    "text": {"type": "string"},
+                    "html": {"type": "string"}
+                },
+                "required": ["type", "text", "html"]
+            }),
+        ];
+
+        #[cfg(feature = "mime")]
+        let variants = {
+            let mut variants = variants;
+            let part = _generator.subschema_for::<MimePart>();
+            variants.push(schemars::json_schema!({
+                "type": "object",
+                "properties": {
+                    "type": {"const": "mime"},
+                    "part": part
+                },
+                "required": ["type", "part"]
+            }));
+            variants
+        };
+
+        schemars::json_schema!({"oneOf": variants})
+    }
 }
 
 impl Body {
@@ -432,9 +643,17 @@ impl Body {
 pub struct Message {
     from: Option<Mailbox>,
     sender: Option<Mailbox>,
+    #[cfg_attr(feature = "serde", serde(default))]
+    #[cfg_attr(feature = "schemars", schemars(default))]
     to: Vec<Address>,
+    #[cfg_attr(feature = "serde", serde(default))]
+    #[cfg_attr(feature = "schemars", schemars(default))]
     cc: Vec<Address>,
+    #[cfg_attr(feature = "serde", serde(default))]
+    #[cfg_attr(feature = "schemars", schemars(default))]
     bcc: Vec<Address>,
+    #[cfg_attr(feature = "serde", serde(default))]
+    #[cfg_attr(feature = "schemars", schemars(default))]
     reply_to: Vec<Address>,
     subject: Option<String>,
     #[cfg_attr(
@@ -443,8 +662,12 @@ pub struct Message {
     )]
     date: Option<OffsetDateTime>,
     message_id: Option<MessageId>,
+    #[cfg_attr(feature = "serde", serde(default))]
+    #[cfg_attr(feature = "schemars", schemars(default))]
     headers: Vec<Header>,
     body: Body,
+    #[cfg_attr(feature = "serde", serde(default))]
+    #[cfg_attr(feature = "schemars", schemars(default))]
     attachments: Vec<Attachment>,
 }
 
@@ -1398,6 +1621,26 @@ mod tests {
         };
         let json = serde_json::to_string(&invalid_message).expect("Message should serialize");
         assert!(serde_json::from_str::<OutboundMessage>(&json).is_err());
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn outbound_message_deserialize_defaults_omitted_optional_lists() {
+        let value = serde_json::json!({
+            "from": {"type": "mailbox", "name": null, "email": "alice@example.com"},
+            "to": [{"type": "mailbox", "name": null, "email": "bob@example.com"}],
+            "body": {"type": "text", "text": "hi"}
+        });
+
+        let outbound: OutboundMessage = serde_json::from_value(value)
+            .expect("defaulted collection fields should be optional on the wire");
+
+        assert_eq!(outbound.as_message().to().len(), 1);
+        assert!(outbound.as_message().cc().is_empty());
+        assert!(outbound.as_message().bcc().is_empty());
+        assert!(outbound.as_message().reply_to().is_empty());
+        assert!(outbound.as_message().headers().is_empty());
+        assert!(outbound.as_message().attachments().is_empty());
     }
 
     #[test]

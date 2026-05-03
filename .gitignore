@@ -11,3 +11,5 @@ devenv.local.yaml
 
 target/
 .env
+
+restate-email.toml

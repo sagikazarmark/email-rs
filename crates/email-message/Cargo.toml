@@ -39,6 +39,9 @@ mime = []
 serde = ["dep:serde", "time/serde"]
 schemars = ["dep:schemars"]
 arbitrary = ["dep:arbitrary"]
+# Accept RFC 5322 string address forms in serde and JSON Schema in addition
+# to the typed address object shape.
+rfc5322-string-compat = []
 
 [package.metadata.docs.rs]
 all-features = true

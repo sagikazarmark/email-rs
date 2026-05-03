@@ -24,7 +24,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = { version = "2", features = ["serde"] }
 
 [features]
-default = ["email-kit/default", "restate-email/default", "transport-all"]
+default = ["email-kit/default", "restate-email/default", "restate-email/schemars", "restate-email/rfc5322-string-compat", "transport-all"]
 transport-all = ["email-kit/transport-all"]
 
 [[bin]]
