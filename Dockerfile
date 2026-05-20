@@ -25,7 +25,7 @@ RUN xx-cargo build --release -p restate-email-bin --bin restate-email
 RUN xx-verify ./target/$(xx-cargo --print-target-triple)/release/restate-email
 RUN cp ./target/$(xx-cargo --print-target-triple)/release/restate-email /usr/local/bin/restate-email
 
-FROM debian:13.4-slim@sha256:26f98ccd92fd0a44d6928ce8ff8f4921b4d2f535bfa07555ee5d18f61429cf0c
+FROM debian:13.5-slim@sha256:dd723c6aa29afd6e310a82dca36ecd596ccc34827d6e3518ab41873b7b582f07
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates && \
