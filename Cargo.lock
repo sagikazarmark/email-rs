@@ -2515,7 +2515,7 @@ dependencies = [
  "prost",
  "reqwest",
  "restate-sdk",
- "restate-sdk-shared-core",
+ "restate-sdk-shared-core 7.0.0",
  "schemars 1.2.1",
  "serde",
  "serde-value",
@@ -2560,7 +2560,7 @@ dependencies = [
  "rand 0.10.1",
  "regress 0.10.5",
  "restate-sdk-macros",
- "restate-sdk-shared-core",
+ "restate-sdk-shared-core 0.10.0",
  "schemars 1.2.1",
  "serde",
  "serde_json",
@@ -2600,6 +2600,23 @@ dependencies = [
  "prost",
  "serde",
  "sha2 0.11.0",
+ "strum",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "restate-sdk-shared-core"
+version = "7.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9bf02583379fc28d6386bd864629ba6553ce942124956b862fa9e95a4d836558"
+dependencies = [
+ "base64",
+ "bytes",
+ "bytes-utils",
+ "pastey",
+ "prost",
+ "serde",
  "strum",
  "thiserror",
  "tracing",

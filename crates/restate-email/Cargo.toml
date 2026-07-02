@@ -28,7 +28,7 @@ http = "1"
 http-body-util = "0.1"
 prost = "0.14"
 reqwest = { workspace = true, features = ["json"], default-features = false }
-restate-sdk-shared-core = "0.10"
+restate-sdk-shared-core = "7.0"
 tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
 
 [features]
