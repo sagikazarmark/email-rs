@@ -2,3 +2,19 @@
 inputs:
   nixpkgs:
     url: github:cachix/devenv-nixpkgs/rolling
+  rust-overlay:
+    url: github:oxalica/rust-overlay
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
+  extras:
+    url: github:sagikazarmark/devenv-extras
+    overlays:
+      - default
+  dagger:
+    url: github:dagger/nix
+    overlays:
+      - default
+
+imports:
+  - extras/modules
