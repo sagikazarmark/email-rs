@@ -9,7 +9,7 @@ use restate_email::{
     CorrelationId, IdempotencyKey, RawSendOptions, SendRequest, ServiceImpl,
     StaticTransportRegistry, TransportKey,
 };
-use restate_sdk::prelude::HttpServer;
+use restate_sdk::{endpoint::Endpoint, http_server::HttpServer, service::IntoServiceDefinition};
 
 struct ExampleTransport;
 
@@ -79,7 +79,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut registry = StaticTransportRegistry::new();
     registry.insert("transactional", ExampleTransport);
 
-    let service = ServiceImpl::new(registry);
+    let service = ServiceImpl::new(registry).into_service_definition();
+    let endpoint = Endpoint::builder().bind(service);
     let address = std::env::var("RESTATE_EMAIL_WORKER_ADDR")
         .unwrap_or_else(|_| String::from("127.0.0.1:9080"))
         .parse()?;
@@ -93,7 +94,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         serde_json::to_string_pretty(&request)?
     );
 
-    HttpServer::new(service.endpoint())
+    HttpServer::new(endpoint.build())
         .listen_and_serve(address)
         .await;
 

@@ -31,6 +31,17 @@ See the [crate documentation](https://docs.rs/restate-email/latest/restate_email
 - `ServiceImpl`: Restate service wrapper that hydrates provider options and dispatches inside a named, journaled `ctx.run` action.
 - `SendResponse`: serializable response containing the transport `SendReport`.
 
+Bind the service using Restate's service definition API:
+
+```rust
+use restate_email::{ServiceImpl, StaticTransportRegistry};
+use restate_sdk::{endpoint::Endpoint, service::IntoServiceDefinition};
+
+let registry = StaticTransportRegistry::new();
+let service = ServiceImpl::new(registry).into_service_definition();
+let endpoint = Endpoint::builder().bind(service).build();
+```
+
 ## Retry Behavior
 
 Retryable transport failures remain retryable Restate handler failures. Unknown transport keys, validation failures, and other permanent errors become terminal Restate errors.
