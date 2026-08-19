@@ -13,7 +13,7 @@
 - **Transport abstraction:** send structured messages or rendered RFC822 through a common transport contract.
 - **Wire support:** parse and render RFC822 and MIME messages.
 - **Provider adapters:** deliver through Resend, with room for additional transports.
-- **Durable workers:** expose email delivery through Restate service contracts and a runnable worker.
+- **Durable workers:** expose email delivery through Restate service contracts and a runnable endpoint.
 
 ## Workspace Crates
 
@@ -24,7 +24,7 @@
 - [`email-transport-resend`](crates/email-transport-resend): Resend transport adapter.
 - [`email-transport-test`](crates/email-transport-test): unpublished test transports and conformance helpers.
 - [`restate-email`](crates/restate-email): Restate worker contracts and service adapter.
-- [`restate-email-bin`](crates/restate-email-bin): runnable Restate email worker.
+- [`restate-email-endpoint`](crates/restate-email-endpoint): standalone endpoint hosting the Restate email service.
 
 ## Development
 

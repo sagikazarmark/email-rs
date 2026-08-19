@@ -78,7 +78,7 @@ jobs:
              email-transport-resend \
              email-transport-test \
              restate-email \
-             restate-email-bin
+             restate-email-endpoint
           do
             echo "==> cargo test -p $package --no-default-features"
             cargo test -p "$package" --no-default-features --locked
@@ -110,7 +110,7 @@ jobs:
              restate-email/resend \
              restate-email/rfc5322-string-compat \
              restate-email/schemars \
-             restate-email-bin/transport-all
+             restate-email-endpoint/transport-all
           do
             package="${package_feature%%/*}"
             feature="${package_feature#*/}"

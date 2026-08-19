@@ -26,7 +26,7 @@ async fn main() -> Result<()> {
     let service = ServiceImpl::new(registry);
     let bind_addr = format!("0.0.0.0:{}", cli.port);
 
-    tracing::info!(%bind_addr, "starting restate email worker");
+    tracing::info!(%bind_addr, "starting Restate email endpoint");
 
     HttpServer::new(service.endpoint())
         .listen_and_serve(bind_addr.parse()?)
