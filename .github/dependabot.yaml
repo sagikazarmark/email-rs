@@ -5,13 +5,27 @@ updates:
     directory: /
     schedule:
       interval: daily
+    groups:
+      cargo:
+        patterns:
+          - "*"
 
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: daily
+    groups:
+      docker:
+        patterns:
+          - "*"
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: daily
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    exclude-paths:
+      - .github/workflows/dagger.yaml
