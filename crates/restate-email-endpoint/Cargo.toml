@@ -1,13 +1,13 @@
 [package]
-name = "restate-email-bin"
+name = "restate-email-endpoint"
 version = { workspace = true }
-description = "Runnable Restate email worker binary"
+description = "Standalone endpoint hosting the email service for Restate"
 edition = { workspace = true }
 rust-version = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }
-keywords = ["email", "worker", "restate", "queue"]
+keywords = ["email", "endpoint", "restate", "queue"]
 categories = ["email", "asynchronous"]
 
 [[bin]]

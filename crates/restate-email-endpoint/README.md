@@ -1,9 +1,15 @@
-# restate-email-bin
+# restate-email-endpoint
 
-[![crates.io](https://img.shields.io/crates/v/restate-email-bin?style=flat-square)](https://crates.io/crates/restate-email-bin)
-[![docs.rs](https://img.shields.io/docsrs/restate-email-bin?style=flat-square)](https://docs.rs/restate-email-bin)
+[![crates.io](https://img.shields.io/crates/v/restate-email-endpoint?style=flat-square)](https://crates.io/crates/restate-email-endpoint)
+[![docs.rs](https://img.shields.io/docsrs/restate-email-endpoint?style=flat-square)](https://docs.rs/restate-email-endpoint)
 
-**A configurable Restate email worker binary.**
+**Standalone endpoint hosting the email service for [Restate](https://restate.dev/).**
+
+## Install
+
+```sh
+cargo install restate-email-endpoint
+```
 
 ## Configuration
 
@@ -16,7 +22,7 @@ api_key = "re_..."
 ```
 
 ```sh
-cargo run -p restate-email-bin -- --config restate-email.toml --port 9080
+restate-email --config restate-email.toml --port 9080
 ```
 
 The Restate service name is `Email`. Invoke its `send` handler with a `restate_email::SendRequest` whose transport key matches a configured entry.
@@ -27,7 +33,7 @@ Default features enable the component defaults, queue-payload schemas, RFC 5322 
 
 - `transport-all`: enables every transport exposed by `email-kit`; currently this is Resend. The binary target requires this feature.
 
-See the [generated feature graph](https://docs.rs/crate/restate-email-bin/latest/features) for activation details.
+See the [generated feature graph](https://docs.rs/crate/restate-email-endpoint/latest/features) for activation details.
 
 ## License
 
