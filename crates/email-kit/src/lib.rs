@@ -16,14 +16,14 @@
 //! message and transport crates. It does not enable `wire` or a provider
 //! transport.
 //!
-//! - `wire`: RFC 822/MIME parsing and rendering through [`wire`].
-//! - `transport-resend`: the Resend adapter at [`transport::resend`].
+//! - `wire`: RFC 822/MIME parsing and rendering through `wire`.
+//! - `transport-resend`: the Resend adapter at `transport::resend`.
 //! - `transport-all`: all provider adapters; currently equivalent to
 //!   `transport-resend`.
 //! - `serde`, `schemars`, and `arbitrary`: forward the corresponding data-model
 //!   integrations.
 //! - `tracing`: transport instrumentation through
-//!   [`transport::TracingTransport`].
+//!   `transport::TracingTransport`.
 //!
 //! # Platform support
 //!

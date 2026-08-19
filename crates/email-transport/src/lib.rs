@@ -37,7 +37,7 @@
 //! - `serde`: serialization for send metadata plus registry-driven
 //!   deserialization of provider options.
 //! - `schemars`: JSON Schema implementations for public wire types.
-//! - `tracing`: the PII-conscious [`TracingTransport`] wrapper.
+//! - `tracing`: the PII-conscious `TracingTransport` wrapper.
 //!
 //! # Platform support
 //!

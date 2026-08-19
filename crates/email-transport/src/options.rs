@@ -16,9 +16,9 @@ use thiserror::Error;
 /// absent options are omitted, [`TransportOptions`] uses its provider-keyed
 /// representation, and `timeout` is encoded as `{ "secs": u64, "nanos": u32 }`.
 /// Deserialization is intentionally registry-driven and not implemented on this
-/// type because provider-specific options need a [`TransportOptionRegistry`];
-/// use [`TransportOptionRegistry::send_options_seed`] (or the convenience
-/// [`TransportOptionRegistry::deserialize_send_options`] wrapper) instead.
+/// type because provider-specific options need a `TransportOptionRegistry`;
+/// use `TransportOptionRegistry::send_options_seed` (or the convenience
+/// `TransportOptionRegistry::deserialize_send_options` wrapper) instead.
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[derive(Debug, Default)]
@@ -189,10 +189,10 @@ pub trait TransportOption: Any + Send + Sync {
 /// Values also carry a stable [`TransportOption::provider_key`]. With the
 /// `serde` feature enabled, this allows the map to serialize into a
 /// provider-keyed object for queue boundaries through any serde format.
-/// Deserialization requires a [`TransportOptionRegistry`] because Rust cannot
+/// Deserialization requires a `TransportOptionRegistry` because Rust cannot
 /// discover concrete `TransportOption` implementors from a string key alone;
-/// drive it through [`TransportOptionsSeed`] / [`SendOptionsSeed`] (or the
-/// convenience [`TransportOptionRegistry::deserialize_send_options`]).
+/// drive it through `TransportOptionsSeed` / `SendOptionsSeed` (or the
+/// convenience `TransportOptionRegistry::deserialize_send_options`).
 #[derive(Default)]
 pub struct TransportOptions {
     inner: HashMap<TypeId, TypedSlot>,
