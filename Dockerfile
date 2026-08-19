@@ -1,6 +1,6 @@
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:1.9.0@sha256:c64defb9ed5a91eacb37f96ccc3d4cd72521c4bd18d5442905b95e2226b0e707 AS xx
 
-FROM --platform=$BUILDPLATFORM rust:1.96.1-slim@sha256:31ee7fc65186be7e0e0ccb3f2ca305f14e4739e7642a1ae65753aa5d7b874523 AS builder
+FROM --platform=$BUILDPLATFORM rust:1.97.1-slim@sha256:8e8cf8f7fd54a2d23d5a743b3a03f56e26b6c774276c33fa0595111704ebb15c AS builder
 
 COPY --from=xx / /
 
@@ -25,7 +25,7 @@ RUN xx-cargo build --locked --release --bin restate-email
 RUN xx-verify ./target/$(xx-cargo --print-target-triple)/release/restate-email
 RUN cp ./target/$(xx-cargo --print-target-triple)/release/restate-email /usr/local/bin/restate-email
 
-FROM debian:13.5-slim@sha256:b6e2a152f22a40ff69d92cb397223c906017e1391a73c952b588e51af8883bf8
+FROM debian:13.6-slim@sha256:3a39a0592364683e6bab97937b72cad5a8fa6dcbbee90edb3bb48c7f8e94f258
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates && \
