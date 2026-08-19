@@ -1,3 +1,8 @@
+//! Validated RFC 5322 `addr-spec` email addresses.
+//!
+//! The parser preserves local-part casing and normalizes non-literal domains to
+//! ASCII lowercase for equality and hashing.
+
 use std::fmt::Display;
 use std::str::FromStr;
 
@@ -52,6 +57,7 @@ impl From<EmailAddress> for String {
     }
 }
 
+/// Error returned when an [`EmailAddress`] is not a valid `addr-spec`.
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
 pub struct EmailAddressParseError(#[from] addr_spec::ParseError);
@@ -85,9 +91,17 @@ impl TryFrom<&str> for EmailAddress {
     /// ```rust
     /// use email_message::EmailAddress;
     ///
-    /// let email = EmailAddress::try_from("jdoe@one.test").unwrap();
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let email = EmailAddress::try_from("jdoe@one.test")?;
     /// assert_eq!(email.as_str(), "jdoe@one.test");
+    /// # Ok(())
+    /// # }
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EmailAddressParseError`] when the input is not a valid RFC
+    /// 5322 `addr-spec`.
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         Self::from_str(value)
     }

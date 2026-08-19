@@ -1,3 +1,8 @@
+//! Validated RFC 5322 `Message-ID` values.
+//!
+//! Values retain their required angle brackets and normalize non-literal domain
+//! casing while rejecting obsolete quoted `id-left` forms.
+
 use std::fmt::Display;
 use std::str::FromStr;
 
@@ -8,6 +13,7 @@ use crate::email::EmailAddressParseError;
 pub struct MessageId(String);
 
 impl MessageId {
+    /// Returns the normalized, angle-bracketed message id.
     #[must_use]
     pub fn as_str(&self) -> &str {
         self.0.as_str()
@@ -47,6 +53,7 @@ impl schemars::JsonSchema for MessageId {
 /// ```rust
 /// use email_message::{MessageId, MessageIdParseError};
 ///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// // Brackets are mandatory.
 /// assert_eq!(
 ///     "abc@example.com".parse::<MessageId>().unwrap_err(),
@@ -61,26 +68,35 @@ impl schemars::JsonSchema for MessageId {
 /// ));
 ///
 /// // A well-formed Message-ID round-trips its bracketed form.
-/// let parsed = "<good@example.com>".parse::<MessageId>().unwrap();
+/// let parsed = "<good@example.com>".parse::<MessageId>()?;
 /// assert_eq!(parsed.as_str(), "<good@example.com>");
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum MessageIdParseError {
+    /// The value is not enclosed in angle brackets.
     #[error("Message-ID must be enclosed in angle brackets")]
     MissingBrackets,
+    /// The value contains whitespace.
     #[error("Message-ID contains whitespace")]
     ContainsWhitespace,
+    /// The value has no local part before `@`.
     #[error("Message-ID is missing the local part")]
     MissingLocal,
+    /// The value has no domain after `@`.
     #[error("Message-ID is missing the domain part")]
     MissingDomain,
+    /// The local part or domain violates the supported `addr-spec` grammar.
     #[error("Message-ID local-part or domain is malformed")]
     #[non_exhaustive]
     InvalidContent {
+        /// The underlying `addr-spec` validation error.
         #[source]
         source: EmailAddressParseError,
     },
+    /// The `id-left` uses the unsupported obsolete quoted-string form.
     #[error(
         "Message-ID `id-left` uses the obsolete quoted-string form; the kernel commits to RFC 5322 dot-atom-text only"
     )]
@@ -173,6 +189,12 @@ impl FromStr for MessageId {
 impl TryFrom<&str> for MessageId {
     type Error = MessageIdParseError;
 
+    /// Parses and normalizes an angle-bracketed message id.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MessageIdParseError`] when the value is not a supported RFC
+    /// 5322 `Message-ID` field value.
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         Self::from_str(value)
     }

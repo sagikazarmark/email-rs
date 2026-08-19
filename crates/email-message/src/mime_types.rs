@@ -27,6 +27,7 @@ use std::str::FromStr;
 pub struct ContentType(String);
 
 impl ContentType {
+    /// Returns the normalized content-type field value.
     #[must_use]
     pub fn as_str(&self) -> &str {
         self.0.as_str()
@@ -86,26 +87,31 @@ pub struct MediaType<'a> {
 }
 
 impl<'a> MediaType<'a> {
+    /// Returns the top-level media type.
     #[must_use]
     pub const fn type_(&self) -> &'a str {
         self.type_
     }
 
+    /// Returns the media subtype.
     #[must_use]
     pub const fn subtype(&self) -> &'a str {
         self.subtype
     }
 
+    /// Returns `true` for a `text/*` media type.
     #[must_use]
     pub fn is_text(&self) -> bool {
         self.type_.eq_ignore_ascii_case("text")
     }
 
+    /// Returns `true` for a `multipart/*` media type.
     #[must_use]
     pub fn is_multipart(&self) -> bool {
         self.type_.eq_ignore_ascii_case("multipart")
     }
 
+    /// Returns `true` for an `image/*` media type.
     #[must_use]
     pub fn is_image(&self) -> bool {
         self.type_.eq_ignore_ascii_case("image")
@@ -181,6 +187,7 @@ impl Display for ContentType {
     }
 }
 
+/// Error returned when parsing an invalid MIME content type.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("content type must have a type/subtype form")]
 pub struct ContentTypeParseError;
@@ -390,15 +397,22 @@ impl<'a> arbitrary::Arbitrary<'a> for ContentType {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum ContentTransferEncoding {
+    /// The RFC 2045 `7bit` encoding.
     SevenBit,
+    /// The RFC 2045 `8bit` encoding.
     EightBit,
+    /// The RFC 2045 `binary` encoding.
     Binary,
+    /// The RFC 2045 `quoted-printable` encoding.
     QuotedPrintable,
+    /// The RFC 2045 `base64` encoding.
     Base64,
+    /// Another syntactically valid, normalized encoding token.
     Other(String),
 }
 
 impl ContentTransferEncoding {
+    /// Returns the normalized transfer-encoding token.
     #[must_use]
     pub fn as_str(&self) -> &str {
         match self {
@@ -418,6 +432,7 @@ impl Display for ContentTransferEncoding {
     }
 }
 
+/// Error returned when parsing an invalid transfer-encoding token.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("content-transfer-encoding cannot be empty")]
 pub struct ContentTransferEncodingParseError;
@@ -526,6 +541,7 @@ impl<'a> arbitrary::Arbitrary<'a> for ContentTransferEncoding {
 pub struct ContentDisposition(String);
 
 impl ContentDisposition {
+    /// Returns the normalized content-disposition field value.
     #[must_use]
     pub fn as_str(&self) -> &str {
         self.0.as_str()
@@ -597,6 +613,7 @@ impl Display for ContentDisposition {
     }
 }
 
+/// Error returned when parsing an invalid MIME content disposition.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("content-disposition cannot be empty")]
 pub struct ContentDispositionParseError;
@@ -787,15 +804,24 @@ impl<'a> arbitrary::Arbitrary<'a> for ContentDisposition {
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MimePart {
+    /// A discrete MIME part containing body bytes.
     Leaf {
+        /// Media type and parameters for the body.
         content_type: ContentType,
+        /// Transfer encoding to apply when rendering the body.
         content_transfer_encoding: Option<ContentTransferEncoding>,
+        /// Optional presentation metadata for the part.
         content_disposition: Option<ContentDisposition>,
+        /// Decoded body bytes.
         body: Vec<u8>,
     },
+    /// A multipart container holding nested MIME parts.
     Multipart {
+        /// Multipart media type and parameters.
         content_type: ContentType,
+        /// Explicit boundary, or `None` to generate one when rendering.
         boundary: Option<String>,
+        /// Child parts in wire order.
         parts: Vec<Self>,
     },
 }

@@ -1,61 +1,70 @@
 # email-message
 
-Core email address and outbound message model primitives.
+[![crates.io](https://img.shields.io/crates/v/email-message?style=flat-square)](https://crates.io/crates/email-message)
+[![docs.rs](https://img.shields.io/docsrs/email-message?style=flat-square)](https://docs.rs/email-message)
 
-## Scope contract
+**Typed, provider-neutral outbound email messages and addresses.**
 
-- This crate models outbound email content and addresses.
-- RFC822/MIME wire parsing and rendering are provided by `email-message-wire`.
-- Provider-specific limits and operational policies belong to transport crates.
+## Quick Start
 
-## Stability Contract
+```rust
+use email_message::{Address, Body, Message};
 
-- `EmailAddress` values are normalized via `addr-spec` during parsing.
-- Address display-name formatting may be canonicalized during render (`Display`) and is not guaranteed byte-for-byte equivalent with source text.
-- Address/message parse-render roundtrips preserve semantic values (mailbox/group membership and header meaning), but not raw wire formatting details.
-- Public enums marked `#[non_exhaustive]` may gain variants in minor releases.
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let message = Message::builder(Body::text("Hello"))
+        .from_mailbox("sender@example.com".parse()?)
+        .to(vec![Address::Mailbox("recipient@example.com".parse()?)])
+        .subject("Welcome")
+        .build_outbound()?;
+
+    assert_eq!(message.as_message().subject(), Some("Welcome"));
+    Ok(())
+}
+```
 
 ## Feature Flags
 
-- `serde`: enables `Serialize`/`Deserialize` derives for public model types.
-- `schemars`: enables `JsonSchema` derives for public model types.
-- `arbitrary`: enables `arbitrary::Arbitrary` derives to support fuzz/property generation.
+No features are enabled by default.
 
-## std support
+- `mime`: exposes `Body::Mime` and `MimePart`; the MIME value types remain available without this feature.
+- `serde`: enables serialization for public model types and byte-backed attachments.
+- `schemars`: enables JSON Schema support for public model types.
+- `arbitrary`: enables `arbitrary::Arbitrary` for fuzzing and property generation.
+- `rfc5322-string-compat`: accepts RFC 5322 string address forms in serde and JSON Schema in addition to typed address objects.
 
-This crate currently requires `std`.
+See the [crate documentation](https://docs.rs/email-message/latest/email_message/) for API and feature semantics and the [generated feature graph](https://docs.rs/crate/email-message/latest/features) for activation details.
 
-### Why no `no_std` today?
+## Scope Contract
 
-- Parsing backends currently depend on `std`.
-- The crate uses owned strings/collections and parser components that are not `no_std`-ready.
+- This crate models outbound email content and addresses.
+- RFC822 and MIME wire parsing and rendering are provided by [`email-message-wire`](../email-message-wire).
+- Provider-specific limits and operational policies belong to transport crates.
+- This crate currently requires `std`; its parsing backends and owned parser components are not `no_std`-ready.
 
-## MIME model
+## Stability Contract
 
-- Enable the `mime` feature to use `Body::Mime` and `MimePart`.
-- MIME parsing/rendering is provided by `email-message-wire`.
+- `EmailAddress` values are normalized through `addr-spec` during parsing.
+- Address display-name formatting may be canonicalized by `Display` and is not guaranteed to preserve source bytes.
+- Address and message parse-render round trips preserve semantic values, not raw wire formatting.
+- Public enums marked `#[non_exhaustive]` may gain variants in minor releases.
 
-## Wire format support
+## Metadata Policy
 
-- RFC822/MIME parsing and rendering are provided by `email-message-wire`.
+Put provider-agnostic message semantics and outbound headers in `Message`. Provider-specific controls belong in transport crates as typed `TransportOptions`, and new `Message` fields should have stable meaning across structured and raw delivery.
 
-## Metadata policy
+With `serde` enabled, `Message` can be used in queued worker payloads. `AttachmentBody::Reference` represents large attachments that a worker must resolve to bytes before transport delivery; reference resolution intentionally remains outside this crate.
 
-- Put provider-agnostic message semantics in `Message`.
-  Examples: `Date`, `Message-ID`, `Sender`, recipients, body, attachments.
-- Put arbitrary outbound headers in `Message.headers` when they should survive both SMTP and structured API paths.
-- Put provider-specific controls in transport crates via typed `TransportOptions`, not in the message model.
-- Avoid adding fields to `Message` unless they have clear cross-provider meaning and stable semantics across structured and raw delivery.
+## License
 
-## Worker-friendly payloads
+Licensed under either of
 
-- With the `serde` feature enabled, `Message` is a good serializable content payload inside a queued worker envelope such as `email_worker::EmailJob`.
-- `AttachmentBody::Bytes` is still the direct send/render form.
-- `AttachmentBody::Reference(AttachmentReference)` is available for large attachments that should be dereferenced by a worker before transport delivery.
-- Reference resolution policy belongs outside this crate so the core model stays transport-agnostic.
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <https://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or <https://opensource.org/licenses/MIT>)
 
-## Development
+at your option.
 
-- Run tests: `cargo test -p email-message --all-features`
-- Run clippy: `cargo clippy -p email-message --all-targets --all-features -- -D warnings`
-- Run benches: `cargo bench -p email-message`
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.

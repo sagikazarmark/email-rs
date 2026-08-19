@@ -21,7 +21,7 @@ RUN xx-apt-get update && \
     libc6-dev \
     pkg-config
 
-RUN xx-cargo build --release -p restate-email-bin --bin restate-email
+RUN xx-cargo build --release -p restate-email-bin --bin restate-email --locked
 RUN xx-verify ./target/$(xx-cargo --print-target-triple)/release/restate-email
 RUN cp ./target/$(xx-cargo --print-target-triple)/release/restate-email /usr/local/bin/restate-email
 

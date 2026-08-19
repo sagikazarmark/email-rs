@@ -24,6 +24,12 @@ use crate::{TransportKey, TransportResolver};
 #[restate_sdk::service]
 #[name = "Email"]
 pub trait Service {
+    /// Dispatch one queued email request through its selected transport.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HandlerError`] when provider options cannot be hydrated, the
+    /// transport key cannot be resolved, or the selected transport fails.
     #[name = "send"]
     async fn send(request: Json<SendRequest>) -> HandlerResult<Json<SendResponse>>;
 }
@@ -113,7 +119,7 @@ fn example_send_request() -> serde_json::Value {
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[non_exhaustive]
 pub struct RawSendOptions {
-    /// Optional SMTP envelope override.
+    /// Optional envelope override for structured transports that support it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub envelope: Option<email_message::Envelope>,
     /// Provider-keyed raw transport options to hydrate with a
@@ -286,8 +292,10 @@ where
     ///
     /// # Errors
     ///
-    /// Returns [`HandlerError`] when validation or sending through the selected
-    /// transport fails.
+    /// Returns [`HandlerError`] when provider options cannot be hydrated, the
+    /// requested transport key is unknown, or sending fails. Unknown keys and
+    /// non-retryable transport failures become Restate terminal errors;
+    /// retryable transport failures remain retryable handler errors.
     pub async fn send_request(&self, request: &SendRequest) -> Result<SendResponse, HandlerError> {
         let options = request
             .options

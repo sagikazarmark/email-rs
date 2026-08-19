@@ -6,23 +6,24 @@ resolver = "2"
 version = "0.7.0"
 edition = "2024"
 rust-version = "1.92"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 repository = "https://github.com/sagikazarmark/email-rs"
 homepage = "https://email-rs.dev"
 keywords = ["email", "smtp", "mail", "async", "mailer"]
 categories = ["email", "network-programming", "asynchronous"]
 
 [workspace.dependencies]
-email-kit = { version = "0.7.0", path = "crates/email-kit", default-features = false }
-email-message = { version = "0.7.0", path = "crates/email-message", default-features = false }
-email-message-wire = { version = "0.7.0", path = "crates/email-message-wire", default-features = false }
-email-transport = { version = "0.7.0", path = "crates/email-transport", default-features = false }
-email-transport-resend = { version = "0.7.0", path = "crates/email-transport-resend", default-features = false }
+email-kit = { path = "crates/email-kit", version = "0.7.0", default-features = false }
+email-message = { path = "crates/email-message", version = "0.7.0", default-features = false }
+email-message-wire = { path = "crates/email-message-wire", version = "0.7.0", default-features = false }
+email-transport = { path = "crates/email-transport", version = "0.7.0", default-features = false }
+email-transport-resend = { path = "crates/email-transport-resend", version = "0.7.0", default-features = false }
 email-transport-test = { path = "crates/email-transport-test", default-features = false }
+restate-email = { path = "crates/restate-email", version = "0.7.0", default-features = false }
+
 erased-serde = "0.4"
 proptest = "1"
 reqwest = { version = "0.13", default-features = false }
-restate-email = { version = "0.7.0", path = "crates/restate-email", default-features = false }
 restate-sdk = "0.10"
 schemars = "1.2"
 serde = "1"
@@ -34,5 +35,6 @@ tokio = "1"
 [workspace.metadata.release]
 sign-commit = true
 sign-tag = true
+shared-version = true
 tag-message = "Release {{version}}"
-tag-prefix = ""
+tag-name = "v{{version}}"

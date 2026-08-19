@@ -17,17 +17,27 @@ pub const STRING_NEWTYPE_MAX_BYTES: usize = 1024;
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum StringNewtypeError {
+    /// The value is empty.
     #[error("string newtype value cannot be empty")]
     Empty,
+    /// The value contains a NUL byte.
     #[error("string newtype value contains a NUL byte")]
     Nul,
+    /// The value contains a carriage return or line feed.
     #[error("string newtype value contains a CR or LF byte")]
     Newline,
+    /// The value contains an ASCII control character other than tab.
     #[error("string newtype value contains a non-tab control character")]
     Control,
+    /// The UTF-8 value exceeds [`STRING_NEWTYPE_MAX_BYTES`].
     #[error("string newtype value exceeds {max} bytes (got {len})")]
     #[non_exhaustive]
-    TooLong { len: usize, max: usize },
+    TooLong {
+        /// Actual value length in bytes.
+        len: usize,
+        /// Maximum accepted value length in bytes.
+        max: usize,
+    },
     /// The value contains a Unicode-tag codepoint (U+E0000..U+E007F).
     /// These are invisible to humans but readable by some downstream
     /// tooling, a known "ASCII smuggling" / log-injection vector.
@@ -178,11 +188,13 @@ macro_rules! __string_newtype_impls {
                 ::std::result::Result::Ok(Self(value))
             }
 
+            /// Borrow the validated string value.
             #[must_use]
             pub fn as_str(&self) -> &str {
                 self.0.as_str()
             }
 
+            /// Consume the newtype and return its string value.
             #[must_use]
             pub fn into_inner(self) -> ::std::string::String {
                 self.0

@@ -1,20 +1,42 @@
 # email-transport-resend
 
-Resend transport implementation for `email-transport`.
+[![crates.io](https://img.shields.io/crates/v/email-transport-resend?style=flat-square)](https://crates.io/crates/email-transport-resend)
+[![docs.rs](https://img.shields.io/docsrs/email-transport-resend?style=flat-square)](https://docs.rs/email-transport-resend)
 
-## Scope contract
+**Send structured `email-message` values through Resend.**
 
-- Sends structured `email_message::Message` values through Resend's JSON API.
-- Supports text/html bodies, custom headers, attachments, inline attachments, and idempotency keys.
-- Exposes Resend-specific per-send options through `ResendSendOptions`.
+## Quick Start
 
-## Send options
+```rust
+use email_message::{Address, Body, Message};
+use email_transport::{SendOptions, Transport};
+use email_transport_resend::ResendTransport;
 
-- `ResendSendOptions`
-- `ResendTag`
-- `ResendTemplate`
+async fn send() -> Result<(), Box<dyn std::error::Error>> {
+    let message = Message::builder(Body::text("Welcome"))
+        .from_mailbox("sender@example.com".parse()?)
+        .to(vec![Address::Mailbox("recipient@example.com".parse()?)])
+        .subject("Hello")
+        .build_outbound()?;
 
-Insert `ResendSendOptions` into `SendOptions.transport_options` to set Resend-only tags or template data for one send attempt. The same struct is serde-compatible for queued `transport_options.resend` payloads.
+    ResendTransport::new("re_...")
+        .send(&message, &SendOptions::default())
+        .await?;
+    Ok(())
+}
+```
+
+## Feature Flags
+
+Default features enable reqwest's default HTTP/TLS stack and serde support.
+
+- `serde`: enables serialization for `ResendSendOptions` and forwards serde support to `email-transport`.
+
+See the [crate documentation](https://docs.rs/email-transport-resend/latest/email_transport_resend/) for API and feature semantics and the [generated feature graph](https://docs.rs/crate/email-transport-resend/latest/features) for activation details.
+
+## Send Options
+
+Use `ResendSendOptions`, `ResendTag`, and `ResendTemplate` for per-send tags and template data. Insert `ResendSendOptions` into `SendOptions::transport_options`; with serde enabled, the same type can cross a queued `transport_options.resend` boundary.
 
 ```rust
 use email_transport::TransportOptions;
@@ -33,13 +55,23 @@ transport_options.insert(
 
 ## Example
 
-Run the example with:
+The canonical [`resend_send` example](examples/resend_send.rs) demonstrates credentials, idempotency, provider options, and the resulting send report:
 
-```text
+```sh
 RESEND_API_KEY=... RESEND_TO=you@example.com cargo run -p email-transport-resend --example resend_send
 ```
 
-## Development
+## License
 
-- Run tests: `cargo test -p email-transport-resend`
-- Check wasm compatibility: `cargo check -p email-transport-resend --target wasm32-unknown-unknown`
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <https://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or <https://opensource.org/licenses/MIT>)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.

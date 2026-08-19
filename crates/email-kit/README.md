@@ -1,28 +1,51 @@
 # email-kit
 
-Convenience facade for the email-rs crates.
+[![crates.io](https://img.shields.io/crates/v/email-kit?style=flat-square)](https://crates.io/crates/email-kit)
+[![docs.rs](https://img.shields.io/docsrs/email-kit?style=flat-square)](https://docs.rs/email-kit)
 
-`email-kit` re-exports:
+**A convenient facade for the email-rs crate family.**
 
-- `email-message` as `email_kit::message`
-- `email-transport` as `email_kit::transport`
-- `email-transport-resend` as `email_kit::transport::resend` when the `transport-resend` feature is enabled
-- `email-message-wire` as `email_kit::wire` when the `wire` feature is enabled
+`email-kit` re-exports `email-message` as `email_kit::message` and `email-transport` as `email_kit::transport`. Optional features expose `email-message-wire` as `email_kit::wire` and the Resend adapter as `email_kit::transport::resend`.
 
-Use `email_kit::prelude::*` for common message types and transport traits. With the `wire` feature enabled, the prelude also includes wire helpers.
+## Quick Start
+
+```rust
+use email_kit::prelude::*;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mailbox: Mailbox = "Mary Smith <mary@example.com>".parse()?;
+    assert_eq!(mailbox.email().as_str(), "mary@example.com");
+
+    Ok(())
+}
+```
+
+Use `email_kit::prelude::*` for common message types and transport traits. When the `wire` feature is enabled, the prelude also includes wire helpers.
 
 ## Feature Flags
 
-- `default`: enables `serde` support.
+- `default`: forwards the default features of enabled component crates. For the base facade, `email-transport`'s default enables serde support for both transport and message types; optional wire and provider crates remain disabled.
 - `serde`: enables serde support for message and transport types.
 - `schemars`: enables JSON Schema support for message and transport types.
 - `arbitrary`: enables property-test generation support for message types.
-- `tracing`: enables `email-transport` tracing instrumentation.
-- `transport-all`: enables every transport feature currently provided by `email-kit`
-- `transport-resend`: enables Resend transport support through `email_kit::transport::resend`.
-- `wire`: enables RFC822/MIME parsing and rendering through `email-message-wire`.
+- `tracing`: enables transport tracing instrumentation.
+- `transport-all`: enables every transport currently provided by `email-kit`; currently this is Resend.
+- `transport-resend`: exposes Resend support through `email_kit::transport::resend`.
+- `wire`: exposes RFC822 and MIME parsing and rendering through `email_kit::wire`.
 
-## Development
+See the [crate documentation](https://docs.rs/email-kit/latest/email_kit/) for API and feature semantics and the [generated feature graph](https://docs.rs/crate/email-kit/latest/features) for activation details.
 
-- Run tests: `cargo test -p email-kit --all-features`
-- Run clippy: `cargo clippy -p email-kit --all-targets --all-features -- -D warnings`
+## License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <https://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or <https://opensource.org/licenses/MIT>)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.

@@ -1,3 +1,9 @@
+//! RFC 5322 mailbox, group, address, and address-list values.
+//!
+//! Parsing accepts either a single address item or a comma-separated list,
+//! depending on the target type. Rendering produces UTF-8-direct display names;
+//! use `email-message-wire` when RFC 2047 header encoding is required.
+
 use std::fmt::Display;
 use std::str::FromStr;
 use std::sync::OnceLock;
@@ -48,17 +54,26 @@ impl From<(Option<String>, EmailAddress)> for Mailbox {
     }
 }
 
+/// Errors returned when parsing a [`Mailbox`] or [`MailboxList`].
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum MailboxParseError {
+    /// The input contained zero or multiple address items.
     #[error("expected a single mailbox, found {found} address item(s)")]
-    ExpectedSingleMailbox { found: usize },
+    ExpectedSingleMailbox {
+        /// Number of address items found.
+        found: usize,
+    },
+    /// The single address item was a group rather than a mailbox.
     #[error("expected mailbox but found group")]
     UnexpectedAddressKind,
+    /// A mailbox list contained at least one group.
     #[error("mailbox list contains group entries")]
     ContainsGroupEntry,
+    /// The address parsing backend failed.
     #[error("mailbox parse backend failed")]
     Backend {
+        /// The underlying backend error.
         #[source]
         source: AddressBackendError,
     },
@@ -95,10 +110,18 @@ impl TryFrom<&str> for Mailbox {
     /// ```rust
     /// use email_message::Mailbox;
     ///
-    /// let mailbox = Mailbox::try_from("Mary Smith <mary@x.test>").unwrap();
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mailbox = Mailbox::try_from("Mary Smith <mary@x.test>")?;
     /// assert_eq!(mailbox.name(), Some("Mary Smith"));
     /// assert_eq!(mailbox.email().as_str(), "mary@x.test");
+    /// # Ok(())
+    /// # }
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MailboxParseError`] unless the input contains exactly one
+    /// mailbox and no group.
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         Self::from_str(value)
     }
@@ -317,15 +340,23 @@ impl Group {
     }
 }
 
+/// Errors returned when parsing a [`Group`].
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum GroupParseError {
+    /// The input contained zero or multiple address items.
     #[error("expected a single group, found {found} address item(s)")]
-    ExpectedSingleGroup { found: usize },
+    ExpectedSingleGroup {
+        /// Number of address items found.
+        found: usize,
+    },
+    /// The single address item was a mailbox rather than a group.
     #[error("expected group but found mailbox")]
     UnexpectedAddressKind,
+    /// The address parsing backend failed.
     #[error("group parse backend failed")]
     Backend {
+        /// The underlying backend error.
         #[source]
         source: AddressBackendError,
     },
@@ -358,10 +389,17 @@ impl TryFrom<&str> for Group {
     /// ```rust
     /// use email_message::Group;
     ///
-    /// let group = Group::try_from("Undisclosed recipients:;").unwrap();
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let group = Group::try_from("Undisclosed recipients:;")?;
     /// assert_eq!(group.name(), "Undisclosed recipients");
     /// assert!(group.members().is_empty());
+    /// # Ok(())
+    /// # }
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GroupParseError`] unless the input contains exactly one group.
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         Self::from_str(value)
     }
@@ -546,7 +584,9 @@ impl<'a> arbitrary::Arbitrary<'a> for Group {
 /// crate wants type-safe coverage of the address space.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Address {
+    /// A single mailbox.
     Mailbox(Mailbox),
+    /// A named group of mailboxes.
     Group(Group),
 }
 
@@ -572,13 +612,20 @@ impl Address {
     }
 }
 
+/// Errors returned when parsing an [`Address`] or [`AddressList`].
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum AddressParseError {
+    /// The input contained zero or multiple address items.
     #[error("expected a single address, found {found} address item(s)")]
-    ExpectedSingleAddress { found: usize },
+    ExpectedSingleAddress {
+        /// Number of address items found.
+        found: usize,
+    },
+    /// The address parsing backend failed.
     #[error("address parse backend failed")]
     Backend {
+        /// The underlying backend error.
         #[source]
         source: AddressBackendError,
     },
@@ -615,9 +662,17 @@ impl TryFrom<&str> for Address {
     /// ```rust
     /// use email_message::Address;
     ///
-    /// let address = Address::try_from("jdoe@one.test").unwrap();
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let address = Address::try_from("jdoe@one.test")?;
     /// assert_eq!(address.to_string(), "jdoe@one.test");
+    /// # Ok(())
+    /// # }
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AddressParseError`] unless the input contains exactly one
+    /// mailbox or group.
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         Self::from_str(value)
     }
@@ -807,29 +862,35 @@ macro_rules! impl_address_collection {
         }
 
         impl $name {
+            /// Returns the number of items in the list.
             #[must_use]
             pub fn len(&self) -> usize {
                 self.items.len()
             }
 
+            /// Returns `true` if the list contains no items.
             #[must_use]
             pub fn is_empty(&self) -> bool {
                 self.items.is_empty()
             }
 
+            /// Returns an iterator over the items.
             pub fn iter(&self) -> std::slice::Iter<'_, $item> {
                 self.items.iter()
             }
 
+            /// Returns a mutable iterator over the items.
             pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, $item> {
                 self.items.iter_mut()
             }
 
+            /// Returns the items as a slice.
             #[must_use]
             pub fn as_slice(&self) -> &[$item] {
                 self.items.as_slice()
             }
 
+            /// Consumes the list and returns its item vector.
             #[must_use]
             pub fn into_vec(self) -> Vec<$item> {
                 self.items
@@ -1101,35 +1162,58 @@ impl_address_collection!(
 /// allocation amplification on adversarial multi-megabyte input.
 pub const MAX_ADDRESS_INPUT_BYTES: usize = 64 * 1024;
 
+/// Low-level failures reported by the address parsing backend.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum AddressBackendError {
+    /// The input contains a raw carriage return or line feed.
     #[error("address input contains raw newline characters")]
     InputContainsRawNewlines,
+    /// The input exceeds [`MAX_ADDRESS_INPUT_BYTES`].
     #[error("address input is {len} bytes, exceeding maximum of {max}")]
     #[non_exhaustive]
-    InputTooLong { len: usize, max: usize },
+    InputTooLong {
+        /// Actual input length in bytes.
+        len: usize,
+        /// Maximum accepted input length in bytes.
+        max: usize,
+    },
+    /// The backend could not parse the synthetic address header.
     #[error("failed to parse address header")]
     HeaderParse,
+    /// The parsed header did not contain address data.
     #[error("parsed header did not contain address data")]
     MissingAddress,
+    /// A mailbox did not contain an `addr-spec`.
     #[error("mailbox is missing addr-spec")]
     MissingAddrSpec,
+    /// A mailbox contained an invalid `addr-spec`.
     #[error("invalid addr-spec `{input}`")]
     InvalidAddrSpec {
+        /// Invalid `addr-spec` text.
         input: String,
+        /// Underlying email-address validation error.
         #[source]
         source: EmailAddressParseError,
     },
+    /// A group member did not contain an `addr-spec`.
     #[error("group member at index {index} is missing addr-spec")]
-    GroupMemberMissingAddrSpec { index: usize },
+    GroupMemberMissingAddrSpec {
+        /// Zero-based index of the invalid member.
+        index: usize,
+    },
+    /// A group member contained an invalid `addr-spec`.
     #[error("invalid group member addr-spec `{input}` at index {index}")]
     InvalidGroupMemberAddrSpec {
+        /// Zero-based index of the invalid member.
         index: usize,
+        /// Invalid `addr-spec` text.
         input: String,
+        /// Underlying email-address validation error.
         #[source]
         source: EmailAddressParseError,
     },
+    /// A parsed group did not contain a name.
     #[error("group is missing a name")]
     GroupMissingName,
 }

@@ -1,7 +1,7 @@
 [package]
 name = "email-message-wire"
-description = "RFC822/MIME wire parsing and rendering for email-message"
 version = { workspace = true }
+description = "RFC822/MIME wire parsing and rendering for email-message"
 edition = { workspace = true }
 rust-version = { workspace = true }
 license = { workspace = true }
@@ -14,10 +14,7 @@ categories = ["email", "encoding"]
 base64 = "0.22"
 email-message = { workspace = true, features = ["mime"] }
 thiserror = { workspace = true }
-time = { workspace = true, features = ["parsing", "formatting"] }
+time = { workspace = true, features = ["formatting", "parsing"] }
 
 [dev-dependencies]
 proptest = { workspace = true }
-
-[features]
-default = []

@@ -30,6 +30,22 @@
 //!   `Message-ID` as a `Vec<Header>` for adapters whose provider API treats
 //!   them as custom headers.
 //!
+//! # Features
+//!
+//! The default feature set enables `serde`.
+//!
+//! - `serde`: serialization for send metadata plus registry-driven
+//!   deserialization of provider options.
+//! - `schemars`: JSON Schema implementations for public wire types.
+//! - `tracing`: the PII-conscious [`TracingTransport`] wrapper.
+//!
+//! # Platform support
+//!
+//! Native targets require transports and their returned futures to be
+//! thread-safe. On `wasm32`, [`RuntimeBound`] and [`MaybeSend`] drop those
+//! bounds so transports may hold browser or worker handles. The `tracing`
+//! feature uses a web-compatible clock on `wasm32-unknown-unknown`.
+//!
 //! [`Message`]: email_message::Message
 
 pub mod options;

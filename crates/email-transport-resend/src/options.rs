@@ -34,17 +34,20 @@ impl TransportOption for ResendSendOptions {
 }
 
 impl ResendSendOptions {
+    /// Create empty Resend-specific send options.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Append one dashboard tag.
     #[must_use]
     pub fn with_tag(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.tags.push(ResendTag::new(name, value));
         self
     }
 
+    /// Append dashboard tags in iteration order.
     #[must_use]
     pub fn with_tags<I, T>(mut self, tags: I) -> Self
     where
@@ -55,12 +58,14 @@ impl ResendSendOptions {
         self
     }
 
+    /// Set the Resend template render settings.
     #[must_use]
     pub fn with_template(mut self, template: ResendTemplate) -> Self {
         self.template = Some(template);
         self
     }
 
+    /// Return whether no tags or template settings are configured.
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.tags.is_empty() && self.template.is_none()
@@ -87,11 +92,14 @@ impl ResendSendOptions {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ResendTag {
+    /// Tag name used for filtering in Resend.
     pub name: String,
+    /// Tag value used for filtering in Resend.
     pub value: String,
 }
 
 impl ResendTag {
+    /// Create a tag without performing provider-specific validation.
     #[must_use]
     pub fn new(name: impl Into<String>, value: impl Into<String>) -> Self {
         Self {
@@ -131,6 +139,7 @@ pub struct ResendTemplate {
 }
 
 impl ResendTemplate {
+    /// Create template settings without variables.
     #[must_use]
     pub fn new(id: impl Into<String>) -> Self {
         Self {
@@ -139,6 +148,7 @@ impl ResendTemplate {
         }
     }
 
+    /// Insert or replace one template variable.
     #[must_use]
     pub fn with_variable(mut self, key: impl Into<String>, value: impl Into<Value>) -> Self {
         self.variables
@@ -147,6 +157,7 @@ impl ResendTemplate {
         self
     }
 
+    /// Insert or replace template variables from an iterator.
     #[must_use]
     pub fn with_variables<I, K, V>(mut self, variables: I) -> Self
     where

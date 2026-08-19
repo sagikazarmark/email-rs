@@ -17,8 +17,9 @@ pub use email_transport_resend as resend;
 /// # Examples
 ///
 /// ```rust
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// # #[cfg(feature = "serde")]
-/// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// # {
 /// use email_kit::transport::SendOptions;
 ///
 /// let registry = email_kit::transport::transport_option_registry();
@@ -35,11 +36,9 @@ pub use email_transport_resend as resend;
 ///
 /// assert!(options.envelope.is_some());
 /// assert_eq!(options.timeout, Some(std::time::Duration::from_secs(5)));
+/// # }
 /// # Ok(())
 /// # }
-/// # #[cfg(not(feature = "serde"))]
-/// # fn example() -> Result<(), Box<dyn std::error::Error>> { Ok(()) }
-/// # example().unwrap();
 /// ```
 #[cfg(feature = "serde")]
 #[must_use]
@@ -56,6 +55,14 @@ pub fn transport_option_registry() -> TransportOptionRegistry {
 /// [`TransportOptionRegistry`] (for example, to also register
 /// application-specific [`TransportOption`] types) and just wants to layer the
 /// email-rs adapters on top.
+///
+/// Calling this function repeatedly is safe when the registry contains the
+/// same concrete option types.
+///
+/// # Panics
+///
+/// Panics if a different option type has already registered a provider key
+/// owned by an enabled built-in adapter, such as `"resend"`.
 #[cfg(feature = "serde")]
 pub fn register_transport_options(registry: &mut TransportOptionRegistry) {
     #[cfg(not(feature = "transport-resend"))]
@@ -71,6 +78,37 @@ pub fn register_transport_options(registry: &mut TransportOptionRegistry) {
 mod tests {
     use super::{TransportOptionRegistry, register_transport_options, transport_option_registry};
 
+    #[cfg(feature = "transport-resend")]
+    struct ResendKeyCollision;
+
+    #[cfg(feature = "transport-resend")]
+    impl email_transport::__macro_serde::Serialize for ResendKeyCollision {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: email_transport::__macro_serde::Serializer,
+        {
+            serializer.serialize_unit()
+        }
+    }
+
+    #[cfg(feature = "transport-resend")]
+    impl<'de> email_transport::__macro_serde::Deserialize<'de> for ResendKeyCollision {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: email_transport::__macro_serde::Deserializer<'de>,
+        {
+            <() as email_transport::__macro_serde::Deserialize>::deserialize(deserializer)?;
+            Ok(Self)
+        }
+    }
+
+    #[cfg(feature = "transport-resend")]
+    impl email_transport::TransportOption for ResendKeyCollision {
+        fn provider_key() -> &'static str {
+            "resend"
+        }
+    }
+
     #[test]
     fn registry_helpers_are_idempotent() {
         let mut registry = TransportOptionRegistry::new();
@@ -81,5 +119,17 @@ mod tests {
     #[test]
     fn fresh_registry_can_be_built() {
         let _ = transport_option_registry();
+    }
+
+    #[cfg(feature = "transport-resend")]
+    #[test]
+    #[should_panic(expected = "resend provider key should be unique")]
+    fn registration_panics_when_resend_key_is_owned_by_another_type() {
+        let mut registry = TransportOptionRegistry::new();
+        registry
+            .register::<ResendKeyCollision>()
+            .expect("collision fixture registers first");
+
+        register_transport_options(&mut registry);
     }
 }

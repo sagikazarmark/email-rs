@@ -10,35 +10,57 @@ use email_message::{
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc2822;
 
+/// Errors returned while parsing RFC 822/MIME bytes.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum MessageParseError {
+    /// A header line is not valid UTF-8.
     #[error("input is not valid UTF-8")]
     InvalidUtf8,
+    /// A header line violates the supported RFC 5322 syntax or byte rules.
     #[error("invalid header line `{line}`")]
     #[non_exhaustive]
-    InvalidHeaderLine { line: String },
+    InvalidHeaderLine {
+        /// Rejected line or validation details.
+        line: String,
+    },
+    /// A single-mailbox header could not be parsed.
     #[error("failed to parse mailbox from `{header}` header")]
     #[non_exhaustive]
-    MailboxHeaderParse { header: &'static str },
+    MailboxHeaderParse {
+        /// Header field containing the invalid mailbox.
+        header: &'static str,
+    },
+    /// An address-list header could not be parsed.
     #[error("failed to parse address list from `{header}` header")]
     #[non_exhaustive]
-    AddressHeaderParse { header: &'static str },
+    AddressHeaderParse {
+        /// Header field containing the invalid address list.
+        header: &'static str,
+    },
+    /// The `Date` header is not a valid RFC 2822 date-time.
     #[error("failed to parse Date header as RFC 2822 datetime")]
     #[non_exhaustive]
     Date {
+        /// Underlying date-time parse error.
         #[source]
         source: time::error::Parse,
     },
+    /// The `Message-ID` header is invalid.
     #[error("failed to parse Message-ID header")]
     #[non_exhaustive]
     MessageId {
+        /// Underlying message-id parse error.
         #[source]
         source: email_message::MessageIdParseError,
     },
+    /// MIME structure, metadata, or transfer-encoded content is invalid.
     #[error("failed to parse MIME body: {details}")]
     #[non_exhaustive]
-    MimeBodyParse { details: String },
+    MimeBodyParse {
+        /// Description of the invalid MIME input.
+        details: String,
+    },
 }
 
 impl PartialEq for MessageParseError {
@@ -82,44 +104,76 @@ pub const MAX_MULTIPART_PARTS: usize = 1024;
 
 const RFC5322_HARD_LINE_LEN: usize = 998;
 
+/// Errors returned while rendering an RFC 822/MIME message.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum MessageRenderError {
+    /// A header value contains a raw carriage return or line feed.
     #[error("header `{name}` contains raw newline characters")]
     #[non_exhaustive]
-    HeaderContainsRawNewline { name: String },
+    HeaderContainsRawNewline {
+        /// Invalid header name.
+        name: String,
+    },
+    /// A header value contains a forbidden control character.
     #[error("header `{name}` contains invalid control characters")]
     #[non_exhaustive]
-    HeaderContainsControlCharacter { name: String },
+    HeaderContainsControlCharacter {
+        /// Invalid header name.
+        name: String,
+    },
+    /// A header remains non-ASCII after applicable encoding.
     #[error("header `{name}` contains non-ASCII characters")]
     #[non_exhaustive]
-    HeaderContainsNonAscii { name: String },
+    HeaderContainsNonAscii {
+        /// Invalid header name.
+        name: String,
+    },
+    /// A header name violates RFC 5322 field-name syntax.
     #[error("header name `{name}` is invalid")]
     #[non_exhaustive]
-    InvalidHeaderName { name: String },
+    InvalidHeaderName {
+        /// Invalid header name.
+        name: String,
+    },
+    /// A header cannot be folded below the RFC 5322 hard line limit.
     #[error("header `{name}` exceeds RFC 5322 hard line length limit")]
     #[non_exhaustive]
-    HeaderLineTooLong { name: String },
+    HeaderLineTooLong {
+        /// Overlong header name.
+        name: String,
+    },
+    /// The message date could not be formatted as RFC 2822.
     #[error("failed to format Date header as RFC 2822 datetime")]
     DateFormat,
+    /// A MIME boundary is empty.
     #[error("MIME boundary cannot be empty")]
     EmptyMimeBoundary,
+    /// A MIME boundary contains bytes forbidden by the supported grammar.
     #[error("MIME boundary contains forbidden characters")]
     InvalidMimeBoundary,
+    /// The content-type boundary parameter differs from the part boundary.
     #[error("multipart boundary parameter does not match part boundary")]
     MismatchedMimeBoundary,
+    /// A multipart node contains no child parts.
     #[error("multipart parts cannot be empty")]
     EmptyMultipartParts,
+    /// A MIME tree exceeds [`MAX_MULTIPART_DEPTH`].
     #[error("multipart nesting exceeds maximum depth of {MAX_MULTIPART_DEPTH}")]
     MimeNestingTooDeep,
+    /// A multipart node's content type is not `multipart/*`.
     #[error("multipart part must use a multipart content type")]
     InvalidMultipartContentType,
+    /// An unresolved attachment reference cannot be rendered.
     #[error("attachment body variant is not supported")]
     UnsupportedAttachmentBody,
+    /// An attachment content id is not a valid message-id value.
     #[error("attachment content-id is invalid")]
     InvalidContentId,
+    /// The message contains a body variant unsupported by this renderer.
     #[error("message body variant is not supported")]
     UnsupportedBody,
+    /// The message failed baseline outbound validation.
     #[error(transparent)]
     MessageValidation(#[from] MessageValidationError),
 }
@@ -164,6 +218,7 @@ pub struct RenderOptions {
 }
 
 impl RenderOptions {
+    /// Creates options with Bcc output and soft folding disabled.
     #[must_use]
     pub const fn new() -> Self {
         Self {
@@ -172,6 +227,7 @@ impl RenderOptions {
         }
     }
 
+    /// Chooses whether to emit the `Bcc` header.
     #[must_use]
     pub const fn with_include_bcc(mut self, value: bool) -> Self {
         self.include_bcc = value;
@@ -1183,15 +1239,18 @@ fn escape_encoded_words_inside_quoted_strings(input: &str) -> Cow<'_, str> {
 /// ```rust
 /// use email_message_wire::{decode_rfc2047_phrase, parse_rfc822};
 ///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let bytes = b"From: from@example.com\r\nTo: to@example.com\r\nX-Note: =?utf-8?B?w6Fy?=\r\n\r\n";
-/// let message = parse_rfc822(bytes).unwrap();
+/// let message = parse_rfc822(bytes)?;
 /// let header = message
 ///     .headers()
 ///     .iter()
 ///     .find(|h| h.name().eq_ignore_ascii_case("x-note"))
-///     .unwrap();
+///     .ok_or_else(|| std::io::Error::other("missing X-Note header"))?;
 /// assert_eq!(header.value(), "=?utf-8?B?w6Fy?=");
 /// assert_eq!(decode_rfc2047_phrase(header.value()), "ár");
+/// # Ok(())
+/// # }
 /// ```
 #[must_use]
 pub fn decode_rfc2047_phrase(input: &str) -> Cow<'_, str> {

@@ -69,35 +69,41 @@ pub struct SendOptions {
 }
 
 impl SendOptions {
+    /// Create send options with no overrides.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Set the structured-send envelope override.
     #[must_use]
     pub fn with_envelope(mut self, envelope: Envelope) -> Self {
         self.envelope = Some(envelope);
         self
     }
 
+    /// Replace the provider-specific typed option map.
     #[must_use]
     pub fn with_transport_options(mut self, transport_options: TransportOptions) -> Self {
         self.transport_options = transport_options;
         self
     }
 
+    /// Set the provider-call timeout for this attempt.
     #[must_use]
     pub const fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = Some(timeout);
         self
     }
 
+    /// Set the provider idempotency key for this attempt.
     #[must_use]
     pub fn with_idempotency_key(mut self, idempotency_key: IdempotencyKey) -> Self {
         self.idempotency_key = Some(idempotency_key);
         self
     }
 
+    /// Set the end-to-end tracing correlation identifier.
     #[must_use]
     pub fn with_correlation_id(mut self, correlation_id: CorrelationId) -> Self {
         self.correlation_id = Some(correlation_id);
@@ -234,6 +240,7 @@ where
 erased_serde::serialize_trait_object!(DynTransportOption);
 
 impl TransportOptions {
+    /// Insert or replace the option value of type `T`.
     #[cfg(feature = "serde")]
     pub fn insert<T>(&mut self, value: T)
     where
@@ -249,6 +256,7 @@ impl TransportOptions {
         );
     }
 
+    /// Insert or replace the option value of type `T`.
     #[cfg(not(feature = "serde"))]
     pub fn insert<T: TransportOption>(&mut self, value: T) {
         self.inner.insert(
@@ -260,17 +268,20 @@ impl TransportOptions {
         );
     }
 
+    /// Return the stored option of type `T`, if present.
     #[must_use]
     pub fn get<T: TransportOption>(&self) -> Option<&T> {
         let slot = self.inner.get(&TypeId::of::<T>())?;
         slot.value_any().downcast_ref::<T>()
     }
 
+    /// Return the stored option of type `T` mutably, if present.
     pub fn get_mut<T: TransportOption>(&mut self) -> Option<&mut T> {
         let slot = self.inner.get_mut(&TypeId::of::<T>())?;
         slot.value_any_mut().downcast_mut::<T>()
     }
 
+    /// Remove and return the option of type `T`, if present.
     pub fn remove<T: TransportOption>(&mut self) -> Option<T> {
         let slot = self.inner.remove(&TypeId::of::<T>())?;
         slot.into_any().downcast::<T>().ok().map(|v| *v)
@@ -400,6 +411,7 @@ struct TransportOptionDecoder {
 
 #[cfg(feature = "serde")]
 impl TransportOptionRegistry {
+    /// Create an empty provider-option registry.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -743,13 +755,18 @@ impl<'de, 'a> serde::de::Visitor<'de> for SendOptionsVisitor<'a> {
 #[cfg(feature = "serde")]
 #[derive(Debug, Error)]
 #[non_exhaustive]
+/// Failure to register a provider-option codec.
 pub enum TransportOptionRegistryError {
+    /// Two different option types claimed the same stable provider key.
     #[error(
         "duplicate TransportOption provider key `{provider_key}` for `{new_type}`; already registered by `{existing_type}`"
     )]
     DuplicateProviderKey {
+        /// Provider key claimed by both option types.
         provider_key: &'static str,
+        /// Fully qualified name of the previously registered type.
         existing_type: &'static str,
+        /// Fully qualified name of the type that attempted registration.
         new_type: &'static str,
     },
 }

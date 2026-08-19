@@ -40,11 +40,19 @@ string_newtype! {
     @unchecked TransportKey
 }
 
+/// Failure to resolve a queued transport key to a configured transport.
+///
+/// Converting this error to [`TerminalError`] produces Restate terminal code
+/// `404`, preventing retries for configuration-independent lookup failures.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum TransportLookupError {
+    /// The requested transport key is not configured.
     #[error("transport key `{key}` is not configured")]
-    UnknownKey { key: String },
+    UnknownKey {
+        /// Unresolved transport key.
+        key: String,
+    },
 }
 
 impl From<TransportLookupError> for TerminalError {

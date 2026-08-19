@@ -1,7 +1,7 @@
 [package]
 name = "email-kit"
-description = "Convenience facade for the email-rs crates"
 version = { workspace = true }
+description = "Convenience facade for the email-rs crates"
 edition = { workspace = true }
 rust-version = { workspace = true }
 license = { workspace = true }
@@ -9,6 +9,24 @@ repository = { workspace = true }
 homepage = { workspace = true }
 keywords = { workspace = true }
 categories = { workspace = true }
+
+[features]
+default = [
+    "email-message/default",
+    "email-transport/default",
+    "email-transport-resend?/default",
+]
+arbitrary = ["email-message/arbitrary"]
+schemars = ["email-message/schemars", "email-transport/schemars"]
+serde = [
+    "email-message/serde",
+    "email-transport/serde",
+    "email-transport-resend?/serde",
+]
+tracing = ["email-transport/tracing"]
+transport-all = ["transport-resend"]
+transport-resend = ["dep:email-transport-resend"]
+wire = ["dep:email-message-wire"]
 
 [dependencies]
 email-message = { workspace = true, default-features = false }
@@ -19,15 +37,6 @@ email-transport-resend = { workspace = true, default-features = false, optional 
 [dev-dependencies]
 serde_json = { workspace = true }
 
-[features]
-default = ["email-message/default", "email-message-wire?/default", "email-transport/default", "email-transport-resend?/default"]
-arbitrary = ["email-message/arbitrary"]
-schemars = ["email-message/schemars", "email-transport/schemars"]
-serde = ["email-message/serde", "email-transport/serde", "email-transport-resend?/serde"]
-tracing = ["email-transport/tracing"]
-transport-all = ["transport-resend"]
-transport-resend = ["dep:email-transport-resend"]
-wire = ["dep:email-message-wire"]
-
+# Build docs with every compatible public API feature enabled.
 [package.metadata.docs.rs]
 all-features = true

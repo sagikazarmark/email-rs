@@ -1,7 +1,7 @@
 [package]
 name = "restate-email"
-description = "Restate email worker contracts and service adapter"
 version = { workspace = true }
+description = "Restate email worker contracts and service adapter"
 edition = { workspace = true }
 rust-version = { workspace = true }
 license = { workspace = true }
@@ -10,10 +10,26 @@ homepage = { workspace = true }
 keywords = ["email", "worker", "restate", "queue"]
 categories = ["email", "asynchronous"]
 
+[features]
+default = ["reqwest/default"]
+# Provider-option deserialization is delegated to email-kit.
+resend = ["email-kit/transport-resend"]
+# Derive JSON Schema for public queue payload types.
+schemars = [
+    "dep:schemars",
+    "email-kit/schemars",
+    "email-message/schemars",
+    "email-transport/schemars",
+    "restate-sdk/schemars",
+]
+# Forward email-message's RFC 5322 string address compatibility into queue schemas.
+rfc5322-string-compat = ["email-message/rfc5322-string-compat"]
+
 [dependencies]
 email-kit = { workspace = true, features = ["serde"] }
 email-message = { workspace = true, features = ["serde"] }
 email-transport = { workspace = true }
+
 restate-sdk = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
@@ -31,18 +47,10 @@ reqwest = { workspace = true, features = ["json"], default-features = false }
 restate-sdk-shared-core = "0.10"
 tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
 
-[features]
-default = ["reqwest/default"]
-# Provider-option deserialization is delegated to email-kit.
-resend = ["email-kit/transport-resend"]
-# Derive JSON Schema for public queue payload types.
-schemars = ["dep:schemars", "restate-sdk/schemars", "email-kit/schemars", "email-message/schemars", "email-transport/schemars"]
-# Forward email-message's RFC 5322 string address compatibility into queue schemas.
-rfc5322-string-compat = ["email-message/rfc5322-string-compat"]
-
 [[example]]
 name = "restate_resend_worker"
 required-features = ["resend"]
 
+# Build docs with every compatible public API feature enabled.
 [package.metadata.docs.rs]
 all-features = true

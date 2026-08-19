@@ -1,17 +1,24 @@
-//! RFC822/MIME wire parsing and rendering for `email-message`.
+//! Parses and renders `email-message` values as RFC 822/MIME bytes.
 //!
-//! This crate focuses on wire format concerns and keeps `email-message` focused on
-//! outbound message representation.
+//! Use this crate at wire-format boundaries such as SMTP submission, `.eml`
+//! import and export, and MIME processing. The `email-message` crate remains
+//! responsible for the provider-independent model and outbound validation.
+//!
+//! # Quick start
 //!
 //! ```rust
 //! use email_message_wire::{parse_rfc822, render_rfc822};
 //!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let raw = b"From: from@example.com\r\nTo: to@example.com\r\n\r\nHello";
-//! let message = parse_rfc822(raw).unwrap();
-//! let _bytes = render_rfc822(&message).unwrap();
+//! let message = parse_rfc822(raw)?;
+//! let _bytes = render_rfc822(&message)?;
+//! # Ok(())
+//! # }
 //! ```
 //!
-//! Current rendering support:
+//! # Rendering support
+//!
 //! - Structured body rendering for text, html, text+html, and MIME trees.
 //! - `Message::attachments` rendered as MIME parts with multipart nesting, base64 transfer
 //!   encoding, Content-Disposition, and optional Content-ID.
@@ -19,14 +26,19 @@
 //! - Attachment references are model-level values and must be resolved to bytes before
 //!   rendering.
 //!
-//! # Feature interaction with `email-message`
+//! # Cargo features
 //!
-//! Depending on `email-message-wire` enables `email-message`'s `mime`
-//! feature for the calling crate as a side effect, `MimePart` becomes
-//! visible in `email_message`. The wire crate genuinely needs `mime`
-//! for full MIME-tree rendering, so this is unavoidable; downstream
-//! crates that want `MimePart` access have an alternative path through
-//! the wire dependency.
+//! This crate has no optional features, and its default feature set is empty;
+//! default and all-feature builds are therefore equivalent. Its required
+//! `email-message` dependency always enables that crate's `mime` feature, so
+//! [`email_message::MimePart`] is also available when both crates occur in the
+//! same dependency graph. Other `email-message` features remain independent.
+//!
+//! # Platform support
+//!
+//! This is a `std` crate with no operating-system APIs or target-specific
+//! implementation. Parsing and rendering operate entirely on in-memory bytes
+//! and support Rust targets that provide the standard library.
 //!
 //! # Parser semantics
 //!

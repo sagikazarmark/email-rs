@@ -10,38 +10,65 @@
 //! - Enable the `wire` feature for `wire`, which re-exports
 //!   `email-message-wire`.
 //!
+//! # Features
+//!
+//! The default feature set forwards the default features of the always-present
+//! message and transport crates. It does not enable `wire` or a provider
+//! transport.
+//!
+//! - `wire`: RFC 822/MIME parsing and rendering through [`wire`].
+//! - `transport-resend`: the Resend adapter at [`transport::resend`].
+//! - `transport-all`: all provider adapters; currently equivalent to
+//!   `transport-resend`.
+//! - `serde`, `schemars`, and `arbitrary`: forward the corresponding data-model
+//!   integrations.
+//! - `tracing`: transport instrumentation through
+//!   [`transport::TracingTransport`].
+//!
+//! # Platform support
+//!
+//! The message, wire, and core transport facades support native and
+//! `wasm32` targets. Individual provider adapters may differ; in particular,
+//! the Resend adapter advertises and enforces per-send timeouts only on
+//! non-`wasm32` targets.
+//!
 //! Use [`prelude`] when you want the common message types, wire helpers, and
 //! transport traits in scope:
 //!
 //! ```rust
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! use email_kit::prelude::*;
 //!
-//! let mailbox: Mailbox = "Mary Smith <mary@example.com>".parse().unwrap();
+//! let mailbox: Mailbox = "Mary Smith <mary@example.com>".parse()?;
 //! assert_eq!(mailbox.email().as_str(), "mary@example.com");
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! Namespaced access stays available when that is clearer:
 //!
 //! ```rust
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let mailbox: email_kit::message::Mailbox = "Mary Smith <mary@example.com>"
-//!     .parse()
-//!     .unwrap();
+//!     .parse()?;
 //! assert_eq!(mailbox.email().as_str(), "mary@example.com");
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! With the `wire` feature enabled, RFC822/MIME helpers are available through
 //! `email_kit::wire` and `email_kit::prelude::*`:
 //!
 //! ```rust
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! # #[cfg(feature = "wire")]
-//! # fn wire_example() {
+//! # {
 //! let raw = b"From: from@example.com\r\nTo: to@example.com\r\n\r\nHello";
-//! let message = email_kit::wire::parse_rfc822(raw).unwrap();
-//! let _bytes = email_kit::wire::render_rfc822(&message).unwrap();
+//! let message = email_kit::wire::parse_rfc822(raw)?;
+//! let _bytes = email_kit::wire::render_rfc822(&message)?;
 //! # }
-//! # #[cfg(not(feature = "wire"))]
-//! # fn wire_example() {}
-//! # wire_example();
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! With the `transport-resend` or `transport-all` feature enabled,

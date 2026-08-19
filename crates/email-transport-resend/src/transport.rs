@@ -12,6 +12,12 @@ use url::Url;
 
 use crate::{ResendSendOptions, ResendTag, ResendTemplate};
 
+/// Structured email transport backed by the official `resend-rs` client.
+///
+/// The transport maps message bodies, recipients, standard/custom headers,
+/// byte-backed attachments, tags, and templates to Resend's structured send
+/// endpoint. Its [`Debug`](std::fmt::Debug) implementation redacts client
+/// internals so API keys are not exposed.
 #[derive(Clone)]
 pub struct ResendTransport {
     client: Resend,
@@ -43,13 +49,16 @@ impl ResendTransport {
         ResendTransportBuilder::new(api_key)
     }
 
-    /// Constructs a `ResendTransport` from an initialized `resend-rs` client.
+    /// Construct a transport from an initialized `resend-rs` client.
+    ///
+    /// Use this when SDK configuration outside [`ResendTransportBuilder`] is
+    /// required.
     #[must_use]
     pub const fn from_client(client: Resend) -> Self {
         Self { client }
     }
 
-    /// Returns the underlying `resend-rs` client.
+    /// Return the underlying `resend-rs` client.
     pub const fn client(&self) -> &Resend {
         &self.client
     }
@@ -193,6 +202,8 @@ impl Transport for ResendTransport {
 }
 
 /// Builder for [`ResendTransport`] with optional Resend SDK configuration.
+///
+/// API keys are redacted by its [`Debug`](std::fmt::Debug) implementation.
 #[derive(Clone)]
 pub struct ResendTransportBuilder {
     api_key: String,
@@ -265,7 +276,10 @@ fn map_body(body: &Body) -> Result<(Option<String>, Option<String>), TransportEr
         Body::Text(text) => Ok((non_empty(text), None)),
         Body::Html(html) => Ok((None, non_empty(html))),
         Body::TextAndHtml { text, html } => Ok((non_empty(text), non_empty(html))),
-        #[allow(unreachable_patterns)]
+        #[allow(
+            unreachable_patterns,
+            reason = "Body is non-exhaustive and future variants must fail explicitly"
+        )]
         _ => Err(transport_error(
             ErrorKind::UnsupportedFeature,
             "non-text/html body is not supported by resend structured endpoint",

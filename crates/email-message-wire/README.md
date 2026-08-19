@@ -1,22 +1,53 @@
 # email-message-wire
 
-RFC822 and MIME parsing/rendering for `email-message`.
+[![crates.io](https://img.shields.io/crates/v/email-message-wire?style=flat-square)](https://crates.io/crates/email-message-wire)
+[![docs.rs](https://img.shields.io/docsrs/email-message-wire?style=flat-square)](https://docs.rs/email-message-wire)
 
-## Scope contract
+**RFC822 and MIME parsing and rendering for `email-message`.**
+
+This crate has no optional feature flags.
+
+## Quick Start
+
+```rust
+use email_message_wire::{parse_rfc822, render_rfc822};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let raw = b"From: from@example.com\r\nTo: to@example.com\r\n\r\nHello";
+    let message = parse_rfc822(raw)?;
+    let rendered = render_rfc822(&message)?;
+
+    assert!(!rendered.is_empty());
+    Ok(())
+}
+```
+
+## Scope Contract
 
 - Parses RFC822 messages into the typed `email_message::Message` model.
-- Renders typed messages back into RFC822/MIME wire format.
-- Handles MIME structure, attachment encoding, RFC2047 encoded words, and related transport-safe formatting rules.
+- Renders typed messages as RFC822 and MIME wire data.
+- Handles MIME structure, attachment encoding, RFC2047 encoded words, and related transport-safe formatting.
+- Enables `email-message`'s `mime` feature because full MIME-tree rendering requires `MimePart`.
 
-## Key behaviors
+## Key Behaviors
 
-- `render_rfc822` strips `Bcc` by default so structured messages can be safely rendered for SMTP or raw delivery.
-- `render_rfc822_with` and `RenderOptions` are available when a caller intentionally needs a non-default wire rendering policy, such as including `Bcc`.
+- `render_rfc822` strips `Bcc` by default so messages are safe for SMTP or raw delivery.
+- `render_rfc822_with` and `RenderOptions` allow intentional non-default policies such as retaining `Bcc`.
 - MIME attachments are base64-encoded and wrapped to RFC-compliant line lengths.
-- Typed `Date` and `Message-ID` values round-trip through the public `Message` API.
+- Typed `Date` and `Message-ID` values round trip through the public `Message` API.
 - Attachment references must be resolved to bytes before rendering.
 
-## Development
+## License
 
-- Run tests: `cargo test -p email-message-wire`
-- Check wasm compatibility: `cargo check -p email-message-wire --target wasm32-unknown-unknown`
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <https://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or <https://opensource.org/licenses/MIT>)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.

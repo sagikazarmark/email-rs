@@ -1,3 +1,5 @@
+//! Structured and raw transport traits, capability metadata, and send reports.
+
 use core::future::Future;
 use core::pin::Pin;
 use std::borrow::Cow;
@@ -43,6 +45,7 @@ pub use crate::options::{
 /// a cancellation boundary, and [`SendOptions::timeout`] to bound
 /// provider-call duration.
 pub trait Transport: RuntimeBound {
+    /// Advertise the structured-send features supported by this transport.
     fn capabilities(&self) -> Capabilities {
         Capabilities {
             structured_send: StructuredSendCapability::Supported,
@@ -54,6 +57,11 @@ pub trait Transport: RuntimeBound {
     ///
     /// Callers without overrides pass `&SendOptions::default()`. See the
     /// trait-level "Cancellation" section.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransportError`] when validation, request construction, or
+    /// provider delivery fails.
     fn send<'a>(
         &'a self,
         message: &'a OutboundMessage,
@@ -65,6 +73,10 @@ pub trait Transport: RuntimeBound {
     /// Default impl forwards to [`send`](Transport::send) via a borrow.
     /// Override when an adapter can move the [`OutboundMessage`] into a
     /// provider-specific request body without cloning.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransportError`] under the same conditions as [`Self::send`].
     fn send_owned<'a>(
         &'a self,
         message: OutboundMessage,
@@ -102,6 +114,7 @@ pub trait Transport: RuntimeBound {
 /// the message. Use [`SendOptions::idempotency_key`] for replay safety where
 /// the provider supports it.
 pub trait RawTransport: RuntimeBound {
+    /// Advertise the raw-send features supported by this transport.
     fn capabilities(&self) -> Capabilities {
         Capabilities {
             raw_rfc822: true,
@@ -115,6 +128,11 @@ pub trait RawTransport: RuntimeBound {
     ///
     /// [`SendOptions::envelope`] is ignored on this path. See the trait-level
     /// "Envelope source" and "Cancellation" sections.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransportError`] when validation, protocol setup, or provider
+    /// delivery fails.
     fn send_raw<'a>(
         &'a self,
         envelope: &'a Envelope,
@@ -130,6 +148,11 @@ pub trait RawTransport: RuntimeBound {
     /// borrow. Override when an adapter can move the envelope and bytes into
     /// a provider-specific API without cloning (e.g. lettre's SMTP state
     /// machine).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransportError`] under the same conditions as
+    /// [`Self::send_raw`].
     fn send_raw_owned<'a>(
         &'a self,
         envelope: Envelope,
@@ -203,66 +226,86 @@ pub trait RawTransport: RuntimeBound {
 /// `idempotency_key` from the queue payload.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
-#[allow(clippy::struct_excessive_bools)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "transport capabilities are intentionally independent feature flags"
+)]
 pub struct Capabilities {
+    /// Accepts an explicit envelope and pre-rendered RFC 822 bytes.
     pub raw_rfc822: bool,
+    /// Level of support for structured message sends.
     pub structured_send: StructuredSendCapability,
+    /// Honors [`SendOptions::envelope`] on structured sends.
     pub custom_envelope: bool,
+    /// Forwards message headers not modeled as provider fields.
     pub custom_headers: bool,
+    /// Supports regular attachments.
     pub attachments: bool,
+    /// Supports inline attachments referenced by content ID.
     pub inline_attachments: bool,
+    /// Forwards [`SendOptions::idempotency_key`] to the provider.
     pub idempotency_key: bool,
+    /// Enforces [`SendOptions::timeout`] around the provider call.
     pub timeout: bool,
 }
 
 impl Capabilities {
+    /// Create a capability set with every feature unsupported.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Set whether raw RFC 822 delivery is supported.
     #[must_use]
     pub const fn with_raw_rfc822(mut self, value: bool) -> Self {
         self.raw_rfc822 = value;
         self
     }
 
+    /// Set the structured-send support level.
     #[must_use]
     pub const fn with_structured_send(mut self, value: StructuredSendCapability) -> Self {
         self.structured_send = value;
         self
     }
 
+    /// Set whether structured sends honor custom envelopes.
     #[must_use]
     pub const fn with_custom_envelope(mut self, value: bool) -> Self {
         self.custom_envelope = value;
         self
     }
 
+    /// Set whether custom message headers are forwarded.
     #[must_use]
     pub const fn with_custom_headers(mut self, value: bool) -> Self {
         self.custom_headers = value;
         self
     }
 
+    /// Set whether regular attachments are supported.
     #[must_use]
     pub const fn with_attachments(mut self, value: bool) -> Self {
         self.attachments = value;
         self
     }
 
+    /// Set whether inline attachments are supported.
     #[must_use]
     pub const fn with_inline_attachments(mut self, value: bool) -> Self {
         self.inline_attachments = value;
         self
     }
 
+    /// Set whether provider idempotency keys are supported.
     #[must_use]
     pub const fn with_idempotency_key(mut self, value: bool) -> Self {
         self.idempotency_key = value;
         self
     }
 
+    /// Set whether per-send provider-call timeouts are supported.
     #[must_use]
     pub const fn with_timeout(mut self, value: bool) -> Self {
         self.timeout = value;
@@ -270,12 +313,16 @@ impl Capabilities {
     }
 }
 
+/// Structured message support advertised by a [`Transport`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum StructuredSendCapability {
+    /// Structured messages are not accepted.
     #[default]
     Unsupported,
+    /// Structured messages are accepted without mandatory provider options.
     Supported,
+    /// Structured messages require a provider-specific [`TransportOption`].
     RequiresTransportOptions,
 }
 
@@ -283,8 +330,11 @@ pub enum StructuredSendCapability {
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
+/// Successful provider handoff metadata returned by a transport.
 pub struct SendReport {
+    /// Stable provider identifier, such as `"resend"` or `"smtp"`.
     pub provider: Cow<'static, str>,
+    /// Provider-assigned message identifier, when one was returned.
     pub provider_message_id: Option<String>,
     /// Recipient list the adapter logically accepted for handoff.
     ///
@@ -314,6 +364,7 @@ pub struct SendReport {
 }
 
 impl SendReport {
+    /// Create an empty handoff report for `provider`.
     #[must_use]
     pub fn new(provider: impl Into<Cow<'static, str>>) -> Self {
         Self {
@@ -323,12 +374,14 @@ impl SendReport {
         }
     }
 
+    /// Record the provider-assigned message identifier.
     #[must_use]
     pub fn with_provider_message_id(mut self, id: impl Into<String>) -> Self {
         self.provider_message_id = Some(id.into());
         self
     }
 
+    /// Record the recipients logically accepted for handoff.
     #[must_use]
     pub fn with_accepted<I>(mut self, accepted: I) -> Self
     where
@@ -339,20 +392,30 @@ impl SendReport {
     }
 }
 
+/// Canonical category for a transport failure.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ErrorKind {
+    /// Message or option validation failed before provider acceptance.
     Validation,
+    /// Provider credentials are missing or invalid.
     Authentication,
+    /// Credentials are valid but not permitted to perform the send.
     Authorization,
+    /// The provider rejected the attempt because a rate limit was reached.
     RateLimited,
     /// In-flight provider/network call timed out. Retryable, a fresh
     /// attempt may complete within the budget.
     Timeout,
+    /// A transient network or connection failure occurred.
     TransientNetwork,
+    /// The provider reported a retryable service failure.
     TransientProvider,
+    /// The provider reported a non-retryable service failure.
     PermanentProvider,
+    /// The requested message or option feature is unsupported.
     UnsupportedFeature,
+    /// An unexpected adapter or SDK failure occurred.
     Internal,
 }
 
@@ -419,8 +482,11 @@ impl std::fmt::Display for ErrorKind {
 #[derive(Debug, thiserror::Error)]
 #[error("{kind}: {message}")]
 #[non_exhaustive]
+/// Transport failure with canonical classification and provider metadata.
 pub struct TransportError {
+    /// Canonical failure category used for retry decisions.
     pub kind: ErrorKind,
+    /// Human-readable failure description.
     pub message: String,
     /// HTTP status code from the provider response, when applicable. Use
     /// [`TransportError::with_http_status`] to set. Adapters whose
@@ -428,8 +494,11 @@ pub struct TransportError {
     /// `None` and surface protocol-specific reply codes through
     /// [`TransportError::provider_error_code`] instead.
     pub http_status: Option<u16>,
+    /// Provider-specific machine-readable error code, when available.
     pub provider_error_code: Option<String>,
+    /// Provider or HTTP request identifier useful for support diagnostics.
     pub request_id: Option<String>,
+    /// Provider-advised delay before retrying the operation.
     pub retry_after: Option<Duration>,
     /// Underlying source error chain. Read through the
     /// [`std::error::Error::source`] impl; the field is private so the
@@ -439,6 +508,7 @@ pub struct TransportError {
 }
 
 impl TransportError {
+    /// Create an error with no provider metadata or source.
     #[must_use]
     pub fn new(kind: ErrorKind, message: impl Into<String>) -> Self {
         Self {
@@ -452,31 +522,35 @@ impl TransportError {
         }
     }
 
-    /// Records the HTTP status code from the provider response.
+    /// Record the HTTP status code from the provider response.
     #[must_use]
     pub const fn with_http_status(mut self, status: u16) -> Self {
         self.http_status = Some(status);
         self
     }
 
+    /// Record a provider-specific machine-readable error code.
     #[must_use]
     pub fn with_provider_error_code(mut self, code: impl Into<String>) -> Self {
         self.provider_error_code = Some(code.into());
         self
     }
 
+    /// Record the provider-advised retry delay.
     #[must_use]
     pub const fn with_retry_after(mut self, retry_after: Duration) -> Self {
         self.retry_after = Some(retry_after);
         self
     }
 
+    /// Attach the underlying SDK, protocol, or validation error.
     #[must_use]
     pub fn with_source(mut self, source: impl std::error::Error + Send + Sync + 'static) -> Self {
         self.source = Some(Box::new(source));
         self
     }
 
+    /// Return whether retrying the send may succeed without changing input.
     #[must_use]
     pub const fn is_retryable(&self) -> bool {
         matches!(
@@ -488,11 +562,13 @@ impl TransportError {
         )
     }
 
+    /// Return whether the failure should terminate retries.
     #[must_use]
     pub const fn is_terminal(&self) -> bool {
         !self.is_retryable()
     }
 
+    /// Return whether the operation exceeded its time budget.
     #[must_use]
     pub const fn is_timeout(&self) -> bool {
         matches!(self.kind, ErrorKind::Timeout)
@@ -592,14 +668,17 @@ mod sealed {
 /// name `ErasedTransport` directly. The exact erasure mechanism (boxed
 /// futures today, possibly RTN later) is an implementation detail.
 pub trait ErasedTransport: RuntimeBound + sealed::ErasedTransport {
+    /// Return the wrapped transport's advertised capabilities.
     fn capabilities(&self) -> Capabilities;
 
+    /// Send a borrowed structured message through the wrapped transport.
     fn send<'a>(
         &'a self,
         message: &'a OutboundMessage,
         options: &'a SendOptions,
     ) -> BoxFut<'a, Result<SendReport, TransportError>>;
 
+    /// Send an owned structured message through the wrapped transport.
     fn send_owned<'a>(
         &'a self,
         message: OutboundMessage,
@@ -639,8 +718,10 @@ where
 /// Sealed: only types that implement [`RawTransport`] satisfy this trait.
 /// Hold trait objects through [`DynRawTransport`] / [`SharedRawTransport`].
 pub trait ErasedRawTransport: RuntimeBound + sealed::ErasedRawTransport {
+    /// Return the wrapped raw transport's advertised capabilities.
     fn capabilities(&self) -> Capabilities;
 
+    /// Send borrowed envelope and RFC 822 data through the wrapped transport.
     fn send_raw<'a>(
         &'a self,
         envelope: &'a Envelope,
@@ -648,6 +729,7 @@ pub trait ErasedRawTransport: RuntimeBound + sealed::ErasedRawTransport {
         options: &'a SendOptions,
     ) -> BoxFut<'a, Result<SendReport, TransportError>>;
 
+    /// Send owned envelope and RFC 822 data through the wrapped transport.
     fn send_raw_owned<'a>(
         &'a self,
         envelope: Envelope,
@@ -740,16 +822,16 @@ pub fn structured_accepted_for(
 ///
 /// # Errors
 ///
-/// Returns [`TransportError`] if the message date cannot be formatted as an
-/// RFC 2822 header value.
+/// Returns [`TransportError`] if a standard value cannot be formatted or
+/// represented as a valid [`Header`]. The underlying formatting or header
+/// validation error is retained as its source.
 pub fn standard_message_headers(message: &Message) -> Result<Vec<Header>, TransportError> {
     let mut headers = Vec::new();
 
     if let Some(sender) = message.sender() {
-        headers.push(
-            Header::new("Sender", sender.to_string())
-                .map_err(|error| TransportError::new(ErrorKind::Validation, error.to_string()))?,
-        );
+        headers.push(Header::new("Sender", sender.to_string()).map_err(|error| {
+            TransportError::new(ErrorKind::Validation, error.to_string()).with_source(error)
+        })?);
     }
 
     if let Some(date) = message.date() {
@@ -757,17 +839,20 @@ pub fn standard_message_headers(message: &Message) -> Result<Vec<Header>, Transp
             Header::new(
                 "Date",
                 date.format(&Rfc2822).map_err(|error| {
-                    TransportError::new(ErrorKind::Validation, error.to_string())
+                    TransportError::new(ErrorKind::Validation, error.to_string()).with_source(error)
                 })?,
             )
-            .map_err(|error| TransportError::new(ErrorKind::Validation, error.to_string()))?,
+            .map_err(|error| {
+                TransportError::new(ErrorKind::Validation, error.to_string()).with_source(error)
+            })?,
         );
     }
 
     if let Some(message_id) = message.message_id() {
         headers.push(
-            Header::new("Message-ID", message_id.to_string())
-                .map_err(|error| TransportError::new(ErrorKind::Validation, error.to_string()))?,
+            Header::new("Message-ID", message_id.to_string()).map_err(|error| {
+                TransportError::new(ErrorKind::Validation, error.to_string()).with_source(error)
+            })?,
         );
     }
 
@@ -777,12 +862,13 @@ pub fn standard_message_headers(message: &Message) -> Result<Vec<Header>, Transp
 #[cfg(test)]
 mod tests {
     use email_message::{Address, Body, EmailAddress, Envelope, Message};
+    use time::OffsetDateTime;
 
     #[cfg(any(feature = "serde", feature = "schemars"))]
     use super::SendReport;
     use super::{
         Capabilities, ErrorKind, SendOptions, StructuredSendCapability, TransportError,
-        structured_accepted_for,
+        standard_message_headers, structured_accepted_for,
     };
 
     fn message_with_recipient(recipient: &str) -> Message {
@@ -846,6 +932,26 @@ mod tests {
         let accepted = structured_accepted_for(&message, &options, capabilities);
 
         assert_eq!(accepted_strings(&accepted), vec!["envelope@example.com"]);
+    }
+
+    #[test]
+    fn standard_headers_preserve_date_format_error_source() {
+        let date = OffsetDateTime::from_unix_timestamp(-11_676_096_000)
+            .expect("1600-01-01 is representable");
+        let message = Message::builder(Body::text("hello"))
+            .from_mailbox("sender@example.com".parse().expect("sender parses"))
+            .to(vec![Address::Mailbox(
+                "recipient@example.com".parse().expect("recipient parses"),
+            )])
+            .date(date)
+            .build()
+            .expect("message validates");
+
+        let error =
+            standard_message_headers(&message).expect_err("RFC 2822 rejects years before 1900");
+
+        assert_eq!(error.kind, ErrorKind::Validation);
+        assert!(std::error::Error::source(&error).is_some());
     }
 
     #[cfg(feature = "serde")]

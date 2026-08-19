@@ -1,18 +1,20 @@
 # email-transport-test
 
-First-party test transports and shared conformance helpers for the
-[`email-transport`](../email-transport) contract.
+**First-party test transports and conformance helpers for [`email-transport`](../email-transport).**
 
-- `MemoryTransport` captures every send in memory for assertion in tests.
-- `FileTransport` writes every send to disk as RFC822 `.eml` files.
-- `conformance` (feature) exposes the shared message factory used by the
-  provider crates to verify they all agree on the cross-provider semantics.
+`MemoryTransport` captures sends in memory for assertions. `FileTransport` writes sends as RFC822 `.eml` files. The optional `conformance` module provides shared message fixtures for verifying cross-provider semantics.
 
-## Memory transport
+This crate is an unpublished workspace utility.
 
-Use `MemoryTransport` when test code needs to assert the structured message,
-raw bytes, envelope override, timeout, idempotency key, or correlation ID that
-would have been sent.
+## Feature Flags
+
+No features are enabled by default.
+
+- `conformance`: exposes shared provider conformance fixtures and enables their time support.
+
+## Memory Transport
+
+Use `MemoryTransport` to assert the structured message, raw bytes, envelope override, timeout, idempotency key, or correlation ID that would have been sent.
 
 ```rust
 use email_message::{Address, Body, Message};
@@ -27,9 +29,7 @@ async fn example() -> Result<(), Box<dyn std::error::Error>> {
         .subject("Hi")
         .build_outbound()?;
 
-    let report = transport.send(&message, &SendOptions::default()).await?;
-    assert_eq!(report.provider_message_id.as_deref(), Some("msg-1"));
-
+    transport.send(&message, &SendOptions::default()).await?;
     let captured = transport.captured();
     let CapturedPayload::Structured { message, .. } = &captured[0].payload else {
         panic!("expected structured capture");
@@ -40,11 +40,9 @@ async fn example() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-## File transport
+## File Transport
 
-Use `FileTransport` when a test needs an RFC822 `.eml` artifact. Existing files
-are never overwritten; if `message-0001.eml` already exists, the transport skips
-to the next available monotonically numbered path.
+Use `FileTransport` when a test needs an RFC822 `.eml` artifact. Existing files are never overwritten; if `message-0001.eml` exists, the transport advances to the next monotonically numbered path.
 
 ```rust
 use email_message::{Address, Body, Message};
@@ -61,9 +59,23 @@ async fn example(dir: std::path::PathBuf) -> Result<(), Box<dyn std::error::Erro
 
     let report = transport.send(&message, &SendOptions::default()).await?;
     let path = report.provider_message_id.expect("file path report id");
-    let bytes = std::fs::read(path)?;
-    assert!(bytes.starts_with(b"From: "));
+    assert!(std::fs::read(path)?.starts_with(b"From: "));
 
     Ok(())
 }
 ```
+
+## License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](../../LICENSE-APACHE) or <https://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](../../LICENSE-MIT) or <https://opensource.org/licenses/MIT>)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.

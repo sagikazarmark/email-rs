@@ -1,3 +1,9 @@
+//! Provider-independent message bodies, attachments, headers, and validation.
+//!
+//! [`MessageBuilder`] constructs both inbound-shaped [`Message`] values and
+//! validated [`OutboundMessage`] values. Wire-specific MIME encoding remains in
+//! `email-message-wire`.
+
 use crate::mime_types::ContentType;
 #[cfg(feature = "mime")]
 use crate::mime_types::MimePart;
@@ -23,16 +29,19 @@ pub struct Envelope {
 }
 
 impl Envelope {
+    /// Creates an envelope from an optional sender and recipient addresses.
     #[must_use]
     pub const fn new(mail_from: Option<EmailAddress>, rcpt_to: Vec<EmailAddress>) -> Self {
         Self { mail_from, rcpt_to }
     }
 
+    /// Returns the SMTP `MAIL FROM` address, if present.
     #[must_use]
     pub const fn mail_from(&self) -> Option<&EmailAddress> {
         self.mail_from.as_ref()
     }
 
+    /// Returns the SMTP `RCPT TO` addresses.
     #[must_use]
     pub fn rcpt_to(&self) -> &[EmailAddress] {
         self.rcpt_to.as_slice()
@@ -48,25 +57,41 @@ pub struct Header {
     value: String,
 }
 
+/// Errors returned when constructing a [`Header`].
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum HeaderValidationError {
+    /// The header name is empty.
     #[error("header name cannot be empty")]
     EmptyName,
+    /// The header name contains a byte outside the RFC 5322 `ftext` range.
     #[error("header name `{name}` is invalid")]
-    InvalidName { name: String },
+    InvalidName {
+        /// Invalid header name.
+        name: String,
+    },
+    /// The header value contains a raw carriage return or line feed.
     #[error("header `{name}` contains raw newline characters")]
-    ValueContainsRawNewline { name: String },
+    ValueContainsRawNewline {
+        /// Name of the invalid header.
+        name: String,
+    },
+    /// The header value contains a forbidden control character.
     #[error("header `{name}` contains invalid control characters")]
-    ValueContainsControlCharacter { name: String },
+    ValueContainsControlCharacter {
+        /// Name of the invalid header.
+        name: String,
+    },
 }
 
 impl Header {
+    /// Returns the header field name.
     #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// Returns the header field value.
     #[must_use]
     pub fn value(&self) -> &str {
         &self.value
@@ -175,6 +200,10 @@ impl<'a> arbitrary::Arbitrary<'a> for Header {
     }
 }
 
+/// An unresolved external attachment body location.
+///
+/// Wire renderers reject references; resolve the URI to bytes and replace the
+/// body before rendering.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
@@ -185,22 +214,27 @@ pub struct AttachmentReference {
 }
 
 impl AttachmentReference {
+    /// Creates a reference from an application-defined URI.
     #[must_use]
     pub fn new(uri: impl Into<String>) -> Self {
         Self { uri: uri.into() }
     }
 
+    /// Returns the application-defined URI.
     #[must_use]
     pub fn uri(&self) -> &str {
         &self.uri
     }
 }
 
+/// Inline bytes or an unresolved external attachment reference.
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum AttachmentBody {
+    /// Attachment bytes available for immediate rendering.
     Bytes(Vec<u8>),
+    /// External content that must be resolved before wire rendering.
     Reference(AttachmentReference),
 }
 
@@ -314,12 +348,14 @@ pub enum Disposition {
 }
 
 impl Disposition {
+    /// Returns `true` when the disposition is [`Self::Inline`].
     #[must_use]
     pub const fn is_inline(&self) -> bool {
         matches!(self, Self::Inline)
     }
 }
 
+/// A MIME attachment and its presentation metadata.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
@@ -378,6 +414,7 @@ where
 }
 
 impl Attachment {
+    /// Creates an attachment without filename or content id.
     #[must_use]
     pub const fn new(content_type: ContentType, body: AttachmentBody) -> Self {
         Self {
@@ -389,46 +426,55 @@ impl Attachment {
         }
     }
 
+    /// Creates an attachment backed by in-memory bytes.
     #[must_use]
     pub fn bytes(content_type: ContentType, bytes: impl Into<Vec<u8>>) -> Self {
         Self::new(content_type, AttachmentBody::Bytes(bytes.into()))
     }
 
+    /// Creates an attachment backed by an unresolved external reference.
     #[must_use]
     pub const fn reference(content_type: ContentType, reference: AttachmentReference) -> Self {
         Self::new(content_type, AttachmentBody::Reference(reference))
     }
 
+    /// Returns the suggested filename, if set.
     #[must_use]
     pub fn filename(&self) -> Option<&str> {
         self.filename.as_deref()
     }
 
+    /// Returns the attachment's MIME content type.
     #[must_use]
     pub const fn content_type(&self) -> &ContentType {
         &self.content_type
     }
 
+    /// Returns the content id used to reference an inline attachment.
     #[must_use]
     pub fn content_id(&self) -> Option<&str> {
         self.content_id.as_deref()
     }
 
+    /// Returns the requested attachment disposition.
     #[must_use]
     pub const fn disposition(&self) -> Disposition {
         self.disposition
     }
 
+    /// Returns `true` when the attachment disposition is inline.
     #[must_use]
     pub const fn is_inline(&self) -> bool {
         self.disposition.is_inline()
     }
 
+    /// Returns the attachment body.
     #[must_use]
     pub const fn body(&self) -> &AttachmentBody {
         &self.body
     }
 
+    /// Replaces the attachment body in place.
     pub fn set_body(&mut self, body: AttachmentBody) {
         self.body = body;
     }
@@ -440,18 +486,21 @@ impl Attachment {
         self
     }
 
+    /// Sets the suggested attachment filename.
     #[must_use]
     pub fn with_filename(mut self, filename: impl Into<String>) -> Self {
         self.filename = Some(filename.into());
         self
     }
 
+    /// Sets the content id used by referring message content.
     #[must_use]
     pub fn with_content_id(mut self, content_id: impl Into<String>) -> Self {
         self.content_id = Some(content_id.into());
         self
     }
 
+    /// Sets how recipient clients should present the attachment.
     #[must_use]
     pub const fn with_disposition(mut self, disposition: Disposition) -> Self {
         self.disposition = disposition;
@@ -481,12 +530,18 @@ impl Attachment {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Body {
+    /// A plain-text body.
     Text(String),
+    /// An HTML body.
     Html(String),
+    /// Alternative plain-text and HTML representations.
     TextAndHtml {
+        /// Plain-text representation.
         text: String,
+        /// HTML representation.
         html: String,
     },
+    /// A caller-defined MIME tree.
     #[cfg(feature = "mime")]
     Mime(MimePart),
 }
@@ -624,16 +679,19 @@ impl schemars::JsonSchema for Body {
 }
 
 impl Body {
+    /// Creates a plain-text body.
     #[must_use]
     pub fn text(value: impl Into<String>) -> Self {
         Self::Text(value.into())
     }
 
+    /// Creates an HTML body.
     #[must_use]
     pub fn html(value: impl Into<String>) -> Self {
         Self::Html(value.into())
     }
 
+    /// Creates alternative plain-text and HTML body representations.
     #[must_use]
     pub fn text_and_html(text: impl Into<String>, html: impl Into<String>) -> Self {
         Self::TextAndHtml {
@@ -738,7 +796,6 @@ pub struct Message {
 }
 
 /// A [`Message`] that has passed outbound delivery validation.
-/// A [`Message`] that has passed outbound delivery validation.
 ///
 /// The serde representation matches [`Message`] verbatim; deserializing
 /// runs [`OutboundMessage::new`] so an invalid payload is rejected
@@ -816,11 +873,13 @@ impl OutboundMessage {
         })
     }
 
+    /// Returns the validated message.
     #[must_use]
     pub const fn as_message(&self) -> &Message {
         &self.inner
     }
 
+    /// Consumes the wrapper and returns the validated message.
     #[must_use]
     pub fn into_message(self) -> Message {
         self.inner
@@ -885,8 +944,9 @@ impl<'a> arbitrary::Arbitrary<'a> for Message {
 /// ```rust
 /// use email_message::{Address, Body, Header, Mailbox, Message, MessageValidationError};
 ///
-/// let from: Mailbox = "alice@example.com".parse().unwrap();
-/// let to = Address::Mailbox("bob@example.com".parse().unwrap());
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let from: Mailbox = "alice@example.com".parse()?;
+/// let to = Address::Mailbox("bob@example.com".parse()?);
 ///
 /// // A subject carrying a CRLF injection is rejected at build time:
 /// let error = Message::builder(Body::text("hello"))
@@ -901,40 +961,58 @@ impl<'a> arbitrary::Arbitrary<'a> for Message {
 /// let error = Message::builder(Body::text("hello"))
 ///     .from_mailbox(from)
 ///     .add_to(to)
-///     .add_header(Header::new("Subject", "shadow").unwrap())
+///     .add_header(Header::new("Subject", "shadow")?)
 ///     .build()
 ///     .unwrap_err();
 /// assert!(matches!(
 ///     error,
 ///     MessageValidationError::ReservedHeaderName { ref name, .. } if name == "Subject"
 /// ));
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum MessageValidationError {
+    /// The message does not have a `From` mailbox.
     #[error("missing From header")]
     MissingFrom,
+    /// A `Sender` mailbox is set without a `From` mailbox.
     #[error("sender header cannot appear without from")]
     SenderWithoutFrom,
+    /// None of `To`, `Cc`, or `Bcc` contains a recipient.
     #[error("no recipients in To/Cc/Bcc")]
     MissingRecipients,
+    /// A custom header duplicates a structured message field.
     #[error(
         "custom header `{name}` collides with a structured field; use the typed setter (Subject, Date, Message-ID, From, ...) instead"
     )]
     #[non_exhaustive]
-    ReservedHeaderName { name: String },
+    ReservedHeaderName {
+        /// Conflicting custom header name.
+        name: String,
+    },
+    /// The subject contains a raw newline or forbidden control character.
     #[error("subject contains raw CR, LF, or non-tab control characters")]
     SubjectContainsInvalidChars,
+    /// A mailbox or group display name contains header-unsafe characters.
     #[error(
         "mailbox display name in `{location}` contains raw CR, LF, NUL, or non-tab control characters"
     )]
     #[non_exhaustive]
-    MailboxDisplayNameContainsInvalidChars { location: &'static str },
+    MailboxDisplayNameContainsInvalidChars {
+        /// Message field containing the invalid display name.
+        location: &'static str,
+    },
+    /// Attachment metadata contains header-unsafe characters.
     #[error(
         "attachment metadata field `{field}` contains raw CR, LF, NUL, or non-tab control characters"
     )]
     #[non_exhaustive]
-    AttachmentMetadataContainsInvalidChars { field: &'static str },
+    AttachmentMetadataContainsInvalidChars {
+        /// Invalid attachment metadata field.
+        field: &'static str,
+    },
 }
 
 fn contains_header_unsafe_chars(value: &str) -> bool {
@@ -1061,61 +1139,73 @@ impl Message {
     }
 
     #[must_use]
+    /// Returns the optional `Sender` mailbox.
     pub const fn sender(&self) -> Option<&Mailbox> {
         self.sender.as_ref()
     }
 
     #[must_use]
+    /// Returns the `To` recipients.
     pub fn to(&self) -> &[Address] {
         self.to.as_slice()
     }
 
     #[must_use]
+    /// Returns the `Cc` recipients.
     pub fn cc(&self) -> &[Address] {
         self.cc.as_slice()
     }
 
     #[must_use]
+    /// Returns the `Bcc` recipients.
     pub fn bcc(&self) -> &[Address] {
         self.bcc.as_slice()
     }
 
     #[must_use]
+    /// Returns the `Reply-To` addresses.
     pub fn reply_to(&self) -> &[Address] {
         self.reply_to.as_slice()
     }
 
     #[must_use]
+    /// Returns the subject, if set.
     pub fn subject(&self) -> Option<&str> {
         self.subject.as_deref()
     }
 
     #[must_use]
+    /// Returns the message date, if set.
     pub const fn date(&self) -> Option<&OffsetDateTime> {
         self.date.as_ref()
     }
 
     #[must_use]
+    /// Returns the message id, if set.
     pub const fn message_id(&self) -> Option<&MessageId> {
         self.message_id.as_ref()
     }
 
     #[must_use]
+    /// Returns custom headers in insertion order.
     pub fn headers(&self) -> &[Header] {
         self.headers.as_slice()
     }
 
     #[must_use]
+    /// Returns the message body.
     pub const fn body(&self) -> &Body {
         &self.body
     }
 
     #[must_use]
+    /// Returns message attachments in insertion order.
     pub fn attachments(&self) -> &[Attachment] {
         self.attachments.as_slice()
     }
 
     #[must_use]
+    /// Replaces all message attachments.
     pub fn with_attachments<I>(mut self, attachments: I) -> Self
     where
         I: IntoIterator<Item = Attachment>,
@@ -1255,6 +1345,7 @@ pub struct MessageBuilder {
 }
 
 impl MessageBuilder {
+    /// Creates a builder with the required message body.
     #[must_use]
     pub const fn new(body: Body) -> Self {
         Self {
@@ -1285,6 +1376,7 @@ impl MessageBuilder {
         self
     }
 
+    /// Sets the optional `Sender` mailbox.
     #[must_use]
     pub fn sender(mut self, sender: Mailbox) -> Self {
         self.message.sender = Some(sender);
@@ -1360,24 +1452,28 @@ impl MessageBuilder {
         self
     }
 
+    /// Sets the optional subject.
     #[must_use]
     pub fn subject(mut self, subject: impl Into<String>) -> Self {
         self.message.subject = Some(subject.into());
         self
     }
 
+    /// Sets the optional message date.
     #[must_use]
     pub const fn date(mut self, date: OffsetDateTime) -> Self {
         self.message.date = Some(date);
         self
     }
 
+    /// Sets the optional message id.
     #[must_use]
     pub fn message_id(mut self, message_id: MessageId) -> Self {
         self.message.message_id = Some(message_id);
         self
     }
 
+    /// Replaces all custom headers.
     #[must_use]
     pub fn headers<I>(mut self, headers: I) -> Self
     where
@@ -1394,6 +1490,7 @@ impl MessageBuilder {
         self
     }
 
+    /// Replaces all attachments.
     #[must_use]
     pub fn attachments<I>(mut self, attachments: I) -> Self
     where
