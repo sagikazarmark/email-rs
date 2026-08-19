@@ -24,7 +24,7 @@ restate-email = { path = "crates/restate-email", version = "0.7.0", default-feat
 erased-serde = "0.4"
 proptest = "1"
 reqwest = { version = "0.13", default-features = false }
-restate-sdk = "0.10"
+restate-sdk = "0.11"
 schemars = "1.2"
 serde = "1"
 serde_json = "1"

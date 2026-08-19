@@ -11,27 +11,117 @@ use email_transport::{
     TransportOptionRegistry,
 };
 use restate_sdk::errors::{HandlerError, TerminalError};
-use restate_sdk::prelude::{Context, ContextSideEffects, Endpoint, HandlerResult, Json, RunFuture};
+use restate_sdk::prelude::{Context, ContextSideEffects, HandlerResult, Json, RunFuture};
 use serde::{Deserialize, Serialize};
 
 use crate::{TransportKey, TransportResolver};
 
-/// Restate service contract for queued email delivery.
+/// Concrete Restate service implementation over a transport resolver.
+///
+/// Most applications construct this once at worker startup, register one or
+/// more transports in a [`StaticTransportRegistry`](crate::StaticTransportRegistry),
+/// and bind it to a Restate endpoint through
+/// [`IntoServiceDefinition`](restate_sdk::service::IntoServiceDefinition).
+pub struct ServiceImpl<T> {
+    transports: Arc<T>,
+    transport_options: Arc<TransportOptionRegistry>,
+}
+
+impl<T> Clone for ServiceImpl<T> {
+    fn clone(&self) -> Self {
+        Self {
+            transports: Arc::clone(&self.transports),
+            transport_options: Arc::clone(&self.transport_options),
+        }
+    }
+}
+
+impl<T> ServiceImpl<T>
+where
+    T: TransportResolver + Send + Sync + 'static,
+{
+    /// Build a service around an owned transport resolver.
+    #[must_use]
+    pub fn new(transports: T) -> Self {
+        Self::from_shared(Arc::new(transports))
+    }
+
+    /// Build a service around a shared transport resolver.
+    #[must_use]
+    pub fn from_shared(transports: Arc<T>) -> Self {
+        Self {
+            transports,
+            transport_options: Arc::new(transport_option_registry()),
+        }
+    }
+
+    /// Override the provider-option registry used to hydrate queued
+    /// `transport_options`.
+    ///
+    /// The default registry is `email_kit::transport::transport_option_registry()`;
+    /// use this method when a worker has additional provider-specific option
+    /// types outside `email-kit`.
+    #[must_use]
+    pub fn with_transport_options(mut self, transport_options: TransportOptionRegistry) -> Self {
+        self.transport_options = Arc::new(transport_options);
+        self
+    }
+
+    /// Send one email request through the configured worker dependencies.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HandlerError`] when provider options cannot be hydrated, the
+    /// requested transport key is unknown, or sending fails. Unknown keys and
+    /// non-retryable transport failures become Restate terminal errors;
+    /// retryable transport failures remain retryable handler errors.
+    pub async fn send_request(&self, request: &SendRequest) -> Result<SendResponse, HandlerError> {
+        let options = request
+            .options
+            .to_send_options(self.transport_options.as_ref())
+            .map_err(raw_send_options_deserialize_error_to_handler_error)?;
+        let transport = self
+            .transports
+            .resolve(&request.transport)
+            .map_err(TerminalError::from)?;
+
+        transport
+            .send(&request.message, &options)
+            .await
+            .map(SendResponse::from)
+            .map_err(transport_error_to_handler_error)
+    }
+}
+
+/// Restate service for queued email delivery.
 ///
 /// The service is exposed as `Email.send` through Restate ingress. Callers that
 /// are not running behind Restate should use [`ServiceImpl::send_request`] to
 /// exercise the same dispatch path without the service protocol.
-#[restate_sdk::service]
-#[name = "Email"]
-pub trait Service {
+#[restate_sdk::service(name = "Email")]
+impl<T> ServiceImpl<T>
+where
+    T: TransportResolver + Send + Sync + 'static,
+{
     /// Dispatch one queued email request through its selected transport.
     ///
     /// # Errors
     ///
     /// Returns [`HandlerError`] when provider options cannot be hydrated, the
     /// transport key cannot be resolved, or the selected transport fails.
-    #[name = "send"]
-    async fn send(request: Json<SendRequest>) -> HandlerResult<Json<SendResponse>>;
+    #[handler]
+    async fn send(
+        &self,
+        ctx: Context<'_>,
+        request: Json<SendRequest>,
+    ) -> HandlerResult<Json<SendResponse>> {
+        let request = request.into_inner();
+
+        Ok(ctx
+            .run(|| async move { self.send_request(&request).await.map(Json) })
+            .name("send_email")
+            .await?)
+    }
 }
 
 /// Queue payload consumed by `Email.send`.
@@ -51,61 +141,6 @@ pub struct SendRequest {
     #[serde(default)]
     #[cfg_attr(feature = "schemars", schemars(default))]
     pub options: RawSendOptions,
-}
-
-#[cfg(feature = "schemars")]
-fn example_send_request() -> serde_json::Value {
-    serde_json::json!({
-        "transport": "your-transport",
-        "options": {
-            "idempotency_key": "foo",
-            "transport_options": {
-                "your-transport": {
-                    "tags": [
-                        {
-                            "name": "campaign",
-                            "value": "test"
-                        }
-                    ]
-                }
-            },
-        },
-        "message": {
-            "from": {
-                "type": "mailbox",
-                "name": "Alice",
-                "email": "alice@example.com"
-            },
-            "to": [
-                {
-                    "type": "mailbox",
-                    "name": "Bob",
-                    "email": "bob@example.com"
-                },
-                {
-                    "type": "mailbox",
-                    "name": "Carol",
-                    "email": "carol@example.com"
-                },
-                {
-                    "type": "group",
-                    "name": "Managers",
-                    "members": [
-                        {
-                            "type": "mailbox",
-                            "name": "Dave",
-                            "email": "dave@example.com"
-                        },
-                    ],
-                },
-            ],
-            "subject": "Test email",
-            "body": {
-                "type": "text",
-                "text": "Hello everyone! This is a test email.",
-            },
-        },
-    })
 }
 
 /// Wire-friendly send options whose provider-specific slots are still raw.
@@ -232,104 +267,59 @@ fn example_send_response() -> serde_json::Value {
     })
 }
 
-/// Concrete Restate service implementation over a transport resolver.
-///
-/// Most applications construct this once at worker startup, register one or
-/// more transports in a [`StaticTransportRegistry`](crate::StaticTransportRegistry),
-/// and expose [`Self::endpoint`] through `restate_sdk::prelude::HttpServer`.
-pub struct ServiceImpl<T> {
-    transports: Arc<T>,
-    transport_options: Arc<TransportOptionRegistry>,
-}
-
-impl<T> Clone for ServiceImpl<T> {
-    fn clone(&self) -> Self {
-        Self {
-            transports: Arc::clone(&self.transports),
-            transport_options: Arc::clone(&self.transport_options),
-        }
-    }
-}
-
-impl<T> ServiceImpl<T>
-where
-    T: TransportResolver + Send + Sync + 'static,
-{
-    /// Build a service around an owned transport resolver.
-    #[must_use]
-    pub fn new(transports: T) -> Self {
-        Self::from_shared(Arc::new(transports))
-    }
-
-    /// Build a service around a shared transport resolver.
-    #[must_use]
-    pub fn from_shared(transports: Arc<T>) -> Self {
-        Self {
-            transports,
-            transport_options: Arc::new(transport_option_registry()),
-        }
-    }
-
-    /// Override the provider-option registry used to hydrate queued
-    /// `transport_options`.
-    ///
-    /// The default registry is `email_kit::transport::transport_option_registry()`;
-    /// use this method when a worker has additional provider-specific option
-    /// types outside `email-kit`.
-    #[must_use]
-    pub fn with_transport_options(mut self, transport_options: TransportOptionRegistry) -> Self {
-        self.transport_options = Arc::new(transport_options);
-        self
-    }
-
-    /// Build a Restate endpoint that serves this service.
-    #[must_use]
-    pub fn endpoint(&self) -> Endpoint {
-        Endpoint::builder().bind(self.clone().serve()).build()
-    }
-
-    /// Send one email request through the configured worker dependencies.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`HandlerError`] when provider options cannot be hydrated, the
-    /// requested transport key is unknown, or sending fails. Unknown keys and
-    /// non-retryable transport failures become Restate terminal errors;
-    /// retryable transport failures remain retryable handler errors.
-    pub async fn send_request(&self, request: &SendRequest) -> Result<SendResponse, HandlerError> {
-        let options = request
-            .options
-            .to_send_options(self.transport_options.as_ref())
-            .map_err(raw_send_options_deserialize_error_to_handler_error)?;
-        let transport = self
-            .transports
-            .resolve(&request.transport)
-            .map_err(TerminalError::from)?;
-
-        transport
-            .send(&request.message, &options)
-            .await
-            .map(SendResponse::from)
-            .map_err(transport_error_to_handler_error)
-    }
-}
-
-impl<T> Service for ServiceImpl<T>
-where
-    T: TransportResolver + Send + Sync + 'static,
-{
-    async fn send(
-        &self,
-        ctx: Context<'_>,
-        request: Json<SendRequest>,
-    ) -> HandlerResult<Json<SendResponse>> {
-        let request = request.into_inner();
-
-        Ok(ctx
-            .run(|| async move { self.send_request(&request).await.map(Json) })
-            .name("send_email")
-            .await?)
-    }
+#[cfg(feature = "schemars")]
+fn example_send_request() -> serde_json::Value {
+    serde_json::json!({
+        "transport": "your-transport",
+        "options": {
+            "idempotency_key": "foo",
+            "transport_options": {
+                "your-transport": {
+                    "tags": [
+                        {
+                            "name": "campaign",
+                            "value": "test"
+                        }
+                    ]
+                }
+            },
+        },
+        "message": {
+            "from": {
+                "type": "mailbox",
+                "name": "Alice",
+                "email": "alice@example.com"
+            },
+            "to": [
+                {
+                    "type": "mailbox",
+                    "name": "Bob",
+                    "email": "bob@example.com"
+                },
+                {
+                    "type": "mailbox",
+                    "name": "Carol",
+                    "email": "carol@example.com"
+                },
+                {
+                    "type": "group",
+                    "name": "Managers",
+                    "members": [
+                        {
+                            "type": "mailbox",
+                            "name": "Dave",
+                            "email": "dave@example.com"
+                        },
+                    ],
+                },
+            ],
+            "subject": "Test email",
+            "body": {
+                "type": "text",
+                "text": "Hello everyone! This is a test email.",
+            },
+        },
+    })
 }
 
 fn raw_send_options_deserialize_error_to_handler_error(
@@ -365,7 +355,9 @@ mod tests {
     use http::Request;
     use http_body_util::{BodyExt, Full};
     use prost::Message as ProstMessage;
-    use restate_sdk::endpoint::{HandleOptions, ProtocolMode};
+    use restate_sdk::discovery::ServiceType as RestateServiceType;
+    use restate_sdk::endpoint::{Endpoint, HandleOptions, ProtocolMode};
+    use restate_sdk::service::{Discoverable, IntoServiceDefinition};
     use restate_sdk_shared_core::Version;
 
     use crate::{StaticTransportRegistry, TransportKey, TransportLookupError};
@@ -515,12 +507,15 @@ mod tests {
             )))
             .expect("request should build");
 
-        service.endpoint().handle_with_options(
-            request,
-            HandleOptions {
-                protocol_mode: ProtocolMode::RequestResponse,
-            },
-        )
+        Endpoint::builder()
+            .bind(service.clone().into_service_definition())
+            .build()
+            .handle_with_options(
+                request,
+                HandleOptions {
+                    protocol_mode: ProtocolMode::RequestResponse,
+                },
+            )
     }
 
     fn invoke_protocol_sdk_endpoint<T>(
@@ -561,12 +556,15 @@ mod tests {
             .body(Full::from(body.freeze()))
             .expect("request should build");
 
-        service.endpoint().handle_with_options(
-            request,
-            HandleOptions {
-                protocol_mode: ProtocolMode::RequestResponse,
-            },
-        )
+        Endpoint::builder()
+            .bind(service.clone().into_service_definition())
+            .build()
+            .handle_with_options(
+                request,
+                HandleOptions {
+                    protocol_mode: ProtocolMode::RequestResponse,
+                },
+            )
     }
 
     async fn collect_response_body(
@@ -697,14 +695,22 @@ mod tests {
     }
 
     #[test]
-    fn endpoint_builder_binds_service() {
+    fn service_discovers_and_binds() {
         let service = ServiceImpl::new(StubRegistry {
             error: Some(TransportLookupError::UnknownKey {
                 key: "transactional".to_owned(),
             }),
         });
 
-        let _endpoint = service.endpoint();
+        let discovery = <ServiceImpl<StubRegistry> as Discoverable>::discover();
+        assert_eq!(discovery.name.as_str(), "Email");
+        assert_eq!(discovery.ty, RestateServiceType::Service);
+        assert_eq!(discovery.handlers.len(), 1);
+        assert_eq!(discovery.handlers[0].name.as_str(), "send");
+
+        let _endpoint = Endpoint::builder()
+            .bind(service.into_service_definition())
+            .build();
     }
 
     #[test]

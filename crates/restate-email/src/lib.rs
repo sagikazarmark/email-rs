@@ -45,7 +45,7 @@ pub use email_transport::{
     TransportOption, TransportOptionRegistry, TransportOptionRegistryError, TransportOptions,
     TransportOptionsSeed,
 };
-pub use service::{RawSendOptions, SendRequest, SendResponse, Service, ServiceImpl};
+pub use service::{RawSendOptions, SendRequest, SendResponse, ServiceImpl, ServiceImplClient};
 pub use transport::{
     CatchAllTransportResolver, RuntimeBound, StaticTransportRegistry, TransportKey,
     TransportLookupError, TransportResolver,

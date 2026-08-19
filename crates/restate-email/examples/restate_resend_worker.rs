@@ -7,7 +7,7 @@ use restate_email::{
     CorrelationId, IdempotencyKey, RawSendOptions, SendRequest, ServiceImpl,
     StaticTransportRegistry, TransportKey,
 };
-use restate_sdk::prelude::HttpServer;
+use restate_sdk::{endpoint::Endpoint, http_server::HttpServer, service::IntoServiceDefinition};
 
 fn sample_request(from: &str, to: &str) -> Result<SendRequest, Box<dyn std::error::Error>> {
     let message = Message::builder(Body::html(String::from(
@@ -50,7 +50,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut registry = StaticTransportRegistry::new();
     registry.insert("resend-default", ResendTransport::new(api_key));
 
-    let service = ServiceImpl::new(registry);
+    let service = ServiceImpl::new(registry).into_service_definition();
+    let endpoint = Endpoint::builder().bind(service);
     let address = "127.0.0.1:9081".parse()?;
     let request = sample_request(&from, &to)?;
 
@@ -62,7 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         serde_json::to_string_pretty(&request)?
     );
 
-    HttpServer::new(service.endpoint())
+    HttpServer::new(endpoint.build())
         .listen_and_serve(address)
         .await;
 

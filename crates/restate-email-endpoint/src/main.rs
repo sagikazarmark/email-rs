@@ -9,7 +9,7 @@ use email_kit::transport::resend::ResendTransport;
 use figment::Figment;
 use figment::providers::{Env, Format, Json, Toml, Yaml};
 use restate_email::{ServiceImpl, StaticTransportRegistry};
-use restate_sdk::prelude::HttpServer;
+use restate_sdk::{endpoint::Endpoint, http_server::HttpServer, service::IntoServiceDefinition};
 use tracing_subscriber::EnvFilter;
 
 use crate::config::{Config, TransportConfig};
@@ -23,12 +23,13 @@ async fn main() -> Result<()> {
 
     let config = cli.load_config()?;
     let registry = create_registry(config.transports)?;
-    let service = ServiceImpl::new(registry);
+    let service = ServiceImpl::new(registry).into_service_definition();
+    let endpoint = Endpoint::builder().bind(service);
     let bind_addr = format!("0.0.0.0:{}", cli.port);
 
     tracing::info!(%bind_addr, "starting Restate email endpoint");
 
-    HttpServer::new(service.endpoint())
+    HttpServer::new(endpoint.build())
         .listen_and_serve(bind_addr.parse()?)
         .await;
 
