@@ -5,7 +5,7 @@
 
 **A convenient facade for the email-rs crate family.**
 
-`email-kit` re-exports `email-message` as `email_kit::message` and `email-transport` as `email_kit::transport`. Optional features expose `email-message-wire` as `email_kit::wire` and the Resend adapter as `email_kit::transport::resend`.
+`email-kit` re-exports `email-message` as `email_kit::message` and `email-transport` as `email_kit::transport`. Optional features expose `email-message-wire` as `email_kit::wire`, the Lettre SMTP adapter as `email_kit::transport::lettre`, and the Resend adapter as `email_kit::transport::resend`.
 
 ## Quick Start
 
@@ -29,7 +29,8 @@ Use `email_kit::prelude::*` for common message types and transport traits. When 
 - `schemars`: enables JSON Schema support for message and transport types.
 - `arbitrary`: enables property-test generation support for message types.
 - `tracing`: enables transport tracing instrumentation.
-- `transport-all`: enables every transport currently provided by `email-kit`; currently this is Resend.
+- `transport-all`: enables every transport currently provided by `email-kit`.
+- `transport-lettre`: exposes SMTP support through `email_kit::transport::lettre`.
 - `transport-resend`: exposes Resend support through `email_kit::transport::resend`.
 - `wire`: exposes RFC822 and MIME parsing and rendering through `email_kit::wire`.
 

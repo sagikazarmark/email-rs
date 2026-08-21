@@ -31,7 +31,7 @@ The Restate service name is `Email`. Invoke its `send` handler with a `restate_e
 
 Default features enable the component defaults, queue-payload schemas, RFC 5322 string-address compatibility, and all available transports.
 
-- `transport-all`: enables every transport exposed by `email-kit`; currently this is Resend. The binary target requires this feature.
+- `transport-all`: enables every transport exposed by `email-kit`. The endpoint configuration currently supports Resend; SMTP endpoint configuration is not yet exposed. The binary target requires this feature.
 
 See the [generated feature graph](https://docs.rs/crate/restate-email-endpoint/latest/features) for activation details.
 

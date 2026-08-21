@@ -1,0 +1,36 @@
+[package]
+name = "email-transport-lettre"
+version = { workspace = true }
+description = "Lettre SMTP transport implementation for email-transport"
+edition = { workspace = true }
+rust-version = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+keywords = ["email", "lettre", "smtp"]
+categories = ["email", "network-programming"]
+
+[features]
+default = ["pool", "rustls-tls"]
+native-tls = ["lettre/tokio1-native-tls"]
+pool = ["lettre/pool"]
+rustls-tls = ["lettre/tokio1-rustls-tls"]
+
+[dependencies]
+email-message = { workspace = true }
+email-message-wire = { workspace = true }
+email-transport = { workspace = true }
+lettre = { version = "=0.11.23", default-features = false, features = ["smtp-transport", "tokio1"] }
+tokio = { workspace = true, features = ["rt", "sync", "time"] }
+
+[dev-dependencies]
+email-transport-test = { workspace = true, features = ["conformance"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time"] }
+
+[[example]]
+name = "lettre_send"
+required-features = ["rustls-tls"]
+
+# Build docs with every compatible public API feature enabled.
+[package.metadata.docs.rs]
+all-features = true

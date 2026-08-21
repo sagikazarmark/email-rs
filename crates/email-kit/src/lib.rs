@@ -5,8 +5,10 @@
 //!
 //! - `message` re-exports `email-message`.
 //! - `transport` re-exports `email-transport`.
-//! - Enable the `transport-resend` or `transport-all` feature for
-//!   `transport::resend`, which re-exports `email-transport-resend`.
+//! - Enable `transport-lettre` for `transport::lettre`, which re-exports
+//!   `email-transport-lettre`.
+//! - Enable `transport-resend` for `transport::resend`, which re-exports
+//!   `email-transport-resend`.
 //! - Enable the `wire` feature for `wire`, which re-exports
 //!   `email-message-wire`.
 //!
@@ -17,9 +19,9 @@
 //! transport.
 //!
 //! - `wire`: RFC 822/MIME parsing and rendering through `wire`.
+//! - `transport-lettre`: the Lettre SMTP adapter at `transport::lettre`.
 //! - `transport-resend`: the Resend adapter at `transport::resend`.
-//! - `transport-all`: all provider adapters; currently equivalent to
-//!   `transport-resend`.
+//! - `transport-all`: all transport adapters.
 //! - `serde`, `schemars`, and `arbitrary`: forward the corresponding data-model
 //!   integrations.
 //! - `tracing`: transport instrumentation through
@@ -86,6 +88,28 @@
 //! # #[cfg(not(any(feature = "transport-resend", feature = "transport-all")))]
 //! # fn resend_example() {}
 //! # resend_example();
+//! ```
+//!
+//! With the `transport-lettre` or `transport-all` feature enabled, the SMTP
+//! transport is available through `email_kit::transport::lettre`:
+//!
+//! ```rust,no_run
+//! # #[cfg(any(feature = "transport-lettre", feature = "transport-all"))]
+//! # fn lettre_example() -> Result<(), Box<dyn std::error::Error>> {
+//! use email_kit::transport::lettre::{LettreTransport, lettre};
+//!
+//! let client = lettre::AsyncSmtpTransport::<lettre::Tokio1Executor>::builder_dangerous(
+//!     "localhost",
+//! )
+//! .port(1025)
+//! .build();
+//! let transport = LettreTransport::from_client(client);
+//! # let _ = transport;
+//! # Ok(())
+//! # }
+//! # #[cfg(not(any(feature = "transport-lettre", feature = "transport-all")))]
+//! # fn lettre_example() -> Result<(), Box<dyn std::error::Error>> { Ok(()) }
+//! # lettre_example().expect("Lettre transport example should build");
 //! ```
 
 pub use email_message as message;

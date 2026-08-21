@@ -14,6 +14,7 @@ categories = { workspace = true }
 default = [
     "email-message/default",
     "email-transport/default",
+    "email-transport-lettre?/default",
     "email-transport-resend?/default",
 ]
 arbitrary = ["email-message/arbitrary"]
@@ -24,7 +25,8 @@ serde = [
     "email-transport-resend?/serde",
 ]
 tracing = ["email-transport/tracing"]
-transport-all = ["transport-resend"]
+transport-all = ["transport-lettre", "transport-resend"]
+transport-lettre = ["dep:email-transport-lettre"]
 transport-resend = ["dep:email-transport-resend"]
 wire = ["dep:email-message-wire"]
 
@@ -32,6 +34,7 @@ wire = ["dep:email-message-wire"]
 email-message = { workspace = true, default-features = false }
 email-message-wire = { workspace = true, default-features = false, optional = true }
 email-transport = { workspace = true, default-features = false }
+email-transport-lettre = { workspace = true, default-features = false, optional = true }
 email-transport-resend = { workspace = true, default-features = false, optional = true }
 
 [dev-dependencies]

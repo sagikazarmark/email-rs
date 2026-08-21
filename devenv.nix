@@ -15,6 +15,8 @@
     cargo-fuzz
     cargo-release
     cargo-watch
+    openssl
+    pkg-config
   ];
 
   languages = {

@@ -2,6 +2,9 @@
 
 pub use email_transport::*;
 
+#[cfg(feature = "transport-lettre")]
+pub use email_transport_lettre as lettre;
+
 #[cfg(feature = "transport-resend")]
 pub use email_transport_resend as resend;
 

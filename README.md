@@ -12,7 +12,7 @@
 - **Typed messages:** model addresses, bodies, attachments, envelopes, and outbound messages independently of any provider.
 - **Transport abstraction:** send structured messages or rendered RFC822 through a common transport contract.
 - **Wire support:** parse and render RFC822 and MIME messages.
-- **Provider adapters:** deliver through Resend, with room for additional transports.
+- **Provider adapters:** deliver through SMTP with Lettre or through Resend.
 - **Durable workers:** expose email delivery through Restate service contracts and a runnable endpoint.
 
 ## Workspace Crates
@@ -21,6 +21,7 @@
 - [`email-message`](crates/email-message): typed outbound message and address model.
 - [`email-message-wire`](crates/email-message-wire): RFC822 and MIME parsing and rendering.
 - [`email-transport`](crates/email-transport): provider-neutral transport traits and send-time options.
+- [`email-transport-lettre`](crates/email-transport-lettre): Lettre SMTP transport adapter.
 - [`email-transport-resend`](crates/email-transport-resend): Resend transport adapter.
 - [`email-transport-test`](crates/email-transport-test): unpublished test transports and conformance helpers.
 - [`restate-email`](crates/restate-email): Restate worker contracts and service adapter.
