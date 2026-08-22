@@ -39,7 +39,11 @@ pub struct SendRequest {
 }
 
 /// Wire-friendly send options whose provider-specific slots are still raw.
+///
+/// Unknown fields are rejected so additions to [`SendOptions`] cannot be
+/// silently discarded before this staging type is updated to match.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[non_exhaustive]
 pub struct RawSendOptions {
@@ -70,7 +74,8 @@ impl RawSendOptions {
     /// # Errors
     ///
     /// Returns a serialization error when a typed provider option cannot be
-    /// represented by the JSON wire contract.
+    /// represented by the JSON wire contract or the serialized fields no
+    /// longer match this staging type.
     pub fn from_send_options(options: &SendOptions) -> Result<Self, serde_json::Error> {
         serde_json::from_value(serde_json::to_value(options)?)
     }
@@ -182,6 +187,151 @@ fn example_send_request() -> serde_json::Value {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
+    use email_message::{EmailAddress, Envelope};
+    use email_transport::{
+        CorrelationId, IdempotencyKey, SendOptions, TransportOption, TransportOptionRegistry,
+    };
+    use serde::{Deserialize, Serialize};
+
+    use super::RawSendOptions;
+
+    #[derive(Debug, Deserialize, Serialize)]
+    struct TestTransportOption {
+        value: String,
+    }
+
+    impl TransportOption for TestTransportOption {
+        fn provider_key() -> &'static str {
+            "mapping-test"
+        }
+    }
+
+    /// Drift guard for the [`SendOptions`] <-> [`RawSendOptions`] mapping.
+    ///
+    /// `SendOptions` is non-exhaustive in a dependency, so its fields cannot be
+    /// exhaustively destructured here. The schema test below guards that side
+    /// of the mapping. For the local type, the destructure below intentionally
+    /// has no `..`, making a new `RawSendOptions` field a compile error until a
+    /// non-default assertion is added for both conversion directions.
+    #[test]
+    fn send_options_mapping_covers_every_field_in_both_directions() {
+        let mut original = SendOptions::new()
+            .with_envelope(Envelope::new(
+                Some("sender@example.com".parse().unwrap()),
+                vec!["recipient@example.com".parse().unwrap()],
+            ))
+            .with_timeout(Duration::new(7, 11))
+            .with_idempotency_key(IdempotencyKey::new("idem-99").unwrap())
+            .with_correlation_id(CorrelationId::new("corr-77").unwrap());
+        original.transport_options.insert(TestTransportOption {
+            value: String::from("typed"),
+        });
+
+        let raw = RawSendOptions::from_send_options(&original).expect("convert to raw options");
+
+        let RawSendOptions {
+            envelope,
+            transport_options,
+            timeout,
+            idempotency_key,
+            correlation_id,
+        } = &raw;
+        assert_eq!(
+            envelope
+                .as_ref()
+                .and_then(Envelope::mail_from)
+                .map(EmailAddress::as_str),
+            Some("sender@example.com"),
+            "from_send_options dropped envelope"
+        );
+        assert!(
+            transport_options.contains_key(TestTransportOption::provider_key()),
+            "from_send_options dropped transport_options"
+        );
+        assert_eq!(
+            *timeout,
+            Some(Duration::new(7, 11)),
+            "from_send_options dropped timeout"
+        );
+        assert_eq!(
+            idempotency_key.as_ref().map(IdempotencyKey::as_str),
+            Some("idem-99"),
+            "from_send_options dropped idempotency_key"
+        );
+        assert_eq!(
+            correlation_id.as_ref().map(CorrelationId::as_str),
+            Some("corr-77"),
+            "from_send_options dropped correlation_id"
+        );
+
+        let mut registry = TransportOptionRegistry::new();
+        registry
+            .register::<TestTransportOption>()
+            .expect("register test transport option");
+        let hydrated = raw
+            .into_send_options(&registry)
+            .expect("hydrate send options");
+
+        assert_eq!(
+            hydrated
+                .envelope
+                .as_ref()
+                .and_then(Envelope::mail_from)
+                .map(EmailAddress::as_str),
+            Some("sender@example.com"),
+            "into_send_options dropped envelope"
+        );
+        assert_eq!(
+            hydrated
+                .transport_options
+                .get::<TestTransportOption>()
+                .map(|option| option.value.as_str()),
+            Some("typed"),
+            "into_send_options dropped transport_options"
+        );
+        assert_eq!(
+            hydrated.timeout,
+            Some(Duration::new(7, 11)),
+            "into_send_options dropped timeout"
+        );
+        assert_eq!(
+            hydrated
+                .idempotency_key
+                .as_ref()
+                .map(IdempotencyKey::as_str),
+            Some("idem-99"),
+            "into_send_options dropped idempotency_key"
+        );
+        assert_eq!(
+            hydrated.correlation_id.as_ref().map(CorrelationId::as_str),
+            Some("corr-77"),
+            "into_send_options dropped correlation_id"
+        );
+    }
+
+    #[cfg(feature = "schemars")]
+    #[test]
+    fn send_options_and_raw_send_options_have_the_same_fields() {
+        fn field_names<T: schemars::JsonSchema>() -> std::collections::BTreeSet<String> {
+            schemars::schema_for!(T)
+                .as_value()
+                .get("properties")
+                .and_then(serde_json::Value::as_object)
+                .expect("send options schema should have object properties")
+                .keys()
+                .cloned()
+                .collect()
+        }
+
+        assert_eq!(
+            field_names::<SendOptions>(),
+            field_names::<RawSendOptions>(),
+            "SendOptions/RawSendOptions mapping drifted; update both conversion directions"
+        );
+    }
+
     #[cfg(feature = "schemars")]
     #[test]
     fn schema_example_is_a_valid_send_request() {
