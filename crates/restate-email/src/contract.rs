@@ -18,6 +18,12 @@ string_newtype! {
 }
 
 /// Queue payload consumed by `Email.send`.
+///
+/// Provider-specific [`RawSendOptions::transport_options`] are a best-effort
+/// union. Callers may include options for every provider they support; the
+/// selected transport consumes its own registered provider slice, while
+/// unrecognized providers are ignored. Switching the selected transport may
+/// therefore drop provider-specific behavior.
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "schemars", schemars(example = example_send_request()))]
@@ -26,7 +32,7 @@ pub struct SendRequest {
     pub transport: TransportKey,
     /// Validated outbound message payload.
     pub message: OutboundMessage,
-    /// Send-time metadata and raw provider-specific transport options.
+    /// Send-time metadata and best-effort provider-specific transport options.
     #[serde(default)]
     #[cfg_attr(feature = "schemars", schemars(default))]
     pub options: RawSendOptions,
@@ -73,8 +79,9 @@ impl RawSendOptions {
     ///
     /// # Errors
     ///
-    /// Returns [`serde_value::DeserializerError`] when provider options cannot
-    /// be hydrated.
+    /// Returns [`serde_value::DeserializerError`] when an option for a
+    /// registered provider cannot be hydrated. Unregistered provider keys are
+    /// ignored.
     pub fn into_send_options(
         self,
         registry: &TransportOptionRegistry,
@@ -95,6 +102,7 @@ impl RawSendOptions {
             );
             let transport_options = registry
                 .transport_options_seed()
+                .ignore_unknown_provider_keys()
                 .deserialize(transport_options_value)?;
             options = options.with_transport_options(transport_options);
         }
@@ -115,8 +123,9 @@ impl RawSendOptions {
     ///
     /// # Errors
     ///
-    /// Returns [`serde_value::DeserializerError`] when provider options cannot
-    /// be hydrated.
+    /// Returns [`serde_value::DeserializerError`] when an option for a
+    /// registered provider cannot be hydrated. Unregistered provider keys are
+    /// ignored.
     pub fn to_send_options(
         &self,
         registry: &TransportOptionRegistry,

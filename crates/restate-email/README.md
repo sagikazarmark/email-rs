@@ -35,6 +35,12 @@ See the [crate documentation](https://docs.rs/restate-email/latest/restate_email
 - `SendResponse`: serializable response containing the transport `SendReport`.
 - `RestateTransport`: caller-side transport that submits the same contract through Restate ingress.
 
+Provider-specific `transport_options` use best-effort union semantics. A caller
+may include slices for every provider it supports; the selected transport takes
+its own registered provider slice, and unrecognized provider keys are ignored.
+This preserves deployment-time transport switching, but switching transports
+may drop provider-specific behavior such as tags.
+
 `RestateTransport` consumes `SendOptions::idempotency_key` as Restate's
 `idempotency-key` ingress header. The key is not forwarded in `RawSendOptions`
 to the provider. This makes replaying the enqueue safe without accidentally

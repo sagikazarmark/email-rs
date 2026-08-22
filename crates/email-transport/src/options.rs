@@ -451,6 +451,12 @@ impl TransportOptionRegistry {
         Ok(())
     }
 
+    /// Return whether a provider option decoder is registered for `provider_key`.
+    #[must_use]
+    pub fn contains_provider_key(&self, provider_key: &str) -> bool {
+        self.decoders.contains_key(provider_key)
+    }
+
     /// Build a [`DeserializeSeed`](serde::de::DeserializeSeed) that hydrates a
     /// [`TransportOptions`] map from any serde deserializer.
     ///

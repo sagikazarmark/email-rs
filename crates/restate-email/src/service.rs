@@ -64,15 +64,33 @@ where
     ///
     /// # Errors
     ///
-    /// Returns [`HandlerError`] when provider options cannot be hydrated, the
-    /// requested transport key is unknown, or sending fails. Unknown keys and
-    /// non-retryable transport failures become Restate terminal errors;
+    /// Returns [`HandlerError`] when options for a registered provider cannot
+    /// be hydrated, the requested transport key is unknown, or sending fails.
+    /// Unregistered provider option keys are ignored. Unknown transport keys
+    /// and non-retryable transport failures become Restate terminal errors;
     /// retryable transport failures remain retryable handler errors.
     pub async fn send_request(&self, request: &SendRequest) -> Result<SendResponse, HandlerError> {
         let options = request
             .options
             .to_send_options(self.transport_options.as_ref())
             .map_err(raw_send_options_deserialize_error_to_handler_error)?;
+        let received_provider_keys: Vec<_> = request
+            .options
+            .transport_options
+            .keys()
+            .map(String::as_str)
+            .collect();
+        let (consumed_provider_keys, ignored_provider_keys): (Vec<_>, Vec<_>) =
+            received_provider_keys
+                .iter()
+                .copied()
+                .partition(|key| self.transport_options.contains_provider_key(key));
+        tracing::debug!(
+            ?received_provider_keys,
+            ?consumed_provider_keys,
+            ?ignored_provider_keys,
+            "hydrated queued transport options"
+        );
         let transport = self
             .transports
             .resolve(&request.transport)
@@ -100,8 +118,9 @@ where
     ///
     /// # Errors
     ///
-    /// Returns [`HandlerError`] when provider options cannot be hydrated, the
-    /// transport key cannot be resolved, or the selected transport fails.
+    /// Returns [`HandlerError`] when options for a registered provider cannot
+    /// be hydrated, the transport key cannot be resolved, or the selected
+    /// transport fails. Unregistered provider option keys are ignored.
     #[handler]
     async fn send(
         &self,

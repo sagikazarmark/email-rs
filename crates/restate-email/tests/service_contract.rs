@@ -120,6 +120,41 @@ impl Transport for RecordingTransport {
     }
 }
 
+#[derive(Clone, Default)]
+struct TraceOutput {
+    bytes: Arc<Mutex<Vec<u8>>>,
+}
+
+impl TraceOutput {
+    fn text(&self) -> String {
+        String::from_utf8(
+            self.bytes
+                .lock()
+                .expect("trace output lock should not be poisoned")
+                .clone(),
+        )
+        .expect("trace output should be UTF-8")
+    }
+}
+
+struct TraceWriter {
+    bytes: Arc<Mutex<Vec<u8>>>,
+}
+
+impl std::io::Write for TraceWriter {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        self.bytes
+            .lock()
+            .expect("trace output lock should not be poisoned")
+            .extend_from_slice(buffer);
+        Ok(buffer.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 #[test]
 fn raw_send_options_map_to_transport_send_options() {
     let mut raw_options = RawSendOptions::default();
@@ -288,19 +323,62 @@ fn transport_options_roundtrip_into_typed_slots() {
     assert_eq!(resend_options.tags[0].value, "welcome");
 }
 
-#[test]
-fn unknown_transport_option_keys_fail_deserialization() {
-    // A typo or missing worker feature should not silently drop provider
-    // behavior from a queued request.
-    let raw: RawSendOptions = serde_json::from_value(serde_json::json!({
-        "transport_options": {"acme-unknown": {"foo": "bar"}}
+#[tokio::test]
+async fn unknown_transport_option_keys_are_ignored() {
+    let trace_output = TraceOutput::default();
+    let trace_writer = trace_output.clone();
+    let subscriber = tracing_subscriber::fmt()
+        .with_ansi(false)
+        .without_time()
+        .with_max_level(tracing::Level::DEBUG)
+        .with_writer(move || TraceWriter {
+            bytes: Arc::clone(&trace_writer.bytes),
+        })
+        .finish();
+    let _subscriber_guard = tracing::subscriber::set_default(subscriber);
+    tracing::callsite::rebuild_interest_cache();
+    let options: RawSendOptions = serde_json::from_value(serde_json::json!({
+        "transport_options": {
+            "custom": {"label": "runtime"},
+            "acme-unknown": {"foo": "bar"}
+        }
     }))
     .expect("raw send options parse");
-    let result = raw.into_send_options(&transport_option_registry());
+    let request = SendRequest {
+        transport: TransportKey::new_unchecked("transactional"),
+        message: message_with_attachment(b"attached-pdf"),
+        options,
+    };
+    let mut custom_registry = TransportOptionRegistry::new();
+    custom_registry
+        .register::<CustomSendOption>()
+        .expect("custom provider key should be unique");
+    let transport = RecordingTransport::default();
+    let mut registry = StaticTransportRegistry::new();
+    registry.insert("transactional", transport.clone());
+    let service = ServiceImpl::new(registry).with_transport_options(custom_registry);
 
+    service
+        .send_request(&request)
+        .await
+        .expect("unknown provider options should not prevent delivery");
+
+    let sends = transport.take_sends();
+    assert_eq!(sends.len(), 1);
+    assert_eq!(sends[0].custom_label.as_deref(), Some("runtime"));
+
+    let traces = trace_output.text();
     assert!(
-        result.is_err(),
-        "unknown provider keys should fail worker deserialization"
+        traces.contains("received_provider_keys=[\"acme-unknown\", \"custom\"]"),
+        "received provider keys should be traced: {traces}"
+    );
+    assert!(
+        traces.contains("consumed_provider_keys=[\"custom\"]"),
+        "consumed provider keys should be traced: {traces}"
+    );
+    assert!(
+        traces.contains("ignored_provider_keys=[\"acme-unknown\"]"),
+        "ignored provider keys should be traced: {traces}"
     );
 }
 

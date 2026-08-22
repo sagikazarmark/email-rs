@@ -24,7 +24,7 @@ schemars = [
     "restate-sdk?/schemars",
 ]
 # Restate worker service adapter and transport registry.
-service = ["dep:email-kit", "dep:restate-sdk"]
+service = ["dep:email-kit", "dep:restate-sdk", "dep:tracing"]
 # Forward email-message's RFC 5322 string address compatibility into queue schemas.
 rfc5322-string-compat = ["email-message/rfc5322-string-compat"]
 
@@ -40,6 +40,7 @@ serde = { workspace = true, features = ["derive"] }
 serde-value = "0.7"
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+tracing = { version = "0.1", optional = true }
 
 [dev-dependencies]
 bytes = "1"
@@ -51,6 +52,7 @@ prost = "0.14"
 reqwest = { workspace = true, features = ["json"], default-features = false }
 restate-sdk-shared-core = "7.0"
 tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
+tracing-subscriber = "0.3"
 wiremock = "0.6"
 
 [[example]]
