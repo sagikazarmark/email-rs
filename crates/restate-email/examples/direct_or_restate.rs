@@ -1,0 +1,43 @@
+use email_message::{Address, Body, Message, OutboundMessage};
+use email_transport::{SendOptions, SendReport, Transport, TransportError};
+use email_transport_resend::ResendTransport;
+use restate_email::{RestateTransport, TransportKey};
+
+async fn send_application_email<T: Transport>(
+    transport: &T,
+    message: &OutboundMessage,
+) -> Result<SendReport, TransportError> {
+    transport.send(message, &SendOptions::default()).await
+}
+
+fn message(recipient: &str) -> Result<OutboundMessage, Box<dyn std::error::Error>> {
+    let message = Message::builder(Body::text("The same call works with either transport."))
+        .from_mailbox("onboarding@resend.dev".parse()?)
+        .to(vec![Address::Mailbox(recipient.parse()?)])
+        .subject("Direct or durable")
+        .build()?;
+
+    Ok(OutboundMessage::new(message)?)
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let recipient = std::env::var("EMAIL_TO")?;
+    let message = message(&recipient)?;
+
+    if let Ok(ingress_url) = std::env::var("RESTATE_INGRESS_URL") {
+        let transport = RestateTransport::new(
+            ingress_url.parse()?,
+            TransportKey::new("transactional")?,
+            reqwest::Client::new(),
+        );
+        let report = send_application_email(&transport, &message).await?;
+        println!("sent durably through {}", report.provider);
+    } else {
+        let transport = ResendTransport::new(std::env::var("RESEND_API_KEY")?);
+        let report = send_application_email(&transport, &message).await?;
+        println!("sent directly through {}", report.provider);
+    }
+
+    Ok(())
+}

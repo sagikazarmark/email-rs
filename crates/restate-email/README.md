@@ -14,8 +14,11 @@
 
 ## Feature Flags
 
-Default features enable reqwest's default client stack for the local ingress example.
+Default features enable the Restate worker service adapter. The SDK-free wire
+contract remains available with default features disabled.
 
+- `client`: enables `RestateTransport`, a caller-side `email_transport::Transport` that invokes Restate ingress without depending on `restate-sdk`.
+- `service`: enables `ServiceImpl`, the worker registry, and the `restate-sdk` dependency. This is enabled by default.
 - `resend`: enables Resend provider-option deserialization through `email-kit`.
 - `schemars`: derives JSON Schema for public queue payload types and forwards schema support to the message and transport crates.
 - `rfc5322-string-compat`: accepts RFC 5322 string addresses in queue payloads and generated schemas in addition to typed address objects.
@@ -30,6 +33,17 @@ See the [crate documentation](https://docs.rs/restate-email/latest/restate_email
 - `StaticTransportRegistry`: owned registry for fixed-key worker setups.
 - `ServiceImpl`: Restate service wrapper that hydrates provider options and dispatches inside a named, journaled `ctx.run` action.
 - `SendResponse`: serializable response containing the transport `SendReport`.
+- `RestateTransport`: caller-side transport that submits the same contract through Restate ingress.
+
+`RestateTransport` consumes `SendOptions::idempotency_key` as Restate's
+`idempotency-key` ingress header. The key is not forwarded in `RawSendOptions`
+to the provider. This makes replaying the enqueue safe without accidentally
+reusing one key across Restate and provider idempotency domains.
+
+The ingress client cannot inspect worker capabilities. Its capability setters
+are deployment assertions; unresolved attachment references remain disabled by
+default and can be asserted with `with_attachment_references(true)` when the
+worker has a resolver configured.
 
 Attachment preparation composes at registry construction rather than in `ServiceImpl`. Wrap a provider transport in `email_kit::attachment::ResolvingTransport` to resolve reference-backed attachments inside the existing `send_email` action before provider delivery:
 
@@ -68,7 +82,8 @@ Retryable transport failures remain retryable Restate handler failures. Unknown 
 ## Examples
 
 - The [basic worker](examples/restate_email_worker.rs) starts an SDK endpoint with a resolver-decorated example transport: `cargo run -p restate-email --example restate_email_worker`.
-- The [local ingress client](examples/invoke_local_worker.rs) sends its reference-backed attachment to `http://127.0.0.1:8080/Email/send` by default: `cargo run -p restate-email --example invoke_local_worker`. Set `RESTATE_INGRESS_URL` to override the ingress URL.
+- The [local ingress client](examples/invoke_local_worker.rs) sends its reference-backed attachment to `http://127.0.0.1:8080/Email/send` by default: `cargo run -p restate-email --features client --example invoke_local_worker`. Set `RESTATE_INGRESS_URL` to override the ingress URL.
+- The [interchangeable transport example](examples/direct_or_restate.rs) sends through the same application function with either a direct Resend transport or `RestateTransport`: `cargo run -p restate-email --features client --example direct_or_restate`. Set `EMAIL_TO` in both modes, `RESTATE_INGRESS_URL` to select Restate, or `RESEND_API_KEY` for direct delivery.
 - The [Resend-backed worker](examples/restate_resend_worker.rs) requires `RESEND_API_KEY`, `RESEND_FROM`, and `RESEND_TO`: `cargo run -p restate-email --features resend --example restate_resend_worker`.
 
 The worker examples expose raw Restate SDK endpoints for registration with Restate; they are not plain JSON HTTP handlers. Invoke `Email.send` through Restate ingress.

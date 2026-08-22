@@ -1,3 +1,5 @@
+#![cfg(feature = "service")]
+
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -40,11 +42,6 @@ fn deserialize_send_options(value: serde_json::Value) -> SendOptions {
 
 fn deserialize_send_request(value: serde_json::Value) -> SendRequest {
     serde_json::from_value(value).expect("send email request should deserialize")
-}
-
-fn raw_send_options_from_send_options(options: &SendOptions) -> RawSendOptions {
-    serde_json::from_value(serde_json::to_value(options).expect("send options should serialize"))
-        .expect("raw options should parse")
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -393,7 +390,8 @@ async fn send_request_deserialization_uses_service_transport_option_registry() {
     send_options.transport_options.insert(CustomSendOption {
         label: String::from("runtime"),
     });
-    let options = raw_send_options_from_send_options(&send_options);
+    let options =
+        RawSendOptions::from_send_options(&send_options).expect("send options should serialize");
     let request = SendRequest {
         transport: TransportKey::new_unchecked("transactional"),
         message: OutboundMessage::new(
@@ -428,7 +426,8 @@ fn send_request_serde_roundtrip_with_transport_options() {
     send_options
         .transport_options
         .insert(ResendSendOptions::new().with_tag("t", "v"));
-    let options = raw_send_options_from_send_options(&send_options);
+    let options =
+        RawSendOptions::from_send_options(&send_options).expect("send options should serialize");
 
     let request = SendRequest {
         transport: TransportKey::new_unchecked("transactional"),

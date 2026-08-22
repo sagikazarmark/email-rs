@@ -1,8 +1,12 @@
 use std::time::Duration;
 
-use email_kit::transport::transport_option_registry;
 use email_message::{Address, Attachment, Body, ContentType, EmailAddress, Envelope, Message};
-use restate_email::{CorrelationId, IdempotencyKey, SendOptions, SendRequest, TransportKey};
+use restate_email::{
+    CorrelationId, IdempotencyKey, SendOptions, SendRequest, TransportKey, TransportOptionRegistry,
+};
+
+#[cfg(feature = "resend")]
+use email_kit::transport::transport_option_registry;
 
 fn fixture_message() -> Result<email_message::OutboundMessage, Box<dyn std::error::Error>> {
     let message = Message::builder(Body::text("hello"))
@@ -35,7 +39,7 @@ fn base_fixture_request() -> Result<SendRequest, Box<dyn std::error::Error>> {
     Ok(SendRequest {
         transport: TransportKey::new("transactional")?,
         message: fixture_message()?,
-        options: serde_json::from_value(serde_json::to_value(send_options)?)?,
+        options: restate_email::RawSendOptions::from_send_options(&send_options)?,
     })
 }
 
@@ -62,7 +66,7 @@ fn send_request_wire_fixture_matches_base_payload() -> Result<(), Box<dyn std::e
     let decoded: SendRequest = serde_json::from_value(expected)?;
     let options = decoded
         .options
-        .into_send_options(&transport_option_registry())?;
+        .into_send_options(&TransportOptionRegistry::new())?;
 
     assert_eq!(options.timeout, Some(Duration::from_millis(2_500)));
     assert_eq!(
@@ -89,7 +93,7 @@ fn resend_fixture_request() -> Result<SendRequest, Box<dyn std::error::Error>> {
     Ok(SendRequest {
         transport: TransportKey::new("transactional")?,
         message: fixture_message()?,
-        options: serde_json::from_value(serde_json::to_value(send_options)?)?,
+        options: restate_email::RawSendOptions::from_send_options(&send_options)?,
     })
 }
 

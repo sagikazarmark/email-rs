@@ -1,18 +1,22 @@
 //! Restate-backed worker contracts for outbound email delivery.
 //!
-//! This crate exposes the serializable email worker contract, transport
-//! resolution abstractions, and a Restate service adapter.
+//! This crate exposes the serializable email worker contract, an optional
+//! caller-side ingress transport, and an optional Restate service adapter.
 //! Provider-specific send options cross the queue boundary through
 //! [`RawSendOptions::transport_options`], using the provider-keyed wire
 //! representation owned by `email-transport`.
 //!
-//! The Restate service adapter is available as [`ServiceImpl`].
+//! The Restate service adapter is available as [`ServiceImpl`] with the
+//! `service` feature. [`RestateTransport`] is available with `client`.
 //!
 //! # Features
 //!
-//! The default feature set enables the default `reqwest` client stack used by
-//! the local invocation tooling.
+//! The default feature set enables `service` for backwards-compatible worker
+//! builds. Disable default features to consume only the SDK-free wire contract.
 //!
+//! - `client`: caller-side [`email_transport::Transport`] implementation using
+//!   Restate ingress. This does not enable `restate-sdk`.
+//! - `service`: Restate worker service adapter and transport registry.
 //! - `resend`: registers Resend provider options and enables the Resend worker
 //!   example.
 //! - `schemars`: JSON Schema implementations and examples for queue contracts.
@@ -35,18 +39,28 @@
 //! - [`invoke_local_worker`](https://github.com/sagikazarmark/email-rs/blob/main/crates/restate-email/examples/invoke_local_worker.rs)
 //!   invokes `Email.send` through Restate ingress and validates the response.
 
+#[cfg(feature = "client")]
+mod client;
+mod contract;
+#[cfg(feature = "service")]
 mod service;
+#[cfg(feature = "service")]
 pub mod transport;
 
 // `IdempotencyKey` and `CorrelationId` live in `email-transport` because they
 // flow through `SendOptions` directly.
+#[cfg(feature = "client")]
+pub use client::RestateTransport;
+pub use contract::{RawSendOptions, SendRequest, SendResponse, TransportKey};
 pub use email_transport::{
     CorrelationId, IdempotencyKey, STRING_NEWTYPE_MAX_BYTES, SendOptions, StringNewtypeError,
     TransportOption, TransportOptionRegistry, TransportOptionRegistryError, TransportOptions,
     TransportOptionsSeed,
 };
-pub use service::{RawSendOptions, SendRequest, SendResponse, ServiceImpl, ServiceImplClient};
+#[cfg(feature = "service")]
+pub use service::{ServiceImpl, ServiceImplClient};
+#[cfg(feature = "service")]
 pub use transport::{
-    CatchAllTransportResolver, RuntimeBound, StaticTransportRegistry, TransportKey,
-    TransportLookupError, TransportResolver,
+    CatchAllTransportResolver, RuntimeBound, StaticTransportRegistry, TransportLookupError,
+    TransportResolver,
 };

@@ -3344,6 +3344,7 @@ dependencies = [
  "email-kit",
  "email-message",
  "email-transport",
+ "email-transport-resend",
  "http",
  "http-body-util",
  "prost",
@@ -3356,6 +3357,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
+ "wiremock",
 ]
 
 [[package]]

@@ -1,20 +1,13 @@
 //! Restate service adapter for `restate-email`.
 
-use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::time::Duration;
 
 use email_kit::transport::transport_option_registry;
-use email_message::OutboundMessage;
-use email_transport::{
-    CorrelationId, ErrorKind, IdempotencyKey, SendOptions, SendReport, TransportError,
-    TransportOptionRegistry,
-};
+use email_transport::{ErrorKind, TransportError, TransportOptionRegistry};
 use restate_sdk::errors::{HandlerError, TerminalError};
 use restate_sdk::prelude::{Context, ContextSideEffects, HandlerResult, Json, RunFuture};
-use serde::{Deserialize, Serialize};
 
-use crate::{TransportKey, TransportResolver};
+use crate::{SendRequest, SendResponse, TransportLookupError, TransportResolver};
 
 /// Concrete Restate service implementation over a transport resolver.
 ///
@@ -124,202 +117,10 @@ where
     }
 }
 
-/// Queue payload consumed by `Email.send`.
-///
-/// The serde shape is part of the crate's cross-process contract: producers can
-/// serialize this value into Restate ingress or another queue, and workers can
-/// deserialize it later with the configured provider-option registry.
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[cfg_attr(feature = "schemars", schemars(example = example_send_request()))]
-pub struct SendRequest {
-    /// Configured transport profile to use for this send.
-    pub transport: TransportKey,
-    /// Validated outbound message payload.
-    pub message: OutboundMessage,
-    /// Send-time metadata and raw provider-specific transport options.
-    #[serde(default)]
-    #[cfg_attr(feature = "schemars", schemars(default))]
-    pub options: RawSendOptions,
-}
-
-/// Wire-friendly send options whose provider-specific slots are still raw.
-///
-/// `SendOptions` intentionally needs a [`TransportOptionRegistry`] to hydrate
-/// typed provider slots. This staging type lets Restate deserialize the queue
-/// payload normally, then uses [`email_transport::TransportOptionsSeed`] to
-/// turn the raw provider-keyed map into the typed
-/// [`email_transport::TransportOptions`] passed to transports.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[non_exhaustive]
-pub struct RawSendOptions {
-    /// Optional envelope override for structured transports that support it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub envelope: Option<email_message::Envelope>,
-    /// Provider-keyed raw transport options to hydrate with a
-    /// [`TransportOptionRegistry`].
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    #[cfg_attr(
-        feature = "schemars",
-        schemars(default, with = "BTreeMap<String, serde_json::Value>")
-    )]
-    pub transport_options: BTreeMap<String, serde_value::Value>,
-    /// Per-send timeout forwarded to transports that honor timeout metadata.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub timeout: Option<Duration>,
-    /// Provider-facing idempotency key, when supported by the selected
-    /// transport.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub idempotency_key: Option<IdempotencyKey>,
-    /// Caller-supplied correlation id for tracing provider requests.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub correlation_id: Option<CorrelationId>,
-}
-
-impl RawSendOptions {
-    /// Hydrate raw provider options and assemble typed [`SendOptions`].
-    ///
-    /// # Errors
-    ///
-    /// Returns [`serde_value::DeserializerError`] when a provider key is not
-    /// registered or a registered provider option has the wrong wire shape.
-    pub fn into_send_options(
-        self,
-        registry: &TransportOptionRegistry,
-    ) -> Result<SendOptions, serde_value::DeserializerError> {
-        use serde::de::DeserializeSeed as _;
-
-        let mut options = SendOptions::new();
-
-        if let Some(envelope) = self.envelope {
-            options = options.with_envelope(envelope);
-        }
-        if !self.transport_options.is_empty() {
-            let transport_options_value = serde_value::Value::Map(
-                self.transport_options
-                    .into_iter()
-                    .map(|(key, value)| (serde_value::Value::String(key), value))
-                    .collect(),
-            );
-            let transport_options = registry
-                .transport_options_seed()
-                .deserialize(transport_options_value)?;
-            options = options.with_transport_options(transport_options);
-        }
-        if let Some(timeout) = self.timeout {
-            options = options.with_timeout(timeout);
-        }
-        if let Some(idempotency_key) = self.idempotency_key {
-            options = options.with_idempotency_key(idempotency_key);
-        }
-        if let Some(correlation_id) = self.correlation_id {
-            options = options.with_correlation_id(correlation_id);
-        }
-
-        Ok(options)
+impl From<TransportLookupError> for TerminalError {
+    fn from(error: TransportLookupError) -> Self {
+        Self::new_with_code(404, error.to_string())
     }
-
-    /// Hydrate a borrowed raw option set into typed [`SendOptions`].
-    ///
-    /// # Errors
-    ///
-    /// Returns [`serde_value::DeserializerError`] when a provider key is not
-    /// registered or a registered provider option has the wrong wire shape.
-    pub fn to_send_options(
-        &self,
-        registry: &TransportOptionRegistry,
-    ) -> Result<SendOptions, serde_value::DeserializerError> {
-        self.clone().into_send_options(registry)
-    }
-}
-
-/// Wire-stable response shape returned by the Restate `Email.send`
-/// handler.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[cfg_attr(feature = "schemars", schemars(example = example_send_response()))]
-#[non_exhaustive]
-pub struct SendResponse {
-    /// Provider send report returned by the selected transport.
-    pub report: SendReport,
-}
-
-impl From<SendReport> for SendResponse {
-    fn from(report: SendReport) -> Self {
-        Self { report }
-    }
-}
-
-#[cfg(feature = "schemars")]
-fn example_send_response() -> serde_json::Value {
-    serde_json::json!({
-        "report": {
-            "provider": "your-provider",
-            "provider_message_id": "184fa9a3-f967-4a98-9d8f-57152e7cbe64",
-            "accepted": [
-                "alice@example.com",
-                "bob@example.com",
-                "carol@example.com",
-                "dave@example.com",
-            ],
-        },
-    })
-}
-
-#[cfg(feature = "schemars")]
-fn example_send_request() -> serde_json::Value {
-    serde_json::json!({
-        "transport": "your-transport",
-        "options": {
-            "idempotency_key": "foo",
-            "transport_options": {
-                "your-transport": {
-                    "tags": [
-                        {
-                            "name": "campaign",
-                            "value": "test"
-                        }
-                    ]
-                }
-            },
-        },
-        "message": {
-            "from": {
-                "type": "mailbox",
-                "name": "Alice",
-                "email": "alice@example.com"
-            },
-            "to": [
-                {
-                    "type": "mailbox",
-                    "name": "Bob",
-                    "email": "bob@example.com"
-                },
-                {
-                    "type": "mailbox",
-                    "name": "Carol",
-                    "email": "carol@example.com"
-                },
-                {
-                    "type": "group",
-                    "name": "Managers",
-                    "members": [
-                        {
-                            "type": "mailbox",
-                            "name": "Dave",
-                            "email": "dave@example.com"
-                        },
-                    ],
-                },
-            ],
-            "subject": "Test email",
-            "body": {
-                "type": "text",
-                "text": "Hello everyone! This is a test email.",
-            },
-        },
-    })
 }
 
 fn raw_send_options_deserialize_error_to_handler_error(
@@ -351,7 +152,7 @@ mod tests {
     use bytes::{Buf, BufMut, Bytes, BytesMut};
     use email_message::ContentType;
     use email_message::{Address, Attachment, Body, Mailbox, Message, OutboundMessage};
-    use email_transport::{SendOptions, Transport, TransportError};
+    use email_transport::{SendOptions, SendReport, Transport, TransportError};
     use http::Request;
     use http_body_util::{BodyExt, Full};
     use prost::Message as ProstMessage;
@@ -360,7 +161,7 @@ mod tests {
     use restate_sdk::service::{Discoverable, IntoServiceDefinition};
     use restate_sdk_shared_core::Version;
 
-    use crate::{StaticTransportRegistry, TransportKey, TransportLookupError};
+    use crate::{RawSendOptions, StaticTransportRegistry, TransportKey, TransportLookupError};
 
     use super::*;
 
@@ -630,21 +431,6 @@ mod tests {
         assert_eq!(response.report.provider, "resend");
         assert_eq!(response.report.provider_message_id.as_deref(), Some("id-1"));
         assert_eq!(response.report.accepted[0].as_str(), "to@example.com");
-    }
-
-    #[cfg(feature = "schemars")]
-    #[test]
-    fn example_send_request_matches_wire_shape() {
-        let value = example_send_request();
-
-        assert!(
-            value
-                .pointer("/options/transport_options")
-                .and_then(serde_json::Value::as_object)
-                .is_some(),
-            "transport_options should be a provider-keyed object: {value}"
-        );
-        serde_json::from_value::<SendRequest>(value).expect("example should deserialize");
     }
 
     #[test]

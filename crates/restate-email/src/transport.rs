@@ -2,9 +2,9 @@
 
 use std::collections::HashMap;
 
-use restate_sdk::errors::TerminalError;
+use email_transport::{DynTransport, Transport};
 
-use email_transport::{DynTransport, Transport, string_newtype};
+pub use crate::TransportKey;
 
 /// Re-export of [`email_transport::RuntimeBound`].
 ///
@@ -28,22 +28,10 @@ pub trait TransportResolver: RuntimeBound {
     fn resolve(&self, transport: &TransportKey) -> Result<&DynTransport, TransportLookupError>;
 }
 
-string_newtype! {
-    /// Configured transport key (e.g. `"primary"`, `"fallback"`).
-    ///
-    /// `new_unchecked` is available, declared via the `@unchecked`
-    /// matcher arm of [`email_transport::string_newtype!`] so trusted-
-    /// input construction (test fixtures, internal constants) stays
-    /// available. End-user code should reach for [`Self::new`] /
-    /// [`std::str::FromStr`] for any value that originated outside
-    /// trusted code paths.
-    @unchecked TransportKey
-}
-
 /// Failure to resolve a queued transport key to a configured transport.
 ///
-/// Converting this error to [`TerminalError`] produces Restate terminal code
-/// `404`, preventing retries for configuration-independent lookup failures.
+/// The service adapter maps this to Restate terminal code `404`, preventing
+/// retries for configuration-independent lookup failures.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum TransportLookupError {
@@ -53,12 +41,6 @@ pub enum TransportLookupError {
         /// Unresolved transport key.
         key: String,
     },
-}
-
-impl From<TransportLookupError> for TerminalError {
-    fn from(error: TransportLookupError) -> Self {
-        Self::new_with_code(404, error.to_string())
-    }
 }
 
 /// Fixed-key transport registry for common worker setups.
