@@ -18,6 +18,11 @@ allow = [
   "0BSD",
   "Zlib",
 ]
+# Build-time only: reached through const-random-macro, a proc-macro in the
+# OpenDAL S3/GCS signer stack, so it is never linked into a shipped artifact.
+exceptions = [
+  { name = "tiny-keccak", allow = ["CC0-1.0"] },
+]
 
 [bans]
 multiple-versions = "warn"
