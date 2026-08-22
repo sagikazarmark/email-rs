@@ -31,6 +31,25 @@ See the [crate documentation](https://docs.rs/restate-email/latest/restate_email
 - `ServiceImpl`: Restate service wrapper that hydrates provider options and dispatches inside a named, journaled `ctx.run` action.
 - `SendResponse`: serializable response containing the transport `SendReport`.
 
+Attachment preparation composes at registry construction rather than in `ServiceImpl`. Wrap a provider transport in `email_kit::attachment::ResolvingTransport` to resolve reference-backed attachments inside the existing `send_email` action before provider delivery:
+
+```rust
+use email_kit::attachment::{MapResolver, ResolvingTransport, SchemeRouter};
+use restate_email::StaticTransportRegistry;
+
+let resolver = SchemeRouter::new().with_resolver(
+    "docs",
+    MapResolver::new().with_entry("report.txt", b"report contents".to_vec()),
+);
+let mut registry = StaticTransportRegistry::new();
+registry.insert(
+    "transactional",
+    ResolvingTransport::new(provider_transport, resolver),
+);
+```
+
+A queued attachment reference such as `docs:report.txt` is then materialized at delivery time. Resolved bytes are not journaled, so retries may observe changed content; use immutable or versioned references when retry attempts must deliver identical bytes.
+
 Bind the service using Restate's service definition API:
 
 ```rust
@@ -48,8 +67,8 @@ Retryable transport failures remain retryable Restate handler failures. Unknown 
 
 ## Examples
 
-- The [basic worker](examples/restate_email_worker.rs) starts an SDK endpoint with an example transport: `cargo run -p restate-email --example restate_email_worker`.
-- The [local ingress client](examples/invoke_local_worker.rs) invokes `http://127.0.0.1:8080/Email/send` by default: `cargo run -p restate-email --example invoke_local_worker`. Set `RESTATE_INGRESS_URL` to override the ingress URL.
+- The [basic worker](examples/restate_email_worker.rs) starts an SDK endpoint with a resolver-decorated example transport: `cargo run -p restate-email --example restate_email_worker`.
+- The [local ingress client](examples/invoke_local_worker.rs) sends its reference-backed attachment to `http://127.0.0.1:8080/Email/send` by default: `cargo run -p restate-email --example invoke_local_worker`. Set `RESTATE_INGRESS_URL` to override the ingress URL.
 - The [Resend-backed worker](examples/restate_resend_worker.rs) requires `RESEND_API_KEY`, `RESEND_FROM`, and `RESEND_TO`: `cargo run -p restate-email --features resend --example restate_resend_worker`.
 
 The worker examples expose raw Restate SDK endpoints for registration with Restate; they are not plain JSON HTTP handlers. Invoke `Email.send` through Restate ingress.

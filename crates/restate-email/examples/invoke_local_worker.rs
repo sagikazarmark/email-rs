@@ -1,7 +1,10 @@
 use std::time::Duration;
 
 use email_message::ContentType;
-use email_message::{Address, Attachment, Body, EmailAddress, Envelope, Message, OutboundMessage};
+use email_message::{
+    Address, Attachment, AttachmentReference, Body, EmailAddress, Envelope, Message,
+    OutboundMessage,
+};
 use restate_email::{
     CorrelationId, IdempotencyKey, RawSendOptions, SendRequest, SendResponse, TransportKey,
 };
@@ -14,9 +17,9 @@ fn sample_request() -> Result<SendRequest, Box<dyn std::error::Error>> {
     .to(vec![Address::Mailbox("recipient@example.com".parse()?)])
     .subject("Local invocation example")
     .add_attachment(
-        Attachment::bytes(
+        Attachment::reference(
             ContentType::try_from("text/plain")?,
-            b"Hello from the sample attachment.\n".to_vec(),
+            AttachmentReference::new("example:report.txt"),
         )
         .with_filename("report.txt"),
     )

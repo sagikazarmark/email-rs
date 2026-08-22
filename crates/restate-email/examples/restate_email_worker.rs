@@ -1,8 +1,10 @@
 use std::time::Duration;
 
+use email_kit::attachment::{MapResolver, ResolvingTransport, SchemeRouter};
 use email_message::ContentType;
 use email_message::{
-    Address, Attachment, AttachmentBody, Body, EmailAddress, Envelope, Message, OutboundMessage,
+    Address, Attachment, AttachmentBody, AttachmentReference, Body, EmailAddress, Envelope,
+    Message, OutboundMessage,
 };
 use email_transport::{ErrorKind, SendOptions, SendReport, Transport, TransportError};
 use restate_email::{
@@ -50,9 +52,9 @@ fn sample_request() -> Result<SendRequest, Box<dyn std::error::Error>> {
     .to(vec![Address::Mailbox("recipient@example.com".parse()?)])
     .subject("Restate worker example")
     .add_attachment(
-        Attachment::bytes(
+        Attachment::reference(
             ContentType::try_from("text/plain")?,
-            b"Hello from the sample attachment.\n".to_vec(),
+            AttachmentReference::new("example:report.txt"),
         )
         .with_filename("report.txt"),
     )
@@ -76,8 +78,18 @@ fn sample_request() -> Result<SendRequest, Box<dyn std::error::Error>> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let resolver = SchemeRouter::new().with_resolver(
+        "example",
+        MapResolver::new().with_entry(
+            "report.txt",
+            b"Hello from the resolved sample attachment.\n".to_vec(),
+        ),
+    );
     let mut registry = StaticTransportRegistry::new();
-    registry.insert("transactional", ExampleTransport);
+    registry.insert(
+        "transactional",
+        ResolvingTransport::new(ExampleTransport, resolver),
+    );
 
     let service = ServiceImpl::new(registry).into_service_definition();
     let endpoint = Endpoint::builder().bind(service);

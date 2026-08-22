@@ -3366,13 +3366,17 @@ dependencies = [
  "clap",
  "email-kit",
  "figment",
+ "opendal",
  "restate-email",
  "restate-sdk",
  "serde",
+ "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",
  "url",
+ "wiremock",
 ]
 
 [[package]]

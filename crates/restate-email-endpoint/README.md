@@ -19,19 +19,34 @@ The `restate-email` binary reads a JSON, YAML, or TOML configuration file and ap
 [transports.transactional]
 provider = "resend"
 api_key = "re_..."
+
+[attachments]
+max_attachment_bytes = 26214400
+max_total_bytes = 41943040
+
+[attachments.resolvers.docs]
+type = "opendal"
+service = "s3"
+bucket = "example-docs"
+root = "/outbound"
 ```
 
 ```sh
 restate-email --config restate-email.toml --port 9080
 ```
 
-The Restate service name is `Email`. Invoke its `send` handler with a `restate_email::SendRequest` whose transport key matches a configured entry.
+The Restate service name is `Email`. Invoke its `send` handler with a `restate_email::SendRequest` whose transport key matches a configured entry. In the example above, an attachment reference such as `docs:reports/quarterly.pdf` is resolved as `reports/quarterly.pdf` within the configured S3 bucket and root before Resend receives the message.
+
+The `[attachments]` section is optional. When present, every configured transport is wrapped with attachment preparation. The resolver key is the reference routing prefix, and all fields other than `type` and `service` are passed to the selected OpenDAL service as operator options. Supported services include `azblob`, `fs`, `gcs`, `http`, and `s3`.
+
+Without `[attachments]`, byte-backed messages work unchanged and provider transports reject unresolved references terminally. Missing objects, unsupported references, access failures, and size violations are terminal; transient storage failures are retryable. Resolution occurs during the existing `send_email` Restate action, and resolved bytes are not journaled. Use immutable or versioned references when retries must resolve identical content.
 
 ## Feature Flags
 
 Default features enable the component defaults, queue-payload schemas, RFC 5322 string-address compatibility, and all available transports.
 
-- `transport-all`: enables every transport exposed by `email-kit`. The endpoint configuration currently supports Resend; SMTP endpoint configuration is not yet exposed. The binary target requires this feature.
+- `attachment-opendal`: enables endpoint attachment preparation and the OpenDAL services listed above. It is enabled by `transport-all`.
+- `transport-all`: enables attachment preparation and every transport exposed by `email-kit`. The endpoint configuration currently supports Resend; SMTP endpoint configuration is not yet exposed. The binary target requires this feature.
 
 See the [generated feature graph](https://docs.rs/crate/restate-email-endpoint/latest/features) for activation details.
 
