@@ -516,6 +516,14 @@ impl TransportOptionRegistry {
         self.decoders.contains_key(provider_key)
     }
 
+    /// Return the registered provider keys in stable lexical order.
+    #[must_use]
+    pub fn provider_keys(&self) -> Vec<&'static str> {
+        let mut provider_keys: Vec<_> = self.decoders.keys().copied().collect();
+        provider_keys.sort_unstable();
+        provider_keys
+    }
+
     /// Build a [`DeserializeSeed`](serde::de::DeserializeSeed) that hydrates a
     /// [`TransportOptions`] map from any serde deserializer.
     ///
@@ -1462,6 +1470,20 @@ mod tests {
                 "expected `{needle}` in {rendered}"
             );
         }
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn transport_option_registry_lists_provider_keys_in_stable_order() {
+        let mut registry = TransportOptionRegistry::new();
+        registry
+            .register::<TestOption>()
+            .expect("register succeeds");
+        registry
+            .register::<OtherTestOption>()
+            .expect("register succeeds");
+
+        assert_eq!(registry.provider_keys(), vec!["other", "test"]);
     }
 
     #[test]

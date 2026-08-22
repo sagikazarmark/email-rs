@@ -12,6 +12,7 @@ use email_kit::attachment::{
 };
 use email_kit::message::AttachmentReference;
 use email_kit::transport::resend::ResendTransport;
+use email_kit::transport::transport_option_registry;
 use figment::Figment;
 use figment::providers::{Env, Format, Json, Toml, Yaml};
 use restate_email::{ServiceImpl, StaticTransportRegistry};
@@ -76,7 +77,13 @@ async fn main() -> Result<()> {
 
     let config = cli.load_config()?;
     let registry = create_registry(config)?;
-    let service = ServiceImpl::new(registry).into_service_definition();
+    let option_registry = transport_option_registry();
+    for provider in option_registry.provider_keys() {
+        tracing::info!(provider, "registered transport option provider");
+    }
+    let service = ServiceImpl::new(registry)
+        .with_transport_options(option_registry)
+        .into_service_definition();
     let endpoint = Endpoint::builder().bind(service);
     let bind_addr = format!("0.0.0.0:{}", cli.port);
 
