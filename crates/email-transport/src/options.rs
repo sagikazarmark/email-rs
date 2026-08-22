@@ -207,6 +207,15 @@ crate::string_newtype! {
 /// `serde::Serialize` for insertion and `serde::Deserialize` for registry
 /// hydration.
 ///
+/// # Safety boundary
+///
+/// Provider-specific options may add or relax behavior, such as tags,
+/// metadata, tracking, or templates. They must not constrain delivery, because
+/// a transport that does not recognize the provider-specific option may ignore
+/// it. Safety controls such as sandbox mode, suppression-list toggles, or
+/// "never deliver to real recipients" belong in core [`SendOptions`], where
+/// every transport must honor them or fail the send.
+///
 /// # Send + Sync
 ///
 /// The bound is `Send + Sync` on every target, including `wasm32`, even

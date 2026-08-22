@@ -41,6 +41,12 @@ its own registered provider slice, and unrecognized provider keys are ignored.
 This preserves deployment-time transport switching, but switching transports
 may drop provider-specific behavior such as tags.
 
+Consequently, `transport_options` may only add or relax behavior. Controls that
+constrain delivery, such as sandbox mode, suppression-list toggles, or
+"never deliver to real recipients", must be core `SendOptions` that every
+transport honors or rejects. See the
+[`TransportOption` safety boundary](https://docs.rs/email-transport/latest/email_transport/trait.TransportOption.html).
+
 `RestateTransport` consumes `SendOptions::idempotency_key` as Restate's
 `idempotency-key` ingress header. The key is omitted from the queued
 `SendOptions`, so it is not forwarded to the provider. This makes replaying the

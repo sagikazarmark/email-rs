@@ -170,6 +170,10 @@ pub trait RawTransport: RuntimeBound {
 /// consult `capabilities()` before constructing options and skip features
 /// the transport does not support; adapters silently ignore unsupported
 /// options unless the flag's tier below says otherwise.
+/// Capability flags describe transport intent; they never enforce a safety
+/// control. Controls that constrain delivery belong in core [`SendOptions`],
+/// where every transport must honor them or fail the send, rather than in an
+/// advisory capability or provider-specific [`TransportOption`].
 ///
 /// # Tiers
 ///
