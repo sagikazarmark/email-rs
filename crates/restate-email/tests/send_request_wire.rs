@@ -2,8 +2,10 @@ use std::time::Duration;
 
 use email_message::{Address, Attachment, Body, ContentType, EmailAddress, Envelope, Message};
 use restate_email::{
-    CorrelationId, IdempotencyKey, SendOptions, SendRequest, TransportKey, TransportOptionRegistry,
+    CorrelationId, IdempotencyKey, SendOptions, SendRequest, SendRequestSeed, TransportKey,
+    TransportOptionRegistry,
 };
+use serde::de::DeserializeSeed as _;
 
 #[cfg(feature = "resend")]
 use email_kit::transport::transport_option_registry;
@@ -39,34 +41,35 @@ fn base_fixture_request() -> Result<SendRequest, Box<dyn std::error::Error>> {
     Ok(SendRequest {
         transport: TransportKey::new("transactional")?,
         message: fixture_message()?,
-        options: restate_email::RawSendOptions::from_send_options(&send_options)?,
+        options: send_options,
     })
 }
 
 fn assert_matches_fixture(
     request: &SendRequest,
     fixture: &str,
-) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    registry: &TransportOptionRegistry,
+) -> Result<SendRequest, Box<dyn std::error::Error>> {
     let expected: serde_json::Value = serde_json::from_str(fixture)?;
     let actual = serde_json::to_value(request)?;
 
     assert_eq!(actual, expected);
 
-    let decoded: SendRequest = serde_json::from_value(expected.clone())?;
-    assert_eq!(serde_json::to_value(decoded)?, expected);
+    let decoded = SendRequestSeed::new(registry).deserialize(expected.clone())?;
+    assert_eq!(serde_json::to_value(&decoded)?, expected);
 
-    Ok(expected)
+    Ok(decoded)
 }
 
 #[test]
 fn send_request_wire_fixture_matches_base_payload() -> Result<(), Box<dyn std::error::Error>> {
     let request = base_fixture_request()?;
-    let expected =
-        assert_matches_fixture(&request, include_str!("fixtures/send_request_base.json"))?;
-    let decoded: SendRequest = serde_json::from_value(expected)?;
-    let options = decoded
-        .options
-        .into_send_options(&TransportOptionRegistry::new())?;
+    let decoded = assert_matches_fixture(
+        &request,
+        include_str!("fixtures/send_request_base.json"),
+        &TransportOptionRegistry::new(),
+    )?;
+    let options = decoded.options;
 
     assert_eq!(options.timeout, Some(Duration::from_millis(2_500)));
     assert_eq!(
@@ -93,7 +96,7 @@ fn resend_fixture_request() -> Result<SendRequest, Box<dyn std::error::Error>> {
     Ok(SendRequest {
         transport: TransportKey::new("transactional")?,
         message: fixture_message()?,
-        options: restate_email::RawSendOptions::from_send_options(&send_options)?,
+        options: send_options,
     })
 }
 
@@ -103,12 +106,12 @@ fn send_request_wire_fixture_matches_resend_payload() -> Result<(), Box<dyn std:
     use email_kit::transport::resend::ResendSendOptions;
 
     let request = resend_fixture_request()?;
-    let expected =
-        assert_matches_fixture(&request, include_str!("fixtures/send_request_resend.json"))?;
-    let decoded: SendRequest = serde_json::from_value(expected)?;
-    let options = decoded
-        .options
-        .into_send_options(&transport_option_registry())?;
+    let decoded = assert_matches_fixture(
+        &request,
+        include_str!("fixtures/send_request_resend.json"),
+        &transport_option_registry(),
+    )?;
+    let options = decoded.options;
     let resend_options = options
         .transport_options
         .get::<ResendSendOptions>()

@@ -9,9 +9,10 @@ use email_message::{Address, Attachment, AttachmentBody, Body, Mailbox, Message,
 use email_message::{ContentType, Envelope};
 use email_transport::{SendReport, Transport, TransportError};
 use restate_email::{
-    CorrelationId, IdempotencyKey, RawSendOptions, SendOptions, SendRequest, ServiceImpl,
+    CorrelationId, IdempotencyKey, SendOptions, SendRequest, SendRequestSeed, ServiceImpl,
     StaticTransportRegistry, TransportKey, TransportOption, TransportOptionRegistry,
 };
+use serde::de::DeserializeSeed as _;
 use serde::{Deserialize, Serialize};
 
 fn mailbox(input: &str) -> Mailbox {
@@ -35,13 +36,20 @@ fn message_with_attachment(bytes: &[u8]) -> OutboundMessage {
 }
 
 fn deserialize_send_options(value: serde_json::Value) -> SendOptions {
-    let raw: RawSendOptions = serde_json::from_value(value).expect("raw send options parse");
-    raw.into_send_options(&transport_option_registry())
+    transport_option_registry()
+        .send_options_seed()
+        .ignore_unknown_transport_options()
+        .deserialize(value)
         .expect("send options should deserialize")
 }
 
-fn deserialize_send_request(value: serde_json::Value) -> SendRequest {
-    serde_json::from_value(value).expect("send email request should deserialize")
+fn deserialize_send_request(
+    value: serde_json::Value,
+    registry: &TransportOptionRegistry,
+) -> SendRequest {
+    SendRequestSeed::new(registry)
+        .deserialize(value)
+        .expect("send email request should deserialize")
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -120,55 +128,17 @@ impl Transport for RecordingTransport {
     }
 }
 
-#[derive(Clone, Default)]
-struct TraceOutput {
-    bytes: Arc<Mutex<Vec<u8>>>,
-}
-
-impl TraceOutput {
-    fn text(&self) -> String {
-        String::from_utf8(
-            self.bytes
-                .lock()
-                .expect("trace output lock should not be poisoned")
-                .clone(),
-        )
-        .expect("trace output should be UTF-8")
-    }
-}
-
-struct TraceWriter {
-    bytes: Arc<Mutex<Vec<u8>>>,
-}
-
-impl std::io::Write for TraceWriter {
-    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
-        self.bytes
-            .lock()
-            .expect("trace output lock should not be poisoned")
-            .extend_from_slice(buffer);
-        Ok(buffer.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
 #[test]
-fn raw_send_options_map_to_transport_send_options() {
-    let mut raw_options = RawSendOptions::default();
-    raw_options.envelope = Some(Envelope::new(
-        Some("bounce@example.com".parse().expect("email should parse")),
-        vec!["to@example.com".parse().expect("email should parse")],
-    ));
-    raw_options.timeout = Some(Duration::from_millis(1_500));
-    raw_options.idempotency_key = Some(IdempotencyKey::new_unchecked("idempotency-key"));
-    raw_options.correlation_id = Some(CorrelationId::new_unchecked("corr-123"));
-
-    let options = raw_options
-        .into_send_options(&transport_option_registry())
-        .expect("raw options should hydrate");
+fn send_options_seed_decodes_shared_options() {
+    let options = deserialize_send_options(serde_json::json!({
+        "envelope": {
+            "mail_from": "bounce@example.com",
+            "rcpt_to": ["to@example.com"]
+        },
+        "timeout": {"secs": 1, "nanos": 500_000_000},
+        "idempotency_key": "idempotency-key",
+        "correlation_id": "corr-123"
+    }));
 
     assert_eq!(options.timeout, Some(Duration::from_millis(1_500)));
     assert_eq!(
@@ -224,25 +194,11 @@ fn send_request_schema_uses_send_options_shape() {
         value.to_string().contains("transport_options"),
         "SendRequest schema should expose SendOptions transport_options"
     );
-
-    let raw_options_schema = schemars::schema_for!(RawSendOptions);
-    let raw_options_value = raw_options_schema.as_value();
-    if let Some(required) = raw_options_value
-        .get("required")
-        .and_then(|value| value.as_array())
-    {
-        assert!(
-            !required
-                .iter()
-                .any(|value| value.as_str() == Some("transport_options")),
-            "RawSendOptions transport_options default to empty and should be optional: {raw_options_value}"
-        );
-    }
 }
 
 #[tokio::test]
 async fn send_dispatches_message_and_options() {
-    let mut options = RawSendOptions::default();
+    let mut options = SendOptions::default();
     options.envelope = Some(Envelope::new(
         Some("bounce@example.com".parse().expect("email should parse")),
         vec!["to@example.com".parse().expect("email should parse")],
@@ -325,34 +281,21 @@ fn transport_options_roundtrip_into_typed_slots() {
 
 #[tokio::test]
 async fn unknown_transport_option_keys_are_ignored() {
-    let trace_output = TraceOutput::default();
-    let trace_writer = trace_output.clone();
-    let subscriber = tracing_subscriber::fmt()
-        .with_ansi(false)
-        .without_time()
-        .with_max_level(tracing::Level::DEBUG)
-        .with_writer(move || TraceWriter {
-            bytes: Arc::clone(&trace_writer.bytes),
-        })
-        .finish();
-    let _subscriber_guard = tracing::subscriber::set_default(subscriber);
-    tracing::callsite::rebuild_interest_cache();
-    let options: RawSendOptions = serde_json::from_value(serde_json::json!({
-        "transport_options": {
-            "custom": {"label": "runtime"},
-            "acme-unknown": {"foo": "bar"}
-        }
-    }))
-    .expect("raw send options parse");
     let request = SendRequest {
         transport: TransportKey::new_unchecked("transactional"),
         message: message_with_attachment(b"attached-pdf"),
-        options,
+        options: SendOptions::default(),
     };
+    let mut value = serde_json::to_value(request).expect("request should serialize");
+    value["options"]["transport_options"] = serde_json::json!({
+        "custom": {"label": "runtime"},
+        "acme-unknown": {"foo": "bar"}
+    });
     let mut custom_registry = TransportOptionRegistry::new();
     custom_registry
         .register::<CustomSendOption>()
         .expect("custom provider key should be unique");
+    let request = deserialize_send_request(value, &custom_registry);
     let transport = RecordingTransport::default();
     let mut registry = StaticTransportRegistry::new();
     registry.insert("transactional", transport.clone());
@@ -366,20 +309,6 @@ async fn unknown_transport_option_keys_are_ignored() {
     let sends = transport.take_sends();
     assert_eq!(sends.len(), 1);
     assert_eq!(sends[0].custom_label.as_deref(), Some("runtime"));
-
-    let traces = trace_output.text();
-    assert!(
-        traces.contains("received_provider_keys=[\"acme-unknown\", \"custom\"]"),
-        "received provider keys should be traced: {traces}"
-    );
-    assert!(
-        traces.contains("consumed_provider_keys=[\"custom\"]"),
-        "consumed provider keys should be traced: {traces}"
-    );
-    assert!(
-        traces.contains("ignored_provider_keys=[\"acme-unknown\"]"),
-        "ignored provider keys should be traced: {traces}"
-    );
 }
 
 #[cfg(feature = "resend")]
@@ -387,11 +316,12 @@ async fn unknown_transport_option_keys_are_ignored() {
 fn malformed_transport_option_for_known_key_returns_error() {
     // Resend's `tags` field is a sequence; a string value here is a shape
     // mismatch that registry deserialization rejects.
-    let raw: RawSendOptions = serde_json::from_value(serde_json::json!({
-        "transport_options": {"resend": {"tags": "not-a-list"}}
-    }))
-    .expect("raw send options parse");
-    let result = raw.into_send_options(&transport_option_registry());
+    let result = transport_option_registry()
+        .send_options_seed()
+        .ignore_unknown_transport_options()
+        .deserialize(serde_json::json!({
+            "transport_options": {"resend": {"tags": "not-a-list"}}
+        }));
 
     assert!(
         result.is_err(),
@@ -401,7 +331,7 @@ fn malformed_transport_option_for_known_key_returns_error() {
 
 #[test]
 fn send_request_serde_roundtrip_with_send_options() {
-    let mut options = RawSendOptions::default();
+    let mut options = SendOptions::default();
     options.timeout = Some(Duration::from_millis(2_500));
     options.correlation_id = Some(CorrelationId::new_unchecked("corr-request"));
 
@@ -421,7 +351,7 @@ fn send_request_serde_roundtrip_with_send_options() {
     let json = serde_json::to_value(&request).expect("serialize");
     assert_eq!(json["transport"], "transactional");
 
-    let back = deserialize_send_request(json);
+    let back = deserialize_send_request(json, &TransportOptionRegistry::new());
 
     assert_eq!(back.options.timeout, Some(Duration::from_millis(2_500)));
     assert_eq!(
@@ -438,7 +368,7 @@ fn send_request_deserialization_rejects_invalid_message() {
     let request = SendRequest {
         transport: TransportKey::new_unchecked("transactional"),
         message: message_with_attachment(b"attached-pdf"),
-        options: RawSendOptions::default(),
+        options: SendOptions::default(),
     };
     let mut value = serde_json::to_value(&request).expect("request should serialize");
     value["message"]
@@ -446,7 +376,7 @@ fn send_request_deserialization_rejects_invalid_message() {
         .expect("message should serialize as object")
         .remove("from");
 
-    let result = serde_json::from_value::<SendRequest>(value);
+    let result = SendRequestSeed::new(&TransportOptionRegistry::new()).deserialize(value);
 
     assert!(
         result.is_err(),
@@ -463,13 +393,10 @@ async fn send_request_deserialization_uses_service_transport_option_registry() {
     let transport = RecordingTransport::default();
     let mut registry = StaticTransportRegistry::new();
     registry.insert("transactional", transport.clone());
-    let service = ServiceImpl::new(registry).with_transport_options(custom_registry);
     let mut send_options = SendOptions::new();
     send_options.transport_options.insert(CustomSendOption {
         label: String::from("runtime"),
     });
-    let options =
-        RawSendOptions::from_send_options(&send_options).expect("send options should serialize");
     let request = SendRequest {
         transport: TransportKey::new_unchecked("transactional"),
         message: OutboundMessage::new(
@@ -480,16 +407,17 @@ async fn send_request_deserialization_uses_service_transport_option_registry() {
                 .expect("message validates"),
         )
         .expect("message should be outbound-valid"),
-        options,
+        options: send_options,
     };
     let json = serde_json::to_value(&request).expect("serialize");
 
-    let back = deserialize_send_request(json);
+    let back = deserialize_send_request(json, &custom_registry);
+    let service = ServiceImpl::new(registry).with_transport_options(custom_registry);
 
     service
         .send_request(&back)
         .await
-        .expect("service should hydrate raw options and send");
+        .expect("service should send hydrated options");
 
     let sends = transport.take_sends();
     assert_eq!(sends[0].custom_label.as_deref(), Some("runtime"));
@@ -504,9 +432,6 @@ fn send_request_serde_roundtrip_with_transport_options() {
     send_options
         .transport_options
         .insert(ResendSendOptions::new().with_tag("t", "v"));
-    let options =
-        RawSendOptions::from_send_options(&send_options).expect("send options should serialize");
-
     let request = SendRequest {
         transport: TransportKey::new_unchecked("transactional"),
         message: OutboundMessage::new(
@@ -517,16 +442,16 @@ fn send_request_serde_roundtrip_with_transport_options() {
                 .expect("message validates"),
         )
         .expect("message should be outbound-valid"),
-        options,
+        options: send_options,
     };
 
     let json = serde_json::to_string(&request).expect("serialize");
-    let back = deserialize_send_request(serde_json::from_str(&json).expect("json value"));
+    let back = deserialize_send_request(
+        serde_json::from_str(&json).expect("json value"),
+        &transport_option_registry(),
+    );
 
-    let send_options = back
-        .options
-        .into_send_options(&transport_option_registry())
-        .expect("raw options should hydrate");
+    let send_options = back.options;
     let resend_options = send_options
         .transport_options
         .get::<ResendSendOptions>()

@@ -1,13 +1,21 @@
 //! Restate service adapter for `restate-email`.
 
+use std::convert::Infallible;
+use std::marker::PhantomData;
 use std::sync::Arc;
 
+use bytes::Bytes;
 use email_kit::transport::transport_option_registry;
 use email_transport::{ErrorKind, TransportError, TransportOptionRegistry};
 use restate_sdk::errors::{HandlerError, TerminalError};
 use restate_sdk::prelude::{Context, ContextSideEffects, HandlerResult, Json, RunFuture};
+use restate_sdk::serde::{
+    Deserialize as RestateDeserialize, InputMetadata, OutputMetadata, PayloadMetadata,
+    Serialize as RestateSerialize,
+};
+use serde::de::DeserializeSeed as _;
 
-use crate::{SendRequest, SendResponse, TransportLookupError, TransportResolver};
+use crate::{SendRequest, SendRequestSeed, SendResponse, TransportLookupError, TransportResolver};
 
 /// Concrete Restate service implementation over a transport resolver.
 ///
@@ -64,40 +72,18 @@ where
     ///
     /// # Errors
     ///
-    /// Returns [`HandlerError`] when options for a registered provider cannot
-    /// be hydrated, the requested transport key is unknown, or sending fails.
-    /// Unregistered provider option keys are ignored. Unknown transport keys
-    /// and non-retryable transport failures become Restate terminal errors;
-    /// retryable transport failures remain retryable handler errors.
+    /// Returns [`HandlerError`] when the requested transport key is unknown or
+    /// sending fails. Unknown transport keys and non-retryable transport
+    /// failures become Restate terminal errors; retryable transport failures
+    /// remain retryable handler errors.
     pub async fn send_request(&self, request: &SendRequest) -> Result<SendResponse, HandlerError> {
-        let options = request
-            .options
-            .to_send_options(self.transport_options.as_ref())
-            .map_err(raw_send_options_deserialize_error_to_handler_error)?;
-        let received_provider_keys: Vec<_> = request
-            .options
-            .transport_options
-            .keys()
-            .map(String::as_str)
-            .collect();
-        let (consumed_provider_keys, ignored_provider_keys): (Vec<_>, Vec<_>) =
-            received_provider_keys
-                .iter()
-                .copied()
-                .partition(|key| self.transport_options.contains_provider_key(key));
-        tracing::debug!(
-            ?received_provider_keys,
-            ?consumed_provider_keys,
-            ?ignored_provider_keys,
-            "hydrated queued transport options"
-        );
         let transport = self
             .transports
             .resolve(&request.transport)
             .map_err(TerminalError::from)?;
 
         transport
-            .send(&request.message, &options)
+            .send(&request.message, &request.options)
             .await
             .map(SendResponse::from)
             .map_err(transport_error_to_handler_error)
@@ -118,16 +104,18 @@ where
     ///
     /// # Errors
     ///
-    /// Returns [`HandlerError`] when options for a registered provider cannot
-    /// be hydrated, the transport key cannot be resolved, or the selected
-    /// transport fails. Unregistered provider option keys are ignored.
+    /// Returns [`HandlerError`] when the request cannot be decoded, the
+    /// transport key cannot be resolved, or the selected transport fails.
+    /// Unregistered provider option keys are ignored during request decoding.
     #[handler]
     async fn send(
         &self,
         ctx: Context<'_>,
-        request: Json<SendRequest>,
+        request: SeededJson<SendRequest>,
     ) -> HandlerResult<Json<SendResponse>> {
-        let request = request.into_inner();
+        let request = request
+            .deserialize(self.transport_options.as_ref())
+            .map_err(send_request_deserialize_error_to_handler_error)?;
 
         Ok(ctx
             .run(|| async move { self.send_request(&request).await.map(Json) })
@@ -136,14 +124,88 @@ where
     }
 }
 
+struct SeededJson<T> {
+    bytes: Bytes,
+    marker: PhantomData<fn() -> T>,
+}
+
+impl SeededJson<SendRequest> {
+    fn deserialize(
+        self,
+        registry: &TransportOptionRegistry,
+    ) -> Result<SendRequest, SendRequestDeserializeError> {
+        let mut deserializer = serde_json::Deserializer::from_slice(&self.bytes);
+        let mut track = serde_path_to_error::Track::new();
+        let path_deserializer =
+            serde_path_to_error::Deserializer::new(&mut deserializer, &mut track);
+        let request = SendRequestSeed::new(registry)
+            .deserialize(path_deserializer)
+            .map_err(|source| SendRequestDeserializeError {
+                path: track.path().to_string(),
+                source,
+            })?;
+        deserializer
+            .end()
+            .map_err(|source| SendRequestDeserializeError {
+                path: String::from("."),
+                source,
+            })?;
+
+        Ok(request)
+    }
+}
+
+impl<T> RestateDeserialize for SeededJson<T> {
+    type Error = Infallible;
+
+    fn deserialize(bytes: &mut Bytes) -> Result<Self, Self::Error> {
+        Ok(Self {
+            bytes: bytes.clone(),
+            marker: PhantomData,
+        })
+    }
+}
+
+impl<T> RestateSerialize for SeededJson<T> {
+    type Error = Infallible;
+
+    fn serialize(&self) -> Result<Bytes, Self::Error> {
+        Ok(self.bytes.clone())
+    }
+}
+
+impl<T> PayloadMetadata for SeededJson<T>
+where
+    Json<T>: PayloadMetadata,
+{
+    fn json_schema() -> Option<serde_json::Value> {
+        <Json<T> as PayloadMetadata>::json_schema()
+    }
+
+    fn input_metadata() -> InputMetadata {
+        <Json<T> as PayloadMetadata>::input_metadata()
+    }
+
+    fn output_metadata() -> OutputMetadata {
+        <Json<T> as PayloadMetadata>::output_metadata()
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("{path}: {source}")]
+struct SendRequestDeserializeError {
+    path: String,
+    source: serde_json::Error,
+}
+
 impl From<TransportLookupError> for TerminalError {
     fn from(error: TransportLookupError) -> Self {
         Self::new_with_code(404, error.to_string())
     }
 }
 
-fn raw_send_options_deserialize_error_to_handler_error(
-    error: serde_value::DeserializerError,
+fn send_request_deserialize_error_to_handler_error(
+    error: SendRequestDeserializeError,
 ) -> HandlerError {
     TerminalError::new_with_code(400, error.to_string()).into()
 }
@@ -180,12 +242,13 @@ mod tests {
     use restate_sdk::service::{Discoverable, IntoServiceDefinition};
     use restate_sdk_shared_core::Version;
 
-    use crate::{RawSendOptions, StaticTransportRegistry, TransportKey, TransportLookupError};
+    use crate::{StaticTransportRegistry, TransportKey, TransportLookupError};
 
     use super::*;
 
     const START_MESSAGE_TYPE: u16 = 0x0000;
     const INPUT_COMMAND_MESSAGE_TYPE: u16 = 0x0400;
+    const OUTPUT_COMMAND_MESSAGE_TYPE: u16 = 0x0401;
     const RUN_COMMAND_MESSAGE_TYPE: u16 = 0x0411;
 
     mod protocol {
@@ -252,9 +315,27 @@ mod tests {
             #[prost(string, tag = "12")]
             pub name: ::prost::alloc::string::String,
         }
+
+        #[derive(Clone, PartialEq, Eq, ::prost::Message)]
+        pub struct Failure {
+            #[prost(uint32, tag = "1")]
+            pub code: u32,
+            #[prost(string, tag = "2")]
+            pub message: ::prost::alloc::string::String,
+        }
+
+        #[derive(Clone, PartialEq, Eq, ::prost::Message)]
+        pub struct OutputCommandMessage {
+            #[prost(message, optional, tag = "15")]
+            pub failure: ::core::option::Option<Failure>,
+            #[prost(string, tag = "12")]
+            pub name: ::prost::alloc::string::String,
+        }
     }
 
-    use protocol::{InputCommandMessage, RunCommandMessage, StartMessage};
+    use protocol::{
+        Failure, InputCommandMessage, OutputCommandMessage, RunCommandMessage, StartMessage,
+    };
 
     fn mailbox(input: &str) -> Mailbox {
         input.parse::<Mailbox>().expect("mailbox should parse")
@@ -277,7 +358,7 @@ mod tests {
         SendRequest {
             transport: TransportKey::new_unchecked("transactional"),
             message: OutboundMessage::new(message).expect("message should be outbound-valid"),
-            options: RawSendOptions::default(),
+            options: SendOptions::default(),
         }
     }
 
@@ -345,6 +426,19 @@ mod tests {
     where
         T: TransportResolver + Send + Sync + 'static,
     {
+        invoke_protocol_sdk_endpoint_with_payload(
+            service,
+            Bytes::from(serde_json::to_vec(request).expect("request should serialize")),
+        )
+    }
+
+    fn invoke_protocol_sdk_endpoint_with_payload<T>(
+        service: &ServiceImpl<T>,
+        payload: Bytes,
+    ) -> http::Response<restate_sdk::endpoint::ResponseBody>
+    where
+        T: TransportResolver + Send + Sync + 'static,
+    {
         let version = Version::maximum_supported_version();
         let mut body = BytesMut::new();
 
@@ -360,11 +454,7 @@ mod tests {
         body.extend_from_slice(&encode_protocol_message(
             INPUT_COMMAND_MESSAGE_TYPE,
             &InputCommandMessage {
-                value: Some(protocol::Value {
-                    content: Bytes::from(
-                        serde_json::to_vec(request).expect("request should serialize"),
-                    ),
-                }),
+                value: Some(protocol::Value { content: payload }),
                 ..InputCommandMessage::default()
             },
         ));
@@ -407,6 +497,18 @@ mod tests {
         assert_eq!(run_ty, RUN_COMMAND_MESSAGE_TYPE);
 
         RunCommandMessage::decode(run_payload).expect("message should decode as run command")
+    }
+
+    fn decode_protocol_failure(body: Bytes) -> Failure {
+        let mut body = body;
+        let (output_ty, output_payload) = decode_protocol_message(&mut body);
+
+        assert_eq!(output_ty, OUTPUT_COMMAND_MESSAGE_TYPE);
+
+        OutputCommandMessage::decode(output_payload)
+            .expect("message should decode as output command")
+            .failure
+            .expect("output should contain a terminal failure")
     }
 
     fn encode_protocol_message<M: ProstMessage>(message_type: u16, message: &M) -> Bytes {
@@ -512,6 +614,18 @@ mod tests {
         assert_eq!(discovery.ty, RestateServiceType::Service);
         assert_eq!(discovery.handlers.len(), 1);
         assert_eq!(discovery.handlers[0].name.as_str(), "send");
+        let input = discovery.handlers[0]
+            .input
+            .as_ref()
+            .expect("send should have input metadata");
+        assert_eq!(
+            input.json_schema,
+            <Json<SendRequest> as PayloadMetadata>::json_schema()
+        );
+        assert_eq!(
+            input.content_type.as_deref(),
+            Some(<Json<SendRequest> as PayloadMetadata>::input_metadata().accept_content_type)
+        );
 
         let _endpoint = Endpoint::builder()
             .bind(service.into_service_definition())
@@ -547,5 +661,49 @@ mod tests {
             Some(Version::maximum_supported_version().content_type())
         );
         assert_eq!(run.name, "send_email");
+    }
+
+    #[derive(Debug, serde::Deserialize, serde::Serialize)]
+    struct PathTestOptions {
+        tags: Vec<String>,
+    }
+
+    impl email_transport::TransportOption for PathTestOptions {
+        fn provider_key() -> &'static str {
+            "path-test"
+        }
+    }
+
+    #[tokio::test]
+    async fn malformed_options_return_terminal_400_with_json_path() {
+        let mut registry = StaticTransportRegistry::new();
+        registry.insert("transactional", SuccessfulTransport);
+        let mut option_registry = TransportOptionRegistry::new();
+        option_registry
+            .register::<PathTestOptions>()
+            .expect("path test option should register");
+        let service = ServiceImpl::new(registry).with_transport_options(option_registry);
+        let mut payload =
+            serde_json::to_value(request_with_attachment()).expect("request should serialize");
+        payload["options"]["transport_options"] = serde_json::json!({
+            "path-test": {"tags": "not-a-list"}
+        });
+
+        let response = invoke_protocol_sdk_endpoint_with_payload(
+            &service,
+            Bytes::from(serde_json::to_vec(&payload).expect("payload should serialize")),
+        );
+        let (status, _, body) = collect_response_body(response).await;
+        let error = decode_protocol_failure(body);
+
+        assert_eq!(status, http::StatusCode::OK);
+        assert_eq!(error.code, 400);
+        assert!(
+            error
+                .message
+                .contains("options.transport_options.path-test.tags"),
+            "decode error should include the failing JSON path: {}",
+            error.message
+        );
     }
 }

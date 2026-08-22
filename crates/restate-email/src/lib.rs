@@ -2,8 +2,8 @@
 //!
 //! This crate exposes the serializable email worker contract, an optional
 //! caller-side ingress transport, and an optional Restate service adapter.
-//! Provider-specific send options cross the queue boundary through
-//! [`RawSendOptions::transport_options`], using the provider-keyed wire
+//! Provider-specific send options cross the queue boundary through the
+//! registry-driven [`SendRequestSeed`], using the provider-keyed wire
 //! representation owned by `email-transport`.
 //!
 //! The Restate service adapter is available as [`ServiceImpl`] with the
@@ -51,7 +51,7 @@ pub mod transport;
 // flow through `SendOptions` directly.
 #[cfg(feature = "client")]
 pub use client::RestateTransport;
-pub use contract::{RawSendOptions, SendRequest, SendResponse, TransportKey};
+pub use contract::{SendRequest, SendRequestSeed, SendResponse, TransportKey};
 pub use email_transport::{
     CorrelationId, IdempotencyKey, STRING_NEWTYPE_MAX_BYTES, SendOptions, StringNewtypeError,
     TransportOption, TransportOptionRegistry, TransportOptionRegistryError, TransportOptions,

@@ -1,5 +1,5 @@
 ---
-status: accepted — expected to be superseded once seeded handler input lands
+status: superseded
 ---
 
 # Queue handler input is staged through an untyped value tree
@@ -30,10 +30,10 @@ SDK.
 - Seed errors are produced against a value tree, so they carry no JSON line, column, or path when
   they surface as a terminal 400.
 
-## Expected supersession
+## Supersession
 
 Both `restate_sdk::serde::Deserialize` and `PayloadMetadata` are static-function traits, so a
-userland `SeededJson<T>` wrapper can capture the request bytes, delegate `json_schema()` to
-`Json<T>` to keep service discovery unchanged, and decode inside the handler where the registry is
-in scope. That removes the staging type, the double decode, and the `serde-value` dependency
-without an SDK change.
+userland `SeededJson<T>` wrapper now captures the request bytes, delegates discovery metadata to
+`Json<T>`, and decodes through `SendRequestSeed` inside the handler where the registry is in scope.
+This removed the staging type, the double decode, and the `serde-value` dependency without an SDK
+change.

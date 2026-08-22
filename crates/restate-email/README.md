@@ -7,7 +7,7 @@
 
 ## Scope Contract
 
-- Defines a serializable `SendRequest` around a validated `email_message::OutboundMessage`.
+- Defines a serializable, registry-decoded `SendRequest` around a validated `email_message::OutboundMessage`.
 - Resolves named `email_transport::Transport` registrations and dispatches messages through them.
 - Exposes delivery as the Restate `Email.send` service handler.
 - Maps worker and transport failures into Restate retry semantics.
@@ -27,8 +27,8 @@ See the [crate documentation](https://docs.rs/restate-email/latest/restate_email
 
 ## Key Types
 
-- `SendRequest`: transport reference, validated outbound message, and raw send-time options.
-- `RawSendOptions`: wire-safe envelope overrides, timeout, idempotency key, correlation ID, and provider-specific transport options.
+- `SendRequest`: transport reference, validated outbound message, and typed send-time options.
+- `SendRequestSeed`: registry-driven deserializer for queued requests and provider-specific options.
 - `TransportResolver`: resolves a transport key to a configured `Transport`.
 - `StaticTransportRegistry`: owned registry for fixed-key worker setups.
 - `ServiceImpl`: Restate service wrapper that hydrates provider options and dispatches inside a named, journaled `ctx.run` action.
@@ -42,9 +42,10 @@ This preserves deployment-time transport switching, but switching transports
 may drop provider-specific behavior such as tags.
 
 `RestateTransport` consumes `SendOptions::idempotency_key` as Restate's
-`idempotency-key` ingress header. The key is not forwarded in `RawSendOptions`
-to the provider. This makes replaying the enqueue safe without accidentally
-reusing one key across Restate and provider idempotency domains.
+`idempotency-key` ingress header. The key is omitted from the queued
+`SendOptions`, so it is not forwarded to the provider. This makes replaying the
+enqueue safe without accidentally reusing one key across Restate and provider
+idempotency domains.
 
 The ingress client cannot inspect worker capabilities. Its capability setters
 are deployment assertions; unresolved attachment references remain disabled by

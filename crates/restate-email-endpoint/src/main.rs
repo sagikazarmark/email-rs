@@ -165,7 +165,7 @@ mod tests {
     use email_kit::message::{
         Address, Attachment, AttachmentReference, Body, ContentType, Message,
     };
-    use restate_email::{RawSendOptions, SendRequest, TransportKey};
+    use restate_email::{SendOptions, SendRequest, TransportKey};
     use serde_json::json;
     use tempfile::tempdir;
     use wiremock::matchers::{body_partial_json, method, path};
@@ -197,7 +197,7 @@ mod tests {
         SendRequest {
             transport: TransportKey::new_unchecked("transactional"),
             message,
-            options: RawSendOptions::default(),
+            options: SendOptions::default(),
         }
     }
 
@@ -224,7 +224,7 @@ mod tests {
         SendRequest {
             transport: TransportKey::new_unchecked("transactional"),
             message,
-            options: RawSendOptions::default(),
+            options: SendOptions::default(),
         }
     }
 

@@ -3,9 +3,9 @@ use std::time::Duration;
 use email_kit::transport::resend::ResendTransport;
 use email_message::ContentType;
 use email_message::{Address, Attachment, Body, EmailAddress, Envelope, Message, OutboundMessage};
+use email_transport::SendOptions;
 use restate_email::{
-    CorrelationId, IdempotencyKey, RawSendOptions, SendRequest, ServiceImpl,
-    StaticTransportRegistry, TransportKey,
+    CorrelationId, IdempotencyKey, SendRequest, ServiceImpl, StaticTransportRegistry, TransportKey,
 };
 use restate_sdk::{endpoint::Endpoint, http_server::HttpServer, service::IntoServiceDefinition};
 
@@ -25,7 +25,7 @@ fn sample_request(from: &str, to: &str) -> Result<SendRequest, Box<dyn std::erro
     )
     .build()?;
 
-    let mut options = RawSendOptions::default();
+    let mut options = SendOptions::default();
     options.envelope = Some(Envelope::new(
         Some(from.parse::<EmailAddress>()?),
         vec![to.parse::<EmailAddress>()?],

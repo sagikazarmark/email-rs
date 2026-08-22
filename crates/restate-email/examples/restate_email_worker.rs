@@ -8,8 +8,7 @@ use email_message::{
 };
 use email_transport::{ErrorKind, SendOptions, SendReport, Transport, TransportError};
 use restate_email::{
-    CorrelationId, IdempotencyKey, RawSendOptions, SendRequest, ServiceImpl,
-    StaticTransportRegistry, TransportKey,
+    CorrelationId, IdempotencyKey, SendRequest, ServiceImpl, StaticTransportRegistry, TransportKey,
 };
 use restate_sdk::{endpoint::Endpoint, http_server::HttpServer, service::IntoServiceDefinition};
 
@@ -60,7 +59,7 @@ fn sample_request() -> Result<SendRequest, Box<dyn std::error::Error>> {
     )
     .build()?;
 
-    let mut options = RawSendOptions::default();
+    let mut options = SendOptions::default();
     options.envelope = Some(Envelope::new(
         Some("bounce@example.com".parse::<EmailAddress>()?),
         vec!["recipient@example.com".parse::<EmailAddress>()?],

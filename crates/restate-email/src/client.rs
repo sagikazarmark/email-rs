@@ -5,9 +5,9 @@ use email_transport::{
     Capabilities, ErrorKind, MaybeSend, SendOptions, SendReport, StructuredSendCapability,
     Transport, TransportError,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-use crate::{RawSendOptions, SendRequest, SendResponse, TransportKey};
+use crate::{SendResponse, TransportKey};
 
 const ERROR_SOURCE_HEADER: &str = "x-restate-error-source";
 
@@ -30,7 +30,7 @@ impl RestateTransport {
     ///
     /// `SendOptions::idempotency_key` is consumed as Restate's
     /// `idempotency-key` request header. It is deliberately omitted from the
-    /// queued [`RawSendOptions`], so the provider does not receive the same key.
+    /// queued [`SendOptions`], so the provider does not receive the same key.
     #[must_use]
     pub fn new(
         ingress_base_url: reqwest::Url,
@@ -79,21 +79,23 @@ impl RestateTransport {
         message: &OutboundMessage,
         options: &SendOptions,
     ) -> Result<SendReport, TransportError> {
-        let mut raw_options = RawSendOptions::from_send_options(options).map_err(|error| {
+        let request = IngressSendRequest {
+            transport: &self.transport,
+            message,
+            options,
+        };
+        let body = serde_json::to_vec(&request).map_err(|error| {
             TransportError::new(
                 ErrorKind::Internal,
                 "failed to serialize Restate send options",
             )
             .with_source(error)
         })?;
-        raw_options.idempotency_key = None;
-
-        let request = SendRequest {
-            transport: self.transport.clone(),
-            message: message.clone(),
-            options: raw_options,
-        };
-        let mut request_builder = self.client.post(self.endpoint.clone()).json(&request);
+        let mut request_builder = self
+            .client
+            .post(self.endpoint.clone())
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body);
         if let Some(idempotency_key) = options.idempotency_key.as_ref() {
             request_builder = request_builder.header("idempotency-key", idempotency_key.as_str());
         }
@@ -124,6 +126,30 @@ impl Transport for RestateTransport {
     ) -> impl core::future::Future<Output = Result<SendReport, TransportError>> + MaybeSend + 'a
     {
         self.invoke(message, options)
+    }
+}
+
+struct IngressSendRequest<'a> {
+    transport: &'a TransportKey,
+    message: &'a OutboundMessage,
+    options: &'a SendOptions,
+}
+
+impl Serialize for IngressSendRequest<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct as _;
+
+        let mut state = serializer.serialize_struct("SendRequest", 3)?;
+        state.serialize_field("transport", self.transport)?;
+        state.serialize_field("message", self.message)?;
+        state.serialize_field(
+            "options",
+            &self.options.serializable_without_idempotency_key(),
+        )?;
+        state.end()
     }
 }
 

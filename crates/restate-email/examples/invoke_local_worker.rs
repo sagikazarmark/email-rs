@@ -5,9 +5,8 @@ use email_message::{
     Address, Attachment, AttachmentReference, Body, EmailAddress, Envelope, Message,
     OutboundMessage,
 };
-use restate_email::{
-    CorrelationId, IdempotencyKey, RawSendOptions, SendRequest, SendResponse, TransportKey,
-};
+use email_transport::SendOptions;
+use restate_email::{CorrelationId, IdempotencyKey, SendRequest, SendResponse, TransportKey};
 
 fn sample_request() -> Result<SendRequest, Box<dyn std::error::Error>> {
     let message = Message::builder(Body::html(String::from(
@@ -25,7 +24,7 @@ fn sample_request() -> Result<SendRequest, Box<dyn std::error::Error>> {
     )
     .build()?;
 
-    let mut options = RawSendOptions::default();
+    let mut options = SendOptions::default();
     options.envelope = Some(Envelope::new(
         Some("bounce@example.com".parse::<EmailAddress>()?),
         vec!["recipient@example.com".parse::<EmailAddress>()?],
