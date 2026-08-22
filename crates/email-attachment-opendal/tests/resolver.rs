@@ -4,8 +4,8 @@ use email_attachment::{AttachmentResolver, ResolveErrorKind, SchemeRouter};
 use email_attachment_opendal::OpendalResolver;
 use email_message::AttachmentReference;
 use opendal::{
-    Capability, Error, ErrorKind, OperationContext, Operator, layers::CapabilityOverrideLayer,
-    raw::*, services::Memory,
+    Buffer, BytesRange, Capability, EntryMode, Error, ErrorKind, Metadata, OperationContext,
+    Operator, layers::CapabilityOverrideLayer, raw::*, services::Memory,
 };
 
 #[derive(Debug)]
@@ -99,6 +99,118 @@ impl Service for ErrorService {
     }
 }
 
+#[derive(Debug)]
+struct UnderreportedLengthService {
+    body: Buffer,
+}
+
+impl Service for UnderreportedLengthService {
+    type Reader = UnderreportedLengthReader;
+    type Writer = ();
+    type Lister = ();
+    type Deleter = ();
+    type Copier = ();
+
+    fn info(&self) -> ServiceInfo {
+        ServiceInfo::with_scheme("underreported-length")
+    }
+
+    fn capability(&self) -> Capability {
+        Capability {
+            stat: true,
+            read: true,
+            ..Default::default()
+        }
+    }
+
+    async fn create_dir(
+        &self,
+        _: &OperationContext,
+        _: &str,
+        _: OpCreateDir,
+    ) -> opendal::Result<RpCreateDir> {
+        Err(unsupported())
+    }
+
+    async fn stat(&self, _: &OperationContext, _: &str, _: OpStat) -> opendal::Result<RpStat> {
+        Ok(RpStat::new(
+            Metadata::new(EntryMode::FILE).with_content_length(0),
+        ))
+    }
+
+    fn read(&self, _: &OperationContext, _: &str, _: OpRead) -> opendal::Result<Self::Reader> {
+        Ok(UnderreportedLengthReader {
+            body: self.body.clone(),
+        })
+    }
+
+    fn write(&self, _: &OperationContext, _: &str, _: OpWrite) -> opendal::Result<Self::Writer> {
+        Err(unsupported())
+    }
+
+    fn delete(&self, _: &OperationContext) -> opendal::Result<Self::Deleter> {
+        Err(unsupported())
+    }
+
+    fn list(&self, _: &OperationContext, _: &str, _: OpList) -> opendal::Result<Self::Lister> {
+        Err(unsupported())
+    }
+
+    fn copy(
+        &self,
+        _: &OperationContext,
+        _: &str,
+        _: &str,
+        _: OpCopy,
+        _: OpCopier,
+    ) -> opendal::Result<Self::Copier> {
+        Err(unsupported())
+    }
+
+    async fn rename(
+        &self,
+        _: &OperationContext,
+        _: &str,
+        _: &str,
+        _: OpRename,
+    ) -> opendal::Result<RpRename> {
+        Err(unsupported())
+    }
+
+    async fn presign(
+        &self,
+        _: &OperationContext,
+        _: &str,
+        _: OpPresign,
+    ) -> opendal::Result<RpPresign> {
+        Err(unsupported())
+    }
+}
+
+#[derive(Debug)]
+struct UnderreportedLengthReader {
+    body: Buffer,
+}
+
+impl oio::Read for UnderreportedLengthReader {
+    async fn open(
+        &self,
+        range: BytesRange,
+    ) -> opendal::Result<(RpRead, Box<dyn oio::ReadStreamDyn>)> {
+        Ok((RpRead::default(), Box::new(self.read_range(range)?)))
+    }
+
+    async fn read(&self, range: BytesRange) -> opendal::Result<(RpRead, Buffer)> {
+        Ok((RpRead::default(), self.read_range(range)?))
+    }
+}
+
+impl UnderreportedLengthReader {
+    fn read_range(&self, range: BytesRange) -> opendal::Result<Buffer> {
+        Ok(self.body.slice(range.to_content_range(self.body.len())?))
+    }
+}
+
 fn unsupported() -> Error {
     Error::new(ErrorKind::Unsupported, "operation is not supported")
 }
@@ -170,6 +282,22 @@ async fn caps_reads_when_stat_is_unavailable() {
         .expect_err("capped read detects oversized attachment");
 
     assert_eq!(error.kind, ResolveErrorKind::TooLarge);
+}
+
+#[tokio::test]
+async fn resolves_full_bytes_when_stat_underreports_content_length() {
+    let service = UnderreportedLengthService {
+        body: Buffer::from("full attachment bytes"),
+    };
+    let operator = Operator::from_parts(OperationContext::default(), Arc::new(service));
+    let resolver = OpendalResolver::new(operator, 1024);
+
+    let resolved = resolver
+        .resolve(&AttachmentReference::new("attachment.bin"))
+        .await
+        .expect("attachment resolves despite stale metadata");
+
+    assert_eq!(resolved.bytes, b"full attachment bytes");
 }
 
 #[tokio::test]

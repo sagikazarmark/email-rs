@@ -22,7 +22,7 @@ services-s3 = ["opendal/services-s3"]
 [dependencies]
 email-attachment = { workspace = true }
 email-message = { workspace = true }
-futures-util = { workspace = true, features = ["io"] }
+futures-util = { workspace = true }
 opendal = { workspace = true }
 
 [dev-dependencies]

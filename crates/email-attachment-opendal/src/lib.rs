@@ -8,15 +8,15 @@ use email_attachment::{
     AttachmentResolveError, AttachmentResolver, ResolveErrorKind, ResolvedAttachment,
 };
 use email_message::AttachmentReference;
-use futures_util::io::AsyncReadExt;
+use futures_util::TryStreamExt;
 use opendal::Operator;
 
 /// Resolves attachment paths through a pre-configured OpenDAL operator.
 ///
 /// Where the service supports `stat`, an oversized object is rejected before
-/// any bytes are read. Every read is then capped one byte past the limit, so
-/// the size policy holds even when a service reports no length or reports one
-/// that has gone stale.
+/// any bytes are read. The resolver then retains at most one byte past the
+/// limit, so the size policy holds even when a service reports no length or
+/// reports one that has gone stale.
 #[derive(Clone, Debug)]
 pub struct OpendalResolver {
     operator: Operator,
@@ -65,20 +65,28 @@ impl AttachmentResolver for OpendalResolver {
             }
         }
 
-        // Read at most one byte past the limit, so an object that is larger
-        // than the limit is detected without ever being buffered whole.
+        // OpenDAL's AsyncRead adapter bounds `..` using stat metadata. Stream
+        // the unbounded range instead, retaining only enough to enforce the
+        // configured limit when that metadata is stale.
         let read_limit = self.max_bytes.saturating_add(1);
-        let reader = self
+        let mut stream = self
             .operator
             .reader(path)
             .await
             .map_err(map_error)?
-            .into_futures_async_read(..)
+            .into_stream(..)
             .await
             .map_err(map_error)?;
-        let mut reader = reader.take(read_limit as u64);
         let mut bytes = Vec::new();
-        reader.read_to_end(&mut bytes).await.map_err(map_io_error)?;
+        while bytes.len() < read_limit {
+            let Some(buffer) = stream.try_next().await.map_err(map_error)? else {
+                break;
+            };
+            let remaining = read_limit - bytes.len();
+            for chunk in buffer.slice(..buffer.len().min(remaining)) {
+                bytes.extend_from_slice(&chunk);
+            }
+        }
 
         if bytes.len() > self.max_bytes {
             return Err(too_large(path, self.max_bytes));
@@ -98,26 +106,6 @@ fn is_relative_path_within_root(path: &str) -> bool {
 fn map_error(error: opendal::Error) -> AttachmentResolveError {
     let kind = classify_error(&error);
     AttachmentResolveError::new(kind, "OpenDAL failed to resolve the attachment").with_source(error)
-}
-
-fn map_io_error(error: std::io::Error) -> AttachmentResolveError {
-    let kind = error
-        .get_ref()
-        .and_then(|source| source.downcast_ref::<opendal::Error>())
-        .map(classify_error)
-        .unwrap_or_else(|| match error.kind() {
-            std::io::ErrorKind::NotFound => ResolveErrorKind::NotFound,
-            std::io::ErrorKind::PermissionDenied => ResolveErrorKind::Denied,
-            std::io::ErrorKind::InvalidInput | std::io::ErrorKind::Unsupported => {
-                ResolveErrorKind::UnsupportedReference
-            }
-            std::io::ErrorKind::Interrupted
-            | std::io::ErrorKind::TimedOut
-            | std::io::ErrorKind::WouldBlock => ResolveErrorKind::Transient,
-            _ => ResolveErrorKind::Internal,
-        });
-    AttachmentResolveError::new(kind, "OpenDAL failed while reading the attachment")
-        .with_source(error)
 }
 
 fn classify_error(error: &opendal::Error) -> ResolveErrorKind {
