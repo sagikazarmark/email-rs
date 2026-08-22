@@ -639,6 +639,10 @@ impl<'a> TransportOptionsSeed<'a> {
     /// Skip provider keys that the registry has no decoder for instead of
     /// erroring, so payloads can flow across workers compiled with different
     /// adapter feature sets.
+    ///
+    /// With the `tracing` feature enabled, each skipped key is emitted as a
+    /// `debug` event carrying a `provider_key` field, so a mistyped key remains
+    /// diagnosable even though it is not an error.
     #[must_use]
     pub fn ignore_unknown_provider_keys(mut self) -> Self {
         self.ignore_unknown = true;
@@ -687,6 +691,15 @@ impl<'de, 'a> serde::de::Visitor<'de> for TransportOptionsVisitor<'a> {
                     options: &mut options,
                 })?;
             } else if self.ignore_unknown {
+                // Ignoring is the normal union case, not a fault: a payload may
+                // carry options for providers this worker was not built with.
+                // It is traced because it is also how a mistyped provider key
+                // disappears without a trace otherwise.
+                #[cfg(feature = "tracing")]
+                ::tracing::debug!(
+                    provider_key = key.as_str(),
+                    "ignored unregistered TransportOption provider key"
+                );
                 map.next_value::<serde::de::IgnoredAny>()?;
             } else {
                 return Err(serde::de::Error::custom(format_args!(
@@ -1343,6 +1356,81 @@ mod tests {
         assert_eq!(
             hydrated.get::<TestOption>().map(|value| value.0.as_str()),
             Some("value")
+        );
+    }
+
+    #[test]
+    #[cfg(all(feature = "serde", feature = "tracing"))]
+    fn transport_options_seed_traces_ignored_provider_keys() {
+        use std::sync::{Arc, Mutex};
+
+        use ::tracing::field::{Field, Visit};
+        use serde::de::DeserializeSeed as _;
+        use tracing_subscriber::{Layer, layer::Context, prelude::*, registry::Registry};
+
+        #[derive(Clone, Default)]
+        struct RecordedEvents {
+            fields: Arc<Mutex<Vec<String>>>,
+        }
+
+        struct EventLayer(RecordedEvents);
+
+        impl<S> Layer<S> for EventLayer
+        where
+            S: ::tracing::Subscriber,
+        {
+            fn on_event(&self, event: &::tracing::Event<'_>, _ctx: Context<'_, S>) {
+                let mut recorder = FieldRecorder::default();
+                event.record(&mut recorder);
+                self.0
+                    .fields
+                    .lock()
+                    .expect("event mutex poisoned")
+                    .extend(recorder.fields);
+            }
+        }
+
+        #[derive(Default)]
+        struct FieldRecorder {
+            fields: Vec<String>,
+        }
+
+        impl Visit for FieldRecorder {
+            fn record_str(&mut self, field: &Field, value: &str) {
+                self.fields.push(format!("{}={value}", field.name()));
+            }
+
+            fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
+                self.fields.push(format!("{}={value:?}", field.name()));
+            }
+        }
+
+        let recorded = RecordedEvents::default();
+        let subscriber = Registry::default().with(EventLayer(recorded.clone()));
+
+        let mut registry = TransportOptionRegistry::new();
+        registry
+            .register::<TestOption>()
+            .expect("register succeeds");
+
+        ::tracing::subscriber::with_default(subscriber, || {
+            registry
+                .transport_options_seed()
+                .ignore_unknown_provider_keys()
+                .deserialize(serde_json::json!({"missing-provider": {"anything": 1}}))
+                .expect("ignore_unknown succeeds");
+        });
+
+        let fields = recorded
+            .fields
+            .lock()
+            .expect("event mutex poisoned")
+            .clone();
+        assert!(
+            fields
+                .iter()
+                .any(|field| field == "provider_key=missing-provider"),
+            "ignored provider key should be traced: {fields:?}"
         );
     }
 

@@ -17,7 +17,7 @@ required-features = ["transport-all"]
 doc = false
 
 [features]
-default = ["attachment-opendal", "email-kit/default", "restate-email/default", "restate-email/rfc5322-string-compat", "restate-email/schemars", "transport-all"]
+default = ["attachment-opendal", "email-kit/default", "email-kit/tracing", "restate-email/default", "restate-email/rfc5322-string-compat", "restate-email/schemars", "transport-all"]
 attachment-opendal = [
     "dep:opendal",
     "email-kit/attachment-opendal",
