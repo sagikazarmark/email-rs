@@ -28,7 +28,12 @@ attachment-opendal = [
     "opendal/services-http",
     "opendal/services-s3",
 ]
-transport-all = ["attachment-opendal", "email-kit/transport-all"]
+transport-all = [
+    "attachment-opendal",
+    "email-kit/serde",
+    "email-kit/transport-all",
+    "restate-email/service",
+]
 
 [dependencies]
 anyhow = "1"
