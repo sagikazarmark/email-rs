@@ -403,7 +403,8 @@ async fn unresolved_attachment_reference_returns_unsupported_feature_with_resolv
     // path so they know how to materialize the Reference.
     let msg = error.to_string();
     assert!(
-        msg.contains("email_attachment::resolve_message_attachments"),
+        msg.contains("email_attachment::ResolvingTransport")
+            && msg.contains("email_attachment::prepare_attachments"),
         "error should point at the resolver: {msg}"
     );
 }

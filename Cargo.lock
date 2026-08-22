@@ -821,6 +821,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "email-attachment"
+version = "0.7.0"
+dependencies = [
+ "email-message",
+ "email-transport",
+ "email-transport-test",
+ "tokio",
+]
+
+[[package]]
 name = "email-kit"
 version = "0.7.0"
 dependencies = [

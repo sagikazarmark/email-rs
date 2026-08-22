@@ -13,6 +13,7 @@ keywords = ["email", "smtp", "mail", "async", "mailer"]
 categories = ["email", "network-programming", "asynchronous"]
 
 [workspace.dependencies]
+email-attachment = { path = "crates/email-attachment", version = "0.7.0", default-features = false }
 email-kit = { path = "crates/email-kit", version = "0.7.0", default-features = false }
 email-message = { path = "crates/email-message", version = "0.7.0", default-features = false }
 email-message-wire = { path = "crates/email-message-wire", version = "0.7.0", default-features = false }

@@ -184,10 +184,10 @@ pub trait RawTransport: RuntimeBound {
 /// option.
 ///
 /// **Hints.** `raw_rfc822`, `custom_envelope`, `custom_headers`,
-/// `attachments`, `inline_attachments` are purely declarative. They
-/// communicate intent to callers; the kernel neither validates inputs
-/// against the flag nor checks that an advertising adapter handles them
-/// correctly.
+/// `attachments`, `inline_attachments`, and `attachment_references` are purely
+/// declarative. They communicate intent to callers; the kernel neither
+/// validates inputs against the flag nor checks that an advertising adapter
+/// handles them correctly.
 ///
 /// # Limits
 ///
@@ -243,6 +243,8 @@ pub struct Capabilities {
     pub attachments: bool,
     /// Supports inline attachments referenced by content ID.
     pub inline_attachments: bool,
+    /// Accepts unresolved attachment references for preparation before send.
+    pub attachment_references: bool,
     /// Forwards [`SendOptions::idempotency_key`] to the provider.
     pub idempotency_key: bool,
     /// Enforces [`SendOptions::timeout`] around the provider call.
@@ -295,6 +297,13 @@ impl Capabilities {
     #[must_use]
     pub const fn with_inline_attachments(mut self, value: bool) -> Self {
         self.inline_attachments = value;
+        self
+    }
+
+    /// Set whether unresolved attachment references are supported.
+    #[must_use]
+    pub const fn with_attachment_references(mut self, value: bool) -> Self {
+        self.attachment_references = value;
         self
     }
 
@@ -907,6 +916,7 @@ mod tests {
                 custom_headers: false,
                 attachments: false,
                 inline_attachments: false,
+                attachment_references: false,
                 idempotency_key: false,
                 timeout: false,
             }

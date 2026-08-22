@@ -1,0 +1,22 @@
+[package]
+name = "email-attachment"
+version = { workspace = true }
+description = "Attachment preparation and resolving transport for email-rs"
+edition = { workspace = true }
+rust-version = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+keywords = { workspace = true }
+categories = { workspace = true }
+
+[dependencies]
+email-message = { workspace = true }
+email-transport = { workspace = true }
+
+[dev-dependencies]
+email-transport-test = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[package.metadata.docs.rs]
+all-features = true

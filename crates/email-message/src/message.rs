@@ -200,10 +200,12 @@ impl<'a> arbitrary::Arbitrary<'a> for Header {
     }
 }
 
-/// An unresolved external attachment body location.
+/// An unresolved external attachment body reference.
 ///
-/// Wire renderers reject references; resolve the URI to bytes and replace the
-/// body before rendering.
+/// The value is opaque and interpreted entirely by the configured resolver. It
+/// may be a URI, a plain key, or a provider identifier. The `uri` field and
+/// accessor retain their names for wire compatibility. Wire renderers reject
+/// references until a preparation layer replaces them with bytes.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
@@ -214,13 +216,13 @@ pub struct AttachmentReference {
 }
 
 impl AttachmentReference {
-    /// Creates a reference from an application-defined URI.
+    /// Creates a reference from an application-defined opaque value.
     #[must_use]
     pub fn new(uri: impl Into<String>) -> Self {
         Self { uri: uri.into() }
     }
 
-    /// Returns the application-defined URI.
+    /// Returns the resolver-interpreted value.
     #[must_use]
     pub fn uri(&self) -> &str {
         &self.uri

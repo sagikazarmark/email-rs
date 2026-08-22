@@ -17,6 +17,7 @@
 
 ## Workspace Crates
 
+- [`email-attachment`](crates/email-attachment): attachment resolution, preparation, and transport decoration.
 - [`email-kit`](crates/email-kit): flagship facade for the message, transport, wire, and provider crates.
 - [`email-message`](crates/email-message): typed outbound message and address model.
 - [`email-message-wire`](crates/email-message-wire): RFC822 and MIME parsing and rendering.

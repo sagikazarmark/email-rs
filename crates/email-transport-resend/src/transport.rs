@@ -305,7 +305,8 @@ fn map_attachment(attachment: &Attachment) -> Result<CreateAttachment, Transport
         return Err(transport_error(
             ErrorKind::UnsupportedFeature,
             "AttachmentBody variant not supported by structured Resend endpoint; \
-             resolve references via `email_attachment::resolve_message_attachments` before send",
+             wrap the transport in `email_attachment::ResolvingTransport` or call \
+             `email_attachment::prepare_attachments` before send",
         ));
     };
 
