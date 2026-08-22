@@ -10,6 +10,7 @@
 ## Features
 
 - **Typed messages:** model addresses, bodies, attachments, envelopes, and outbound messages independently of any provider.
+- **Attachment adapters:** resolve attachment paths from any OpenDAL-backed storage service.
 - **Transport abstraction:** send structured messages or rendered RFC822 through a common transport contract.
 - **Wire support:** parse and render RFC822 and MIME messages.
 - **Provider adapters:** deliver through SMTP with Lettre or through Resend.
@@ -18,6 +19,7 @@
 ## Workspace Crates
 
 - [`email-attachment`](crates/email-attachment): attachment resolution, preparation, and transport decoration.
+- [`email-attachment-opendal`](crates/email-attachment-opendal): attachment resolution through configured OpenDAL storage operators.
 - [`email-kit`](crates/email-kit): flagship facade for the message, transport, wire, and provider crates.
 - [`email-message`](crates/email-message): typed outbound message and address model.
 - [`email-message-wire`](crates/email-message-wire): RFC822 and MIME parsing and rendering.

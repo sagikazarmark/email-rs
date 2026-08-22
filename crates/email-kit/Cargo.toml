@@ -12,12 +12,14 @@ categories = { workspace = true }
 
 [features]
 default = [
+    "email-attachment-opendal?/default",
     "email-message/default",
     "email-transport/default",
     "email-transport-lettre?/default",
     "email-transport-resend?/default",
 ]
 arbitrary = ["email-message/arbitrary"]
+attachment-opendal = ["dep:email-attachment-opendal"]
 schemars = ["email-message/schemars", "email-transport/schemars"]
 serde = [
     "email-message/serde",
@@ -31,6 +33,8 @@ transport-resend = ["dep:email-transport-resend"]
 wire = ["dep:email-message-wire"]
 
 [dependencies]
+email-attachment = { workspace = true, default-features = false }
+email-attachment-opendal = { workspace = true, default-features = false, optional = true }
 email-message = { workspace = true, default-features = false }
 email-message-wire = { workspace = true, default-features = false, optional = true }
 email-transport = { workspace = true, default-features = false }

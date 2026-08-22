@@ -14,6 +14,7 @@ categories = ["email", "network-programming", "asynchronous"]
 
 [workspace.dependencies]
 email-attachment = { path = "crates/email-attachment", version = "0.7.0", default-features = false }
+email-attachment-opendal = { path = "crates/email-attachment-opendal", version = "0.7.0", default-features = false }
 email-kit = { path = "crates/email-kit", version = "0.7.0", default-features = false }
 email-message = { path = "crates/email-message", version = "0.7.0", default-features = false }
 email-message-wire = { path = "crates/email-message-wire", version = "0.7.0", default-features = false }
@@ -24,6 +25,8 @@ email-transport-test = { path = "crates/email-transport-test", default-features 
 restate-email = { path = "crates/restate-email", version = "0.7.0", default-features = false }
 
 erased-serde = "0.4"
+futures-util = "0.3"
+opendal = { version = "0.58.2", default-features = false }
 proptest = "1"
 reqwest = { version = "0.13", default-features = false }
 restate-sdk = "0.11"

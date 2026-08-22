@@ -168,7 +168,8 @@ impl AttachmentResolver for MapResolver {
 /// Resolver combinator that routes references by their leading scheme.
 ///
 /// Both `scheme:value` and `scheme://value` select the resolver registered for
-/// `scheme`. The selected resolver receives the original, unmodified reference.
+/// `scheme`. The selected resolver receives only `value`; the router strips the
+/// leading `scheme:` and an optional `//` before dispatch.
 #[derive(Default)]
 pub struct SchemeRouter {
     resolvers: BTreeMap<String, Box<dyn ErasedAttachmentResolver>>,
@@ -208,17 +209,21 @@ impl AttachmentResolver for SchemeRouter {
         &self,
         reference: &AttachmentReference,
     ) -> Result<ResolvedAttachment, AttachmentResolveError> {
-        let scheme = reference.uri().split_once(':').map(|(scheme, _)| scheme);
-        let resolver = scheme.and_then(|scheme| self.resolvers.get(scheme));
-        match resolver {
-            Some(resolver) => resolver.resolve(reference).await,
-            None => Err(AttachmentResolveError::new(
+        let route = reference.uri().split_once(':');
+        let resolver = route.and_then(|(scheme, _)| self.resolvers.get(scheme));
+        match (resolver, route) {
+            (Some(resolver), Some((_, value))) => {
+                let value = value.strip_prefix("//").unwrap_or(value);
+                resolver.resolve(&AttachmentReference::new(value)).await
+            }
+            (None, _) => Err(AttachmentResolveError::new(
                 ResolveErrorKind::UnsupportedReference,
                 format!(
                     "no attachment resolver is registered for reference `{}`",
                     reference.uri()
                 ),
             )),
+            _ => unreachable!("a resolver requires a parsed route"),
         }
     }
 }

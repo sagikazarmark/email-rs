@@ -5,7 +5,7 @@
 
 **Attachment preparation for provider-neutral outbound email.**
 
-`AttachmentResolver` materializes opaque `AttachmentReference` values into bytes. `MapResolver` supports plain in-memory keys, while `SchemeRouter` dispatches references to resolvers by prefix. `prepare_attachments` applies shared per-attachment and total size limits.
+`AttachmentResolver` materializes opaque `AttachmentReference` values into bytes. `MapResolver` supports plain in-memory keys, while `SchemeRouter` dispatches references by prefix and strips `scheme:` plus an optional `//` before calling the selected resolver. `prepare_attachments` applies shared per-attachment and total size limits.
 
 `ResolvingTransport` composes preparation onto any `email-transport` implementation. Byte-only messages use the inner transport's borrowed send path unchanged; reference-backed messages are materialized and delegated as owned messages.
 

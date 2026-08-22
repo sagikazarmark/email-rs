@@ -72,6 +72,7 @@ jobs:
 
           for package in \
             email-attachment \
+            email-attachment-opendal \
             email-kit \
             email-message \
             email-message-wire \
@@ -92,6 +93,8 @@ jobs:
           set -euo pipefail
 
           for package_feature in \
+            email-attachment-opendal/services-memory \
+            email-kit/attachment-opendal \
             email-kit/serde \
             email-kit/schemars \
             email-kit/arbitrary \

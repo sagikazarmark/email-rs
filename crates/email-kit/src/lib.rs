@@ -3,6 +3,9 @@
 //! `email-kit` lets applications depend on one crate while still keeping the
 //! lower-level crates available through stable namespaces:
 //!
+//! - `attachment` re-exports `email-attachment`.
+//! - Enable `attachment-opendal` for `attachment::opendal`, which re-exports
+//!   `email-attachment-opendal`.
 //! - `message` re-exports `email-message`.
 //! - `transport` re-exports `email-transport`.
 //! - Enable `transport-lettre` for `transport::lettre`, which re-exports
@@ -15,9 +18,10 @@
 //! # Features
 //!
 //! The default feature set forwards the default features of the always-present
-//! message and transport crates. It does not enable `wire` or a provider
-//! transport.
+//! message and transport crates. It does not enable `wire`, an attachment
+//! adapter, or a provider transport.
 //!
+//! - `attachment-opendal`: the OpenDAL resolver at `attachment::opendal`.
 //! - `wire`: RFC 822/MIME parsing and rendering through `wire`.
 //! - `transport-lettre`: the Lettre SMTP adapter at `transport::lettre`.
 //! - `transport-resend`: the Resend adapter at `transport::resend`.
@@ -112,6 +116,7 @@
 //! # lettre_example().expect("Lettre transport example should build");
 //! ```
 
+pub mod attachment;
 pub use email_message as message;
 #[cfg(feature = "wire")]
 pub use email_message_wire as wire;
@@ -120,6 +125,7 @@ pub mod transport;
 
 /// Common imports for applications using the email-rs crate family.
 pub mod prelude {
+    pub use email_attachment::*;
     pub use email_message::*;
     #[cfg(feature = "wire")]
     pub use email_message_wire::*;

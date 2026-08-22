@@ -25,9 +25,7 @@ async fn map_resolver_reports_missing_references() {
 
 #[tokio::test]
 async fn scheme_router_dispatches_colon_and_slash_references() {
-    let resolver = MapResolver::new()
-        .with_entry("asset:logo", b"colon")
-        .with_entry("asset://logo", b"slashes");
+    let resolver = MapResolver::new().with_entry("logo", b"image");
     let router = SchemeRouter::new().with_resolver("asset", resolver);
 
     let colon = router
@@ -39,8 +37,8 @@ async fn scheme_router_dispatches_colon_and_slash_references() {
         .await
         .expect("slash reference resolves");
 
-    assert_eq!(colon.bytes, b"colon");
-    assert_eq!(slashes.bytes, b"slashes");
+    assert_eq!(colon.bytes, b"image");
+    assert_eq!(slashes.bytes, b"image");
 }
 
 #[tokio::test]
