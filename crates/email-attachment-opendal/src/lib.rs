@@ -12,6 +12,11 @@ use futures_util::io::AsyncReadExt;
 use opendal::Operator;
 
 /// Resolves attachment paths through a pre-configured OpenDAL operator.
+///
+/// Where the service supports `stat`, an oversized object is rejected before
+/// any bytes are read. Every read is then capped one byte past the limit, so
+/// the size policy holds even when a service reports no length or reports one
+/// that has gone stale.
 #[derive(Clone, Debug)]
 pub struct OpendalResolver {
     operator: Operator,
@@ -49,35 +54,32 @@ impl AttachmentResolver for OpendalResolver {
             ));
         }
 
-        let bytes = if self.operator.info().capability().stat {
+        // `stat` is an early rejection only. Its reported length is never used
+        // as the read range: it can be stale by the time the read starts, and a
+        // service that reports no length would otherwise silently truncate the
+        // attachment to nothing.
+        if self.operator.info().capability().stat {
             let metadata = self.operator.stat(path).await.map_err(map_error)?;
             if metadata.content_length() > self.max_bytes as u64 {
                 return Err(too_large(path, self.max_bytes));
             }
-            self.operator
-                .reader(path)
-                .await
-                .map_err(map_error)?
-                .read(0..metadata.content_length())
-                .await
-                .map_err(map_error)?
-                .to_vec()
-        } else {
-            let read_limit = self.max_bytes.saturating_add(1);
-            let reader = self
-                .operator
-                .reader_with(path)
-                .chunk(read_limit.max(1))
-                .await
-                .map_err(map_error)?
-                .into_futures_async_read(..)
-                .await
-                .map_err(map_error)?;
-            let mut reader = reader.take(read_limit as u64);
-            let mut bytes = Vec::new();
-            reader.read_to_end(&mut bytes).await.map_err(map_io_error)?;
-            bytes
-        };
+        }
+
+        // Read at most one byte past the limit, so an object that is larger
+        // than the limit is detected without ever being buffered whole.
+        let read_limit = self.max_bytes.saturating_add(1);
+        let reader = self
+            .operator
+            .reader(path)
+            .await
+            .map_err(map_error)?
+            .into_futures_async_read(..)
+            .await
+            .map_err(map_error)?;
+        let mut reader = reader.take(read_limit as u64);
+        let mut bytes = Vec::new();
+        reader.read_to_end(&mut bytes).await.map_err(map_io_error)?;
+
         if bytes.len() > self.max_bytes {
             return Err(too_large(path, self.max_bytes));
         }
