@@ -2,6 +2,7 @@
 name = "restate-email"
 version = { workspace = true }
 description = "Restate email worker contracts and service adapter"
+autotests = false
 edition = { workspace = true }
 rust-version = { workspace = true }
 license = { workspace = true }
@@ -52,6 +53,18 @@ reqwest = { workspace = true, features = ["json"], default-features = false }
 restate-sdk-shared-core = "7.0"
 tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
 wiremock = "0.6"
+
+[[test]]
+name = "restate_transport"
+path = "tests/restate_transport.rs"
+
+[[test]]
+name = "send_request_wire"
+path = "tests/send_request_wire.rs"
+
+[[test]]
+name = "service_contract"
+path = "tests/service_contract.rs"
 
 [[example]]
 name = "direct_or_restate"

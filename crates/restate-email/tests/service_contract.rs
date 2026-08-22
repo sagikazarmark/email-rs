@@ -1,9 +1,12 @@
 #![cfg(feature = "service")]
 
+mod support;
+
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 
+use bytes::Bytes;
 use email_kit::transport::transport_option_registry;
 use email_message::{Address, Attachment, AttachmentBody, Body, Mailbox, Message, OutboundMessage};
 use email_message::{ContentType, Envelope};
@@ -12,45 +15,13 @@ use restate_email::{
     CorrelationId, IdempotencyKey, SendOptions, SendRequest, SendRequestSeed, ServiceImpl,
     StaticTransportRegistry, TransportKey, TransportOption, TransportOptionRegistry,
 };
+use restate_sdk_shared_core::Version;
 use serde::de::DeserializeSeed as _;
 use serde::{Deserialize, Serialize};
-
-fn mailbox(input: &str) -> Mailbox {
-    input.parse::<Mailbox>().expect("mailbox should parse")
-}
-
-fn message_with_attachment(bytes: &[u8]) -> OutboundMessage {
-    let message = Message::builder(Body::text("hello"))
-        .from_mailbox(mailbox("from@example.com"))
-        .add_to(Address::Mailbox(mailbox("to@example.com")))
-        .add_attachment(
-            Attachment::bytes(
-                ContentType::try_from("application/pdf").expect("content type should parse"),
-                bytes.to_vec(),
-            )
-            .with_filename("report.pdf"),
-        )
-        .build()
-        .expect("message should validate");
-    OutboundMessage::new(message).expect("message should be outbound-valid")
-}
-
-fn deserialize_send_options(value: serde_json::Value) -> SendOptions {
-    transport_option_registry()
-        .send_options_seed()
-        .ignore_unknown_transport_options()
-        .deserialize(value)
-        .expect("send options should deserialize")
-}
-
-fn deserialize_send_request(
-    value: serde_json::Value,
-    registry: &TransportOptionRegistry,
-) -> SendRequest {
-    SendRequestSeed::new(registry)
-        .deserialize(value)
-        .expect("send email request should deserialize")
-}
+use support::{
+    collect_response_body, decode_protocol_failure, decode_protocol_run_command,
+    invoke_protocol_sdk_endpoint, invoke_protocol_sdk_endpoint_with_payload,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RecordedSend {
@@ -72,9 +43,20 @@ struct CustomSendOption {
     label: String,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct PathTestOptions {
+    tags: Vec<String>,
+}
+
 impl TransportOption for CustomSendOption {
     fn provider_key() -> &'static str {
         "custom"
+    }
+}
+
+impl TransportOption for PathTestOptions {
+    fn provider_key() -> &'static str {
+        "path-test"
     }
 }
 
@@ -126,6 +108,51 @@ impl Transport for RecordingTransport {
                 .with_accepted(vec!["to@example.com".parse().expect("email parses")]))
         })
     }
+}
+
+fn mailbox(input: &str) -> Mailbox {
+    input.parse::<Mailbox>().expect("mailbox should parse")
+}
+
+fn message_with_attachment(bytes: &[u8]) -> OutboundMessage {
+    let message = Message::builder(Body::text("hello"))
+        .from_mailbox(mailbox("from@example.com"))
+        .add_to(Address::Mailbox(mailbox("to@example.com")))
+        .add_attachment(
+            Attachment::bytes(
+                ContentType::try_from("application/pdf").expect("content type should parse"),
+                bytes.to_vec(),
+            )
+            .with_filename("report.pdf"),
+        )
+        .build()
+        .expect("message should validate");
+    OutboundMessage::new(message).expect("message should be outbound-valid")
+}
+
+fn request_with_attachment() -> SendRequest {
+    SendRequest {
+        transport: TransportKey::new_unchecked("transactional"),
+        message: message_with_attachment(b"attached"),
+        options: SendOptions::default(),
+    }
+}
+
+fn deserialize_send_options(value: serde_json::Value) -> SendOptions {
+    transport_option_registry()
+        .send_options_seed()
+        .ignore_unknown_transport_options()
+        .deserialize(value)
+        .expect("send options should deserialize")
+}
+
+fn deserialize_send_request(
+    value: serde_json::Value,
+    registry: &TransportOptionRegistry,
+) -> SendRequest {
+    SendRequestSeed::new(registry)
+        .deserialize(value)
+        .expect("send email request should deserialize")
 }
 
 #[test]
@@ -249,6 +276,61 @@ async fn send_dispatches_message_and_options() {
             .and_then(Envelope::mail_from)
             .map(email_message::EmailAddress::as_str),
         Some("bounce@example.com")
+    );
+}
+
+#[tokio::test]
+async fn raw_protocol_endpoint_emits_run_command_for_send_side_effect() {
+    let transport = RecordingTransport::default();
+    let mut registry = StaticTransportRegistry::new();
+    registry.insert("transactional", transport);
+    let service = ServiceImpl::new(registry);
+
+    let response = invoke_protocol_sdk_endpoint(&service, &request_with_attachment());
+    let (status, headers, body) = collect_response_body(response).await;
+    let run = decode_protocol_run_command(body);
+
+    assert_eq!(status, http::StatusCode::OK);
+    assert_eq!(
+        headers
+            .get("content-type")
+            .and_then(|value| value.to_str().ok()),
+        Some(Version::maximum_supported_version().content_type())
+    );
+    assert_eq!(run.name, "send_email");
+}
+
+#[tokio::test]
+async fn malformed_options_return_terminal_400_with_json_path() {
+    let transport = RecordingTransport::default();
+    let mut registry = StaticTransportRegistry::new();
+    registry.insert("transactional", transport);
+    let mut option_registry = TransportOptionRegistry::new();
+    option_registry
+        .register::<PathTestOptions>()
+        .expect("path test option should register");
+    let service = ServiceImpl::new(registry).with_transport_options(option_registry);
+    let mut payload =
+        serde_json::to_value(request_with_attachment()).expect("request should serialize");
+    payload["options"]["transport_options"] = serde_json::json!({
+        "path-test": {"tags": "not-a-list"}
+    });
+
+    let response = invoke_protocol_sdk_endpoint_with_payload(
+        &service,
+        Bytes::from(serde_json::to_vec(&payload).expect("payload should serialize")),
+    );
+    let (status, _, body) = collect_response_body(response).await;
+    let error = decode_protocol_failure(body);
+
+    assert_eq!(status, http::StatusCode::OK);
+    assert_eq!(error.code, 400);
+    assert!(
+        error
+            .message
+            .contains("options.transport_options.path-test.tags"),
+        "decode error should include the failing JSON path: {}",
+        error.message
     );
 }
 
