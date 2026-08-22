@@ -1,6 +1,8 @@
 use std::sync::{Arc, Mutex, PoisonError};
 
-use email_attachment::{AttachmentResolveError, MapResolver, ResolveErrorKind, ResolvingTransport};
+use email_attachment::{
+    AttachmentResolveError, MapResolver, PreparationLimits, ResolveErrorKind, ResolvingTransport,
+};
 use email_message::{
     Address, Attachment, AttachmentBody, AttachmentReference, Body, ContentType, Message,
     OutboundMessage,
@@ -85,6 +87,25 @@ async fn decorator_borrows_byte_only_messages_without_preparation() {
         .expect("send succeeds");
 
     assert_eq!(inner.routes(), vec!["borrowed"]);
+}
+
+#[tokio::test]
+async fn decorator_enforces_limits_on_byte_only_messages() {
+    let inner = RecordingTransport::default();
+    let transport = ResolvingTransport::new(inner.clone(), MapResolver::new())
+        .with_limits(PreparationLimits::new().with_max_attachment_bytes(Some(3)));
+    let message = message_with(Attachment::bytes(content_type(), b"ready"));
+
+    let error = transport
+        .send(&message, &SendOptions::default())
+        .await
+        .expect_err("an oversized byte-backed attachment is rejected");
+
+    assert_eq!(error.kind, ErrorKind::Validation);
+    assert!(
+        inner.routes().is_empty(),
+        "the inner transport should not be reached"
+    );
 }
 
 #[tokio::test]

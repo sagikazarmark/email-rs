@@ -3,13 +3,17 @@ use email_transport::{
     Capabilities, ErrorKind, SendOptions, SendReport, Transport, TransportError,
 };
 
-use crate::preparation::has_attachment_references;
+use crate::preparation::{enforce_limits, has_attachment_references};
 use crate::{
     AttachmentResolveError, AttachmentResolver, PreparationLimits, ResolveErrorKind,
     prepare_attachments,
 };
 
 /// Transport decorator that resolves attachment references before delivery.
+///
+/// The configured [`PreparationLimits`] apply to every send, not only to sends
+/// that carry references: a byte-backed message is checked against the same
+/// policy before it is passed through untouched.
 pub struct ResolvingTransport<T, R> {
     inner: T,
     resolver: R,
@@ -87,6 +91,10 @@ where
         options: &SendOptions,
     ) -> Result<SendReport, TransportError> {
         if !has_attachment_references(message) {
+            // Still a zero-copy path: the size policy is checked against the
+            // borrowed message so byte-backed sends are held to the same limits
+            // as resolved ones.
+            enforce_limits(message, &self.limits).map_err(TransportError::from)?;
             return self.inner.send(message, options).await;
         }
 

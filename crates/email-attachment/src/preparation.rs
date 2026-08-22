@@ -1,8 +1,11 @@
-use email_message::{AttachmentBody, OutboundMessage};
+use email_message::{Attachment, AttachmentBody, OutboundMessage};
 
 use crate::{AttachmentResolveError, AttachmentResolver, ResolveErrorKind};
 
-/// Size policy applied while materializing attachment references.
+/// Size policy applied to a message's attachments during preparation.
+///
+/// Limits cover declared bytes and resolved bytes alike, so a message is judged
+/// on its own size rather than on whether it happens to carry a reference.
 ///
 /// The default is unlimited. Deployments opt into limits according to their
 /// storage, memory, and provider constraints.
@@ -42,8 +45,9 @@ impl PreparationLimits {
 
 /// Materialize every reference-backed attachment in `message`.
 ///
-/// Byte-backed attachments and all attachment metadata are preserved. If the
-/// message contains no references, it is returned unchanged.
+/// Byte-backed attachments and all attachment metadata are preserved. A message
+/// with no references is returned unchanged, but is still checked against
+/// `limits`.
 ///
 /// # Errors
 ///
@@ -55,18 +59,12 @@ pub async fn prepare_attachments<R: AttachmentResolver>(
     limits: &PreparationLimits,
 ) -> Result<OutboundMessage, AttachmentResolveError> {
     if !has_attachment_references(&message) {
+        enforce_limits(&message, limits)?;
         return Ok(message);
     }
 
     let (message, mut attachments) = message.into_message().into_attachments();
-    let mut total_bytes = 0usize;
-
-    for attachment in &attachments {
-        if let AttachmentBody::Bytes(bytes) = attachment.body() {
-            enforce_attachment_limit(bytes.len(), limits)?;
-            total_bytes = checked_total(total_bytes, bytes.len(), limits)?;
-        }
-    }
+    let mut total_bytes = accumulate_byte_backed(&attachments, limits)?;
 
     for attachment in &mut attachments {
         let reference = match attachment.body() {
@@ -91,12 +89,40 @@ pub async fn prepare_attachments<R: AttachmentResolver>(
     })
 }
 
+/// Enforce `limits` over the byte-backed attachments already in `message`.
+///
+/// Preparation applies the same policy to declared bytes and to resolved bytes,
+/// so a message is accepted or rejected on its own size rather than on whether
+/// it happens to carry a reference.
+pub(crate) fn enforce_limits(
+    message: &OutboundMessage,
+    limits: &PreparationLimits,
+) -> Result<(), AttachmentResolveError> {
+    accumulate_byte_backed(message.as_message().attachments(), limits).map(|_| ())
+}
+
 pub(crate) fn has_attachment_references(message: &OutboundMessage) -> bool {
     message
         .as_message()
         .attachments()
         .iter()
         .any(|attachment| matches!(attachment.body(), AttachmentBody::Reference(_)))
+}
+
+fn accumulate_byte_backed(
+    attachments: &[Attachment],
+    limits: &PreparationLimits,
+) -> Result<usize, AttachmentResolveError> {
+    let mut total_bytes = 0usize;
+
+    for attachment in attachments {
+        if let AttachmentBody::Bytes(bytes) = attachment.body() {
+            enforce_attachment_limit(bytes.len(), limits)?;
+            total_bytes = checked_total(total_bytes, bytes.len(), limits)?;
+        }
+    }
+
+    Ok(total_bytes)
 }
 
 fn enforce_attachment_limit(

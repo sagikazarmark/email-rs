@@ -78,6 +78,25 @@ async fn preparation_returns_byte_only_messages_unchanged() {
 }
 
 #[tokio::test]
+async fn preparation_enforces_limits_on_byte_only_messages() {
+    let mut limits = PreparationLimits::default();
+    limits.max_total_bytes = Some(7);
+
+    let error = prepare_attachments(
+        message_with(vec![
+            Attachment::bytes(content_type(), b"four"),
+            Attachment::bytes(content_type(), b"more"),
+        ]),
+        &MapResolver::new(),
+        &limits,
+    )
+    .await
+    .expect_err("a message without references is still held to the limits");
+
+    assert_eq!(error.kind, ResolveErrorKind::TooLarge);
+}
+
+#[tokio::test]
 async fn preparation_enforces_per_attachment_limit() {
     let mut limits = PreparationLimits::default();
     limits.max_attachment_bytes = Some(3);
