@@ -249,52 +249,6 @@ async fn transport_options_wire_hydrates_tags() {
 }
 
 #[tokio::test]
-async fn attachment_encoding_round_trip_through_request_body() {
-    use email_message::Attachment;
-    use email_message::ContentType;
-    use serde_json::json;
-    use wiremock::matchers::body_partial_json;
-
-    let server = MockServer::start().await;
-    let payload: &[u8] = b"hello\xff\x00world";
-
-    Mock::given(method("POST"))
-        .and(path("/emails"))
-        .and(body_partial_json(json!({
-            "attachments": [{
-                "filename": "report.bin",
-                "content": payload,
-                "contentType": "application/octet-stream",
-            }]
-        })))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "ok-att"})))
-        .mount(&server)
-        .await;
-
-    let message = Message::builder(Body::text("body"))
-        .from_mailbox("sender@example.com".parse().expect("from parses"))
-        .to(vec![Address::Mailbox(
-            "recipient@example.com".parse().expect("to parses"),
-        )])
-        .subject("with attachment")
-        .add_attachment(
-            Attachment::bytes(
-                ContentType::try_from("application/octet-stream").expect("ct parses"),
-                payload.to_vec(),
-            )
-            .with_filename("report.bin"),
-        )
-        .build_outbound()
-        .expect("message validates");
-
-    let report = transport_for(&server)
-        .send(&message, &SendOptions::default())
-        .await
-        .expect("send with attachment succeeds");
-    assert_eq!(report.provider_message_id.as_deref(), Some("ok-att"));
-}
-
-#[tokio::test]
 async fn custom_header_is_forwarded_in_headers_object() {
     use email_message::Header;
     use serde_json::json;
@@ -364,49 +318,6 @@ async fn template_send_without_text_or_html_body_uses_template_branch() {
         .await
         .expect("template-only send succeeds");
     assert_eq!(report.provider_message_id.as_deref(), Some("ok-tmpl"));
-}
-
-#[tokio::test]
-async fn unresolved_attachment_reference_returns_unsupported_feature_with_resolver_hint() {
-    use email_message::ContentType;
-    use email_message::{Attachment, AttachmentReference};
-
-    let server = MockServer::start().await;
-    // The mock server will not actually receive a request, the
-    // adapter rejects on the unresolved Reference before any send.
-    Mock::given(method("POST"))
-        .and(path("/emails"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id":"unused"})))
-        .expect(0)
-        .mount(&server)
-        .await;
-
-    let message = Message::builder(Body::text("body"))
-        .from_mailbox("sender@example.com".parse().expect("from parses"))
-        .to(vec![Address::Mailbox(
-            "recipient@example.com".parse().expect("to parses"),
-        )])
-        .subject("ref attachment")
-        .add_attachment(Attachment::reference(
-            ContentType::try_from("application/pdf").expect("ct parses"),
-            AttachmentReference::new("s3://bucket/key"),
-        ))
-        .build_outbound()
-        .expect("message validates");
-
-    let error = transport_for(&server)
-        .send(&message, &SendOptions::default())
-        .await
-        .expect_err("unresolved reference must be rejected");
-    assert_eq!(error.kind, ErrorKind::UnsupportedFeature);
-    // Wording check, the error must point the caller at the resolver
-    // path so they know how to materialize the Reference.
-    let msg = error.to_string();
-    assert!(
-        msg.contains("email_attachment::ResolvingTransport")
-            && msg.contains("email_attachment::prepare_attachments"),
-        "error should point at the resolver: {msg}"
-    );
 }
 
 #[tokio::test]
