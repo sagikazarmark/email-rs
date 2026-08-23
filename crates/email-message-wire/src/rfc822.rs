@@ -1,18 +1,19 @@
+mod attachment;
 mod encoded_word;
 mod header;
 mod shared;
+mod transfer_encoding;
 
 use std::str::FromStr;
 
-use base64::Engine;
 use email_message::{
-    Address, AddressList, Attachment, AttachmentBody, Body, ContentDisposition,
-    ContentTransferEncoding, ContentType, Header, Mailbox, Message, MessageId,
-    MessageValidationError, MimePart,
+    Address, AddressList, Body, ContentDisposition, ContentTransferEncoding, ContentType, Header,
+    Mailbox, Message, MessageId, MessageValidationError, MimePart,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc2822;
 
+use attachment::{attachment_to_mime_part, partition_attachments};
 pub use encoded_word::decode_rfc2047_phrase;
 use encoded_word::{
     decode_rfc2047_words, encode_rfc2047_unstructured, escape_encoded_words_inside_quoted_strings,
@@ -21,8 +22,12 @@ use header::{
     is_structured_header, parse_header_lines_bytes, push_header_line, render_address_list_header,
     render_mailbox_header, split_headers_and_body_bytes,
 };
+use shared::RFC5322_HARD_LINE_LEN;
 pub use shared::{MAX_INPUT_BYTES, MAX_MULTIPART_DEPTH, MAX_MULTIPART_PARTS};
-use shared::{RFC5322_HARD_LINE_LEN, hex_val};
+use transfer_encoding::{
+    decode_transfer_encoded_body, encode_base64, encode_body_for_transfer_encoding,
+    encode_quoted_printable_body, validate_multipart_transfer_encoding,
+};
 
 /// Errors returned while parsing RFC 822/MIME bytes.
 #[derive(Debug, thiserror::Error)]
@@ -891,22 +896,6 @@ fn mime_to_render_part(part: &MimePart, depth: usize) -> Result<RenderPart, Mess
     }
 }
 
-fn encode_body_for_transfer_encoding(body: &[u8], encoding: Option<&str>) -> Vec<u8> {
-    let Some(encoding) = encoding else {
-        return body.to_vec();
-    };
-
-    if encoding.eq_ignore_ascii_case("base64") {
-        return encode_base64(body);
-    }
-
-    if encoding.eq_ignore_ascii_case("quoted-printable") {
-        return encode_quoted_printable_body(body);
-    }
-
-    body.to_vec()
-}
-
 fn renderable_text_leaf(content_type: &str, value: &str) -> RenderPart {
     let canonical_body = canonicalize_text_line_endings(value);
     let mut content_type_value = String::from(content_type);
@@ -977,173 +966,6 @@ fn contains_overlong_physical_line(body: &[u8]) -> bool {
         let line = line.strip_suffix(b"\r").unwrap_or(line);
         line.len() > RFC5322_HARD_LINE_LEN
     })
-}
-
-fn partition_attachments(attachments: &[Attachment]) -> (Vec<&Attachment>, Vec<&Attachment>) {
-    let mut inline = Vec::new();
-    let mut regular = Vec::new();
-
-    for attachment in attachments {
-        if attachment.is_inline() || attachment.content_id().is_some() {
-            inline.push(attachment);
-        } else {
-            regular.push(attachment);
-        }
-    }
-
-    (inline, regular)
-}
-
-fn attachment_to_mime_part(attachment: &Attachment) -> Result<RenderPart, MessageRenderError> {
-    let AttachmentBody::Bytes(raw) = attachment.body() else {
-        return Err(MessageRenderError::UnsupportedAttachmentBody);
-    };
-
-    let mut disposition = if attachment.is_inline() || attachment.content_id().is_some() {
-        String::from("inline")
-    } else {
-        String::from("attachment")
-    };
-
-    if let Some(filename) = attachment.filename() {
-        let encoded = encode_filename_parameter(filename);
-        if let Some(legacy) = encoded.legacy {
-            disposition.push_str("; ");
-            disposition.push_str(&legacy);
-        }
-        if let Some(star) = encoded.extended {
-            disposition.push_str("; ");
-            disposition.push_str(&star);
-        }
-    }
-
-    let mut headers = vec![(
-        String::from("Content-Type"),
-        attachment.content_type().to_string(),
-    )];
-    headers.push((
-        String::from("Content-Transfer-Encoding"),
-        String::from("base64"),
-    ));
-    headers.push((String::from("Content-Disposition"), disposition));
-
-    if let Some(content_id) = attachment.content_id() {
-        headers.push((
-            String::from("Content-ID"),
-            normalize_content_id(content_id)?,
-        ));
-    }
-
-    Ok(RenderPart::Leaf {
-        headers,
-        body: encode_base64(raw),
-    })
-}
-
-struct EncodedFilenameParameter {
-    legacy: Option<String>,
-    extended: Option<String>,
-}
-
-fn encode_filename_parameter(filename: &str) -> EncodedFilenameParameter {
-    let escaped = filename.replace('\\', "\\\\").replace('"', "\\\"");
-    let plain_ascii = filename
-        .bytes()
-        .all(|b| b.is_ascii() && !b.is_ascii_control());
-    if plain_ascii {
-        return EncodedFilenameParameter {
-            legacy: Some(format!("filename=\"{escaped}\"")),
-            extended: None,
-        };
-    }
-
-    // Filenames containing control bytes (including TAB, CR, LF) take the
-    // RFC 2231 percent-encoded path even when the bytes are otherwise ASCII.
-    // RFC 6266 §4.1 nominally permits TAB inside a quoted-string, but real
-    // MUAs misinterpret tabs in `filename=` parameters; force the
-    // unambiguous encoding.
-    let mut extended = String::from("filename*=utf-8''");
-    // Writing into a String is infallible.
-    let _ = write_percent_encoded(filename.as_bytes(), &mut extended);
-    EncodedFilenameParameter {
-        legacy: None,
-        extended: Some(extended),
-    }
-}
-
-fn write_percent_encoded<W: std::fmt::Write>(input: &[u8], out: &mut W) -> std::fmt::Result {
-    for byte in input {
-        let ch = *byte as char;
-        if ch.is_ascii_alphanumeric()
-            || matches!(
-                ch,
-                '!' | '#' | '$' | '&' | '+' | '-' | '.' | '^' | '_' | '`' | '|' | '~'
-            )
-        {
-            out.write_char(ch)?;
-        } else {
-            write!(out, "%{byte:02X}")?;
-        }
-    }
-    Ok(())
-}
-
-fn normalize_content_id(content_id: &str) -> Result<String, MessageRenderError> {
-    let value = content_id.trim();
-    if value.is_empty()
-        || value
-            .chars()
-            .any(|ch| ch.is_ascii_control() || ch.is_ascii_whitespace())
-    {
-        return Err(MessageRenderError::InvalidContentId);
-    }
-
-    let left = value.matches('<').count();
-    let right = value.matches('>').count();
-    if left > 1 || right > 1 {
-        return Err(MessageRenderError::InvalidContentId);
-    }
-    if (left == 1 || right == 1) && !(value.starts_with('<') && value.ends_with('>')) {
-        return Err(MessageRenderError::InvalidContentId);
-    }
-
-    let addr_spec = if value.starts_with('<') && value.ends_with('>') {
-        &value[1..value.len() - 1]
-    } else {
-        value
-    };
-
-    if addr_spec.is_empty()
-        || addr_spec
-            .chars()
-            .any(|ch| ch.is_ascii_control() || ch.is_ascii_whitespace() || ch == '<' || ch == '>')
-    {
-        return Err(MessageRenderError::InvalidContentId);
-    }
-
-    let rendered = if value.starts_with('<') && value.ends_with('>') {
-        value.to_owned()
-    } else {
-        format!("<{value}>")
-    };
-
-    rendered
-        .parse::<MessageId>()
-        .map_err(|_| MessageRenderError::InvalidContentId)?;
-
-    Ok(rendered)
-}
-
-fn encode_base64(input: &[u8]) -> Vec<u8> {
-    let encoded = base64::engine::general_purpose::STANDARD.encode(input);
-    let mut output = Vec::with_capacity(encoded.len() + (encoded.len() / 76 + 2) * 2);
-
-    for chunk in encoded.as_bytes().chunks(76) {
-        output.extend_from_slice(chunk);
-        output.extend_from_slice(b"\r\n");
-    }
-
-    output
 }
 
 #[derive(Clone, Debug)]
@@ -1496,51 +1318,6 @@ fn validate_boundary(value: &str) -> Result<(), MessageRenderError> {
     Ok(())
 }
 
-fn decode_transfer_encoded_body(
-    body: &[u8],
-    encoding: Option<&str>,
-) -> Result<Vec<u8>, MessageParseError> {
-    let Some(encoding) = encoding else {
-        return Ok(body.to_vec());
-    };
-
-    if encoding.eq_ignore_ascii_case("base64") {
-        return decode_base64_body(body).ok_or_else(|| MessageParseError::MimeBodyParse {
-            details: "invalid base64 content-transfer-encoding payload".to_owned(),
-        });
-    }
-
-    if encoding.eq_ignore_ascii_case("quoted-printable") {
-        return decode_quoted_printable_body(body).ok_or_else(|| {
-            MessageParseError::MimeBodyParse {
-                details: "invalid quoted-printable content-transfer-encoding payload".to_owned(),
-            }
-        });
-    }
-
-    Ok(body.to_vec())
-}
-
-fn validate_multipart_transfer_encoding(
-    encoding: Option<&ContentTransferEncoding>,
-) -> Result<(), MessageParseError> {
-    let Some(encoding) = encoding else {
-        return Ok(());
-    };
-
-    let value = encoding.as_str();
-    if value.eq_ignore_ascii_case("7bit")
-        || value.eq_ignore_ascii_case("8bit")
-        || value.eq_ignore_ascii_case("binary")
-    {
-        return Ok(());
-    }
-
-    Err(MessageParseError::MimeBodyParse {
-        details: format!("multipart part cannot use content-transfer-encoding `{value}`"),
-    })
-}
-
 fn decode_text_body(body: &[u8], charset: Option<&str>) -> String {
     let Some(charset) = charset else {
         return String::from_utf8_lossy(body).into_owned();
@@ -1555,165 +1332,6 @@ fn decode_text_body(body: &[u8], charset: Option<&str>) -> String {
     }
 
     String::from_utf8_lossy(body).into_owned()
-}
-
-fn decode_base64_body(body: &[u8]) -> Option<Vec<u8>> {
-    let mut filtered = Vec::with_capacity(body.len());
-    for byte in body.iter().copied() {
-        if matches!(byte, b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'+' | b'/' | b'=') {
-            filtered.push(byte);
-        }
-    }
-
-    base64::engine::general_purpose::STANDARD
-        .decode(filtered)
-        .ok()
-}
-
-fn decode_quoted_printable_body(body: &[u8]) -> Option<Vec<u8>> {
-    let mut out = Vec::with_capacity(body.len());
-    let mut idx = 0usize;
-
-    while idx < body.len() {
-        let line_start = idx;
-        while idx < body.len() && body[idx] != b'\r' && body[idx] != b'\n' {
-            idx += 1;
-        }
-
-        let line = &body[line_start..idx];
-        let mut line_end = line.len();
-        while line_end > 0 && matches!(line[line_end - 1], b' ' | b'\t') {
-            line_end -= 1;
-        }
-        let line = &line[..line_end];
-
-        let mut newline = &[][..];
-        if idx < body.len() {
-            if body[idx] == b'\r' {
-                if idx + 1 < body.len() && body[idx + 1] == b'\n' {
-                    newline = b"\r\n";
-                    idx += 2;
-                } else {
-                    newline = b"\r";
-                    idx += 1;
-                }
-            } else {
-                newline = b"\n";
-                idx += 1;
-            }
-        }
-
-        let soft_break = line.ends_with(b"=");
-        let encoded = if soft_break {
-            &line[..line.len().saturating_sub(1)]
-        } else {
-            line
-        };
-
-        let mut line_idx = 0usize;
-        while line_idx < encoded.len() {
-            if encoded[line_idx] != b'=' {
-                if !is_valid_quoted_printable_literal(encoded[line_idx]) {
-                    return None;
-                }
-                out.push(encoded[line_idx]);
-                line_idx += 1;
-                continue;
-            }
-
-            if line_idx + 2 >= encoded.len() {
-                return None;
-            }
-
-            let hi = hex_val(encoded[line_idx + 1])?;
-            let lo = hex_val(encoded[line_idx + 2])?;
-            out.push((hi << 4) | lo);
-            line_idx += 3;
-        }
-
-        if soft_break {
-            if newline.is_empty() {
-                return None;
-            }
-            continue;
-        }
-
-        out.extend_from_slice(newline);
-    }
-
-    Some(out)
-}
-
-const fn is_valid_quoted_printable_literal(byte: u8) -> bool {
-    matches!(byte, b'\t' | b' ' | 33..=60 | 62..=126)
-}
-
-fn encode_quoted_printable_body(body: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(body.len() + body.len() / 2);
-    let mut idx = 0usize;
-    let mut line_len = 0usize;
-
-    while idx < body.len() {
-        let byte = body[idx];
-
-        if byte == b'\r' {
-            if idx + 1 < body.len() && body[idx + 1] == b'\n' {
-                out.extend_from_slice(b"\r\n");
-                idx += 2;
-                line_len = 0;
-                continue;
-            }
-
-            let token = quoted_printable_token(byte, false);
-            if line_len + token.len() > 76 {
-                out.extend_from_slice(b"=\r\n");
-                line_len = 0;
-            }
-            out.extend_from_slice(token.as_bytes());
-            line_len += token.len();
-            idx += 1;
-            continue;
-        }
-
-        if byte == b'\n' {
-            let token = quoted_printable_token(byte, false);
-            if line_len + token.len() > 76 {
-                out.extend_from_slice(b"=\r\n");
-                line_len = 0;
-            }
-            out.extend_from_slice(token.as_bytes());
-            line_len += token.len();
-            idx += 1;
-            continue;
-        }
-
-        let next_is_newline =
-            idx + 1 >= body.len() || body[idx + 1] == b'\r' || body[idx + 1] == b'\n';
-
-        let token = quoted_printable_token(byte, next_is_newline);
-        if line_len + token.len() > 76 {
-            out.extend_from_slice(b"=\r\n");
-            line_len = 0;
-        }
-
-        out.extend_from_slice(token.as_bytes());
-        line_len += token.len();
-        idx += 1;
-    }
-
-    out
-}
-
-fn quoted_printable_token(byte: u8, at_line_end: bool) -> String {
-    if matches!(byte, 33..=60 | 62..=126) {
-        return (byte as char).to_string();
-    }
-
-    if (byte == b' ' || byte == b'\t') && !at_line_end {
-        return (byte as char).to_string();
-    }
-
-    format!("={byte:02X}")
 }
 
 fn next_boundary(counter: &mut usize) -> String {
