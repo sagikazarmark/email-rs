@@ -5,6 +5,23 @@
 
 **Attachment preparation for provider-neutral outbound email.**
 
+## Quick Start
+
+```rust
+use email_attachment::{AttachmentResolver, MapResolver};
+use email_message::AttachmentReference;
+
+async fn resolve() -> Result<(), Box<dyn std::error::Error>> {
+    let resolver = MapResolver::new().with_entry("report.txt", b"contents".to_vec());
+    let attachment = resolver
+        .resolve(&AttachmentReference::new("report.txt"))
+        .await?;
+
+    assert_eq!(attachment.bytes, b"contents");
+    Ok(())
+}
+```
+
 `AttachmentResolver` materializes opaque `AttachmentReference` values into bytes. `MapResolver` supports plain in-memory keys, while `SchemeRouter` dispatches references by prefix and strips `scheme:` plus an optional `//` before calling the selected resolver. `prepare_attachments` applies shared per-attachment and total size limits.
 
 `ResolvingTransport` composes preparation onto any `email-transport` implementation. Byte-only messages use the inner transport's borrowed send path unchanged; reference-backed messages are materialized and delegated as owned messages.

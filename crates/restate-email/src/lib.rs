@@ -7,7 +7,21 @@
 //! representation owned by `email-transport`.
 //!
 //! The Restate service adapter is available as [`ServiceImpl`] with the
-//! `service` feature. [`RestateTransport`] is available with `client`.
+//! `service` feature. `RestateTransport` is available with `client`.
+//!
+//! # Quick start
+//!
+//! ```rust
+//! # #[cfg(feature = "service")]
+//! # {
+//! use restate_email::{ServiceImpl, StaticTransportRegistry};
+//! use restate_sdk::{endpoint::Endpoint, service::IntoServiceDefinition};
+//!
+//! let registry = StaticTransportRegistry::new();
+//! let service = ServiceImpl::new(registry).into_service_definition();
+//! let _endpoint = Endpoint::builder().bind(service).build();
+//! # }
+//! ```
 //!
 //! # Features
 //!
@@ -38,6 +52,9 @@
 //!   it requires the `resend` feature.
 //! - [`invoke_local_worker`](https://github.com/sagikazarmark/email-rs/blob/main/crates/restate-email/examples/invoke_local_worker.rs)
 //!   invokes `Email.send` through Restate ingress and validates the response.
+//! - [`direct_or_restate`](https://github.com/sagikazarmark/email-rs/blob/main/crates/restate-email/examples/direct_or_restate.rs)
+//!   sends through the same application function using either a direct
+//!   provider transport or `RestateTransport`.
 
 #[cfg(feature = "client")]
 mod client;

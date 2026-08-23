@@ -224,10 +224,20 @@ pub trait RawTransport: RuntimeBound {
 /// `RequiresTransportOptions` case) from [`Transport::send`] even when
 /// `capabilities()` looks compatible with their inputs.
 ///
-/// # Example
+/// # Examples
 ///
 /// The worker layer reads capabilities to decide whether to forward an
 /// `idempotency_key` from the queue payload.
+///
+/// ```rust
+/// use email_transport::{Capabilities, StructuredSendCapability};
+///
+/// let capabilities = Capabilities::new()
+///     .with_structured_send(StructuredSendCapability::Supported)
+///     .with_idempotency_key(true);
+///
+/// assert!(capabilities.idempotency_key);
+/// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 #[allow(

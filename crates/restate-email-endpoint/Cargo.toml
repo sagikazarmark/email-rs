@@ -36,14 +36,15 @@ transport-all = [
 ]
 
 [dependencies]
+email-kit = { workspace = true, default-features = false }
+restate-email = { workspace = true, default-features = false }
+
 anyhow = "1"
 clap = { version = "4.5", features = ["derive", "env"] }
-email-kit = { workspace = true, default-features = false }
 figment = { version = "0.10", features = ["env", "json", "toml", "yaml"] }
 opendal = { workspace = true, optional = true }
-restate-email = { workspace = true, default-features = false }
-restate-sdk = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+restate-sdk = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

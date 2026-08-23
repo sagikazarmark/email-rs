@@ -48,6 +48,12 @@ cargo deny check
 CI also verifies Rust 1.92, the documented Wasm targets, default and no-default
 configurations, and selected named features independently.
 
+The configured Dagger module exposes its complete local check set through:
+
+```sh
+dagger check
+```
+
 ## License
 
 Licensed under either of

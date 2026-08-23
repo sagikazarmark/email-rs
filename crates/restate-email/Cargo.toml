@@ -2,7 +2,6 @@
 name = "restate-email"
 version = { workspace = true }
 description = "Restate email worker contracts and service adapter"
-autotests = false
 edition = { workspace = true }
 rust-version = { workspace = true }
 license = { workspace = true }
@@ -10,6 +9,7 @@ repository = { workspace = true }
 homepage = { workspace = true }
 keywords = ["email", "worker", "restate", "queue"]
 categories = ["email", "asynchronous"]
+autotests = false
 
 [features]
 default = ["service"]
@@ -30,27 +30,27 @@ service = ["dep:bytes", "dep:email-kit", "dep:restate-sdk", "dep:serde_path_to_e
 rfc5322-string-compat = ["email-message/rfc5322-string-compat"]
 
 [dependencies]
-bytes = { version = "1", optional = true }
 email-kit = { workspace = true, features = ["serde"], optional = true }
 email-message = { workspace = true, features = ["serde"] }
 email-transport = { workspace = true, features = ["serde"] }
 
+bytes = { version = "1", optional = true }
 reqwest = { workspace = true, default-features = false, optional = true }
-restate-sdk = { workspace = true, optional = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 serde_path_to_error = { workspace = true, optional = true }
+restate-sdk = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-email-message = { workspace = true, features = ["mime", "serde"] }
 email-transport-resend = { workspace = true }
+
 http = "1"
 http-body-util = "0.1"
 prost = "0.14"
-reqwest = { workspace = true, features = ["json"], default-features = false }
 restate-sdk-shared-core = "7.0"
+reqwest = { workspace = true, features = ["json"], default-features = false }
 tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
 wiremock = "0.6"
 

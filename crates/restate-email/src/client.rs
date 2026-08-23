@@ -31,18 +31,24 @@ impl RestateTransport {
     /// `SendOptions::idempotency_key` is consumed as Restate's
     /// `idempotency-key` request header. It is deliberately omitted from the
     /// queued [`SendOptions`], so the provider does not receive the same key.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `ingress_base_url` cannot contain hierarchical path segments.
     #[must_use]
     pub fn new(
         ingress_base_url: reqwest::Url,
         transport: TransportKey,
         client: reqwest::Client,
     ) -> Self {
-        let endpoint = format!(
-            "{}/Email/send",
-            ingress_base_url.as_str().trim_end_matches('/')
-        )
-        .parse()
-        .expect("appending the static Email/send path preserves a valid URL");
+        let mut endpoint = ingress_base_url;
+        endpoint.set_query(None);
+        endpoint.set_fragment(None);
+        endpoint
+            .path_segments_mut()
+            .expect("Restate ingress base URL must support path segments")
+            .pop_if_empty()
+            .extend(["Email", "send"]);
 
         Self {
             client,

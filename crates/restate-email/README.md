@@ -5,6 +5,19 @@
 
 **Durable Restate service contracts for outbound email delivery.**
 
+## Quick Start
+
+Bind a transport registry to a Restate endpoint:
+
+```rust
+use restate_email::{ServiceImpl, StaticTransportRegistry};
+use restate_sdk::{endpoint::Endpoint, service::IntoServiceDefinition};
+
+let registry = StaticTransportRegistry::new();
+let service = ServiceImpl::new(registry).into_service_definition();
+let endpoint = Endpoint::builder().bind(service).build();
+```
+
 ## Scope Contract
 
 - Defines a serializable, registry-decoded `SendRequest` around a validated `email_message::OutboundMessage`.
@@ -76,17 +89,6 @@ registry.insert(
 ```
 
 A queued attachment reference such as `docs:report.txt` is then materialized at delivery time. Resolved bytes are not journaled, so retries may observe changed content; use immutable or versioned references when retry attempts must deliver identical bytes.
-
-Bind the service using Restate's service definition API:
-
-```rust
-use restate_email::{ServiceImpl, StaticTransportRegistry};
-use restate_sdk::{endpoint::Endpoint, service::IntoServiceDefinition};
-
-let registry = StaticTransportRegistry::new();
-let service = ServiceImpl::new(registry).into_service_definition();
-let endpoint = Endpoint::builder().bind(service).build();
-```
 
 ## Retry Behavior
 

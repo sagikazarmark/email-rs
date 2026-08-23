@@ -9,6 +9,20 @@
 
 The crate also defines transport capabilities, send reports, structured error kinds, adapter helpers, and `TracingTransport` when tracing support is enabled.
 
+## Quick Start
+
+```rust
+use email_transport::email_message::OutboundMessage;
+use email_transport::{SendOptions, SendReport, Transport, TransportError};
+
+async fn deliver<T: Transport>(
+    transport: &T,
+    message: &OutboundMessage,
+) -> Result<SendReport, TransportError> {
+    transport.send(message, &SendOptions::default()).await
+}
+```
+
 ## Feature Flags
 
 The `serde` feature is enabled by default.

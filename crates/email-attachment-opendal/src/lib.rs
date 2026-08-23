@@ -3,6 +3,24 @@
 //! An [`OpendalResolver`] reads paths from one [`opendal::Operator`] configured
 //! by the application at startup. Attachment references never configure a
 //! service, endpoint, bucket, or credentials.
+//!
+//! # Quick start
+//!
+//! ```rust
+//! use email_attachment_opendal::{OpendalResolver, opendal::Operator};
+//!
+//! fn resolver(operator: Operator) -> OpendalResolver {
+//!     OpendalResolver::new(operator, 25 * 1024 * 1024)
+//! }
+//! ```
+//!
+//! # Cargo features
+//!
+//! The default feature forwards OpenDAL's default feature set. The
+//! `services-azblob`, `services-fs`, `services-gcs`, `services-http`,
+//! `services-memory`, and `services-s3` features enable the corresponding
+//! OpenDAL services. Other services can be enabled on a direct `opendal`
+//! dependency used to construct the operator.
 
 use email_attachment::{
     AttachmentResolveError, AttachmentResolver, ResolveErrorKind, ResolvedAttachment,

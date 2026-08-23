@@ -5,6 +5,16 @@
 
 **OpenDAL attachment resolution for email-rs.**
 
+## Quick Start
+
+```rust
+use email_attachment_opendal::{OpendalResolver, opendal::Operator};
+
+fn resolver(operator: Operator) -> OpendalResolver {
+    OpendalResolver::new(operator, 25 * 1024 * 1024)
+}
+```
+
 `OpendalResolver` reads attachment paths through an `opendal::Operator` configured at application startup. References cannot select a service, endpoint, bucket, root, or credentials. Each resolver is limited to its operator's configured store and root.
 
 The resolver requires a per-attachment byte limit. It checks metadata before reading when `stat` is available and otherwise reads through a capped reader.
@@ -15,11 +25,13 @@ Register multiple resolvers with `email_attachment::SchemeRouter` to use multipl
 
 The default feature forwards OpenDAL's default feature set. The commonly used OpenDAL features `services-azblob`, `services-fs`, `services-gcs`, `services-http`, `services-memory`, and `services-s3` are available under the same names. Operators for all other OpenDAL services are also supported; enable those services on a direct `opendal` dependency when constructing the operator.
 
+See the [crate documentation](https://docs.rs/email-attachment-opendal/latest/email_attachment_opendal/) for feature semantics and the [generated feature graph](https://docs.rs/crate/email-attachment-opendal/latest/features) for activation details.
+
 ## License
 
 Licensed under either of
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <https://opensource.org/licenses/Apache-2.0>)
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <https://www.apache.org/licenses/LICENSE-2.0>)
 - MIT license ([LICENSE-MIT](LICENSE-MIT) or <https://opensource.org/licenses/MIT>)
 
 at your option.

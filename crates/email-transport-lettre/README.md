@@ -37,6 +37,9 @@ transport.send(&message, &SendOptions::default()).await?;
 - `rustls-tls`: enables Lettre's Tokio Rustls backend with WebPKI roots.
 
 Disable default features to build an unencrypted SMTP client for local relays.
+The adapter requires a Tokio runtime and does not support `wasm32-unknown-unknown`.
+
+See the [crate documentation](https://docs.rs/email-transport-lettre/latest/email_transport_lettre/) for feature, runtime, and cancellation semantics and the [generated feature graph](https://docs.rs/crate/email-transport-lettre/latest/features) for activation details.
 
 ## Timeouts and Cancellation
 
@@ -46,6 +49,14 @@ so a partially used connection cannot return to Lettre's pool. Delivery may
 therefore still succeed after a timeout or caller cancellation. Concurrent
 handoffs are bounded so stalled background transactions cannot accumulate
 without limit.
+
+## Example
+
+The canonical [`lettre_send` example](examples/lettre_send.rs) reads `SMTP_URL` and `SMTP_TO`, sends one message, and prints the resulting report:
+
+```sh
+SMTP_URL=smtps://user:password@smtp.example.com:465 SMTP_TO=you@example.com cargo run -p email-transport-lettre --example lettre_send
+```
 
 ## License
 

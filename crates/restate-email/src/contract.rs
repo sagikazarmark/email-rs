@@ -181,7 +181,7 @@ fn example_send_request() -> serde_json::Value {
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "schemars"))]
 mod tests {
     use email_transport::TransportOptionRegistry;
     use serde::de::DeserializeSeed as _;

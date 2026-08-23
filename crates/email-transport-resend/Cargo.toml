@@ -12,15 +12,15 @@ categories = ["email", "network-programming"]
 
 [features]
 default = ["reqwest/default", "serde"]
-serde = ["dep:serde", "email-transport/serde"]
+serde = ["email-transport/serde"]
 
 [dependencies]
 email-message = { workspace = true }
 email-transport = { workspace = true }
+resend-rs = { version = "0.26", default-features = false }
 
 reqwest = { workspace = true, default-features = false }
-resend-rs = { version = "0.26", default-features = false }
-serde = { workspace = true, features = ["derive"], optional = true }
+serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 url = "2"
 
@@ -31,12 +31,8 @@ tokio = { workspace = true, features = ["time"] }
 email-transport-test = { workspace = true, features = ["conformance"] }
 
 time = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread"] }
 wiremock = "0.6"
 
 [[example]]
 name = "resend_send"
-
-# Build docs with every compatible public API feature enabled.
-[package.metadata.docs.rs]
-all-features = true

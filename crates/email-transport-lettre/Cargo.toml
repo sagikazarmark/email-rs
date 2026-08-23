@@ -21,10 +21,12 @@ email-message = { workspace = true }
 email-message-wire = { workspace = true }
 email-transport = { workspace = true }
 lettre = { version = "=0.11.23", default-features = false, features = ["smtp-transport", "tokio1"] }
+
 tokio = { workspace = true, features = ["rt", "sync", "time"] }
 
 [dev-dependencies]
 email-transport-test = { workspace = true, features = ["conformance"] }
+
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time"] }
 
 [[example]]

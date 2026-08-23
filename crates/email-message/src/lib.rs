@@ -8,15 +8,16 @@
 //! # Quick start
 //!
 //! ```rust
-//! use email_message::{Mailbox, MailboxList};
+//! use email_message::{Address, Body, Message};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let mailbox: Mailbox = "Mary Smith <mary@x.test>".parse()?;
-//! assert_eq!(mailbox.name(), Some("Mary Smith"));
-//! assert_eq!(mailbox.email().as_str(), "mary@x.test");
+//! let message = Message::builder(Body::text("Hello"))
+//!     .from_mailbox("sender@example.com".parse()?)
+//!     .to(vec![Address::Mailbox("recipient@example.com".parse()?)])
+//!     .subject("Welcome")
+//!     .build_outbound()?;
 //!
-//! let list: MailboxList = "mary@x.test, jdoe@one.test".parse()?;
-//! assert_eq!(list.len(), 2);
+//! assert_eq!(message.as_message().subject(), Some("Welcome"));
 //! # Ok(())
 //! # }
 //! ```

@@ -108,6 +108,36 @@ async fn send_posts_wire_options_and_uses_idempotency_for_ingress() {
 }
 
 #[tokio::test]
+async fn send_replaces_ingress_query_and_fragment_with_service_path() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/Email/send"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "report": {
+                "provider": "resend",
+                "accepted": ["to@example.com"]
+            }
+        })))
+        .mount(&server)
+        .await;
+    let ingress_url = format!("{}?tenant=blue#configuration", server.uri())
+        .parse()
+        .expect("server URL parses");
+    let transport = RestateTransport::new(
+        ingress_url,
+        TransportKey::new("transactional").expect("key is valid"),
+        reqwest::Client::new(),
+    );
+
+    let report = transport
+        .send(&message(), &SendOptions::default())
+        .await
+        .expect("ingress accepts request at the service path");
+
+    assert_eq!(report.provider, "resend");
+}
+
+#[tokio::test]
 async fn invocation_error_is_terminal_and_preserves_worker_code() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))

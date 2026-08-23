@@ -11,6 +11,12 @@ use email_transport::{BoxFut, MaybeSend, RuntimeBound};
 /// string.
 pub trait AttachmentResolver: RuntimeBound {
     /// Resolve `reference` into attachment bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns a resolver-defined [`AttachmentResolveError`] classified by
+    /// [`ResolveErrorKind`] when the reference is unsupported, unavailable,
+    /// denied, too large, transiently inaccessible, or cannot be processed.
     fn resolve<'a>(
         &'a self,
         reference: &'a AttachmentReference,

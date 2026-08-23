@@ -42,7 +42,7 @@ time = { workspace = true }
 criterion = "0.8"
 proptest = { workspace = true }
 serde_json = { workspace = true }
-time = { workspace = true, features = ["formatting", "parsing"] }
+time = { workspace = true, features = ["parsing"] }
 
 [[bench]]
 name = "parsing"

@@ -128,6 +128,9 @@ jobs:
             cargo test -p "$package" --no-default-features --features "$feature" --locked
           done
 
+      - name: Test additive feature combinations
+        run: cargo test -p email-transport-resend --all-targets --no-default-features --features email-transport/serde --locked
+
   wasm:
     name: Wasm
     runs-on: ubuntu-latest

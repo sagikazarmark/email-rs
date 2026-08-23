@@ -4,12 +4,33 @@
 //! `resend-rs` SDK and exposes Resend-specific typed send options through
 //! [`email_transport::TransportOptions`].
 //!
+//! # Quick start
+//!
+//! ```rust,no_run
+//! use email_message::{Address, Body, Message};
+//! use email_transport::{SendOptions, Transport};
+//! use email_transport_resend::ResendTransport;
+//!
+//! # async fn send() -> Result<(), Box<dyn std::error::Error>> {
+//! let message = Message::builder(Body::text("Welcome"))
+//!     .from_mailbox("sender@example.com".parse()?)
+//!     .to(vec![Address::Mailbox("recipient@example.com".parse()?)])
+//!     .build_outbound()?;
+//!
+//! ResendTransport::new("re_...")
+//!     .send(&message, &SendOptions::default())
+//!     .await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
 //! # Features
 //!
 //! The default feature set enables the default `reqwest` client stack and
 //! `serde`. Disable default features to choose `reqwest`'s transport/TLS
-//! features explicitly. The `serde` feature enables queue/wire serialization
-//! for [`ResendSendOptions`], [`ResendTag`], and [`ResendTemplate`].
+//! features explicitly. Resend option types always implement
+//! [`serde::Serialize`] so feature unification remains additive. The `serde`
+//! feature enables their queue/wire deserialization through `email-transport`.
 //!
 //! # Platform support
 //!
@@ -18,7 +39,7 @@
 //! enforced and advertised only on non-`wasm32` targets; it is ignored on
 //! `wasm32`.
 //!
-//! # Example
+//! # Example program
 //!
 //! The canonical [`resend_send` example](https://github.com/sagikazarmark/email-rs/blob/main/crates/email-transport-resend/examples/resend_send.rs)
 //! constructs a validated message, applies idempotency and provider options,

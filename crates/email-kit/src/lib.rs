@@ -15,6 +15,21 @@
 //! - Enable the `wire` feature for `wire`, which re-exports
 //!   `email-message-wire`.
 //!
+//! # Quick start
+//!
+//! Use [`prelude`] when you want the common message types, wire helpers, and
+//! transport traits in scope:
+//!
+//! ```rust
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! use email_kit::prelude::*;
+//!
+//! let mailbox: Mailbox = "Mary Smith <mary@example.com>".parse()?;
+//! assert_eq!(mailbox.email().as_str(), "mary@example.com");
+//! # Ok(())
+//! # }
+//! ```
+//!
 //! # Features
 //!
 //! The default feature set forwards the default features of the always-present
@@ -34,22 +49,9 @@
 //! # Platform support
 //!
 //! The message, wire, and core transport facades support native and
-//! `wasm32` targets. Individual provider adapters may differ; in particular,
-//! the Resend adapter advertises and enforces per-send timeouts only on
-//! non-`wasm32` targets.
-//!
-//! Use [`prelude`] when you want the common message types, wire helpers, and
-//! transport traits in scope:
-//!
-//! ```rust
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! use email_kit::prelude::*;
-//!
-//! let mailbox: Mailbox = "Mary Smith <mary@example.com>".parse()?;
-//! assert_eq!(mailbox.email().as_str(), "mary@example.com");
-//! # Ok(())
-//! # }
-//! ```
+//! `wasm32` targets. The Lettre adapter, and therefore `transport-all`, does not
+//! support `wasm32-unknown-unknown`. The Resend adapter supports that target,
+//! but advertises and enforces per-send timeouts only on non-`wasm32` targets.
 //!
 //! Namespaced access stays available when that is clearer:
 //!

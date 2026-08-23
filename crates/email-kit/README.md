@@ -35,6 +35,8 @@ Use `email_kit::prelude::*` for common message types and transport traits. When 
 - `transport-resend`: exposes Resend support through `email_kit::transport::resend`.
 - `wire`: exposes RFC822 and MIME parsing and rendering through `email_kit::wire`.
 
+The Lettre adapter, and therefore `transport-all`, does not support `wasm32-unknown-unknown`. Use `transport-resend` when targeting Wasm.
+
 See the [crate documentation](https://docs.rs/email-kit/latest/email_kit/) for API and feature semantics and the [generated feature graph](https://docs.rs/crate/email-kit/latest/features) for activation details.
 
 ## License
