@@ -156,8 +156,8 @@ mod tests {
             .expect("transport should resolve");
 
         assert!(std::ptr::addr_eq(
-            first as *const DynTransport,
-            second as *const DynTransport
+            std::ptr::from_ref::<DynTransport>(first),
+            std::ptr::from_ref::<DynTransport>(second)
         ));
     }
 }

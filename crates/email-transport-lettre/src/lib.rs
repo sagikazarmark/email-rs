@@ -32,7 +32,7 @@
 //! # Features
 //!
 //! The default feature set enables connection pooling and Tokio-compatible
-//! Rustls with WebPKI roots. `native-tls` selects Lettre's native TLS backend,
+//! Rustls with `WebPKI` roots. `native-tls` selects Lettre's native TLS backend,
 //! while disabling default features leaves unencrypted SMTP available for local
 //! relays and explicitly configured clients.
 //!

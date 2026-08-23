@@ -240,6 +240,7 @@ fn classify_smtp_error(error: &SmtpError, status: Option<u16>) -> ErrorKind {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
+#[allow(clippy::struct_excessive_bools)]
 struct SmtpFailureFacts {
     timeout: bool,
     transient: bool,

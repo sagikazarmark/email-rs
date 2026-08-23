@@ -5,12 +5,12 @@ use email_message::AttachmentReference;
 async fn map_resolver_resolves_plain_string_references() {
     let resolver = MapResolver::new().with_entry("invoice-42", b"pdf bytes");
 
-    let resolved = resolver
+    let resolved_attachment = resolver
         .resolve(&AttachmentReference::new("invoice-42"))
         .await
         .expect("known reference resolves");
 
-    assert_eq!(resolved.bytes, b"pdf bytes");
+    assert_eq!(resolved_attachment.bytes, b"pdf bytes");
 }
 
 #[tokio::test]

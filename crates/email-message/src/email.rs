@@ -163,6 +163,8 @@ impl<'a> arbitrary::Arbitrary<'a> for EmailAddress {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::EmailAddress;
 
     const RFC_VALID_EMAILS: &[&str] = &[
@@ -236,7 +238,6 @@ mod tests {
         assert_eq!(b.as_str(), "User.Name@example.com");
 
         // HashSet dedup
-        use std::collections::HashSet;
         let mut set: HashSet<EmailAddress> = HashSet::new();
         set.insert(a);
         assert!(set.contains(&b));

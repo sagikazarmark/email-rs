@@ -13,11 +13,19 @@ categories = ["email", "asynchronous"]
 [[bin]]
 name = "restate-email"
 path = "src/main.rs"
-required-features = ["transport-all"]
+required-features = ["attachment-opendal", "transport-resend"]
 doc = false
 
 [features]
-default = ["attachment-opendal", "email-kit/default", "email-kit/tracing", "restate-email/default", "restate-email/rfc5322-string-compat", "restate-email/schemars", "transport-all"]
+default = [
+    "attachment-opendal",
+    "email-kit/default",
+    "email-kit/tracing",
+    "restate-email/default",
+    "restate-email/rfc5322-string-compat",
+    "restate-email/schemars",
+    "transport-resend",
+]
 attachment-opendal = [
     "dep:opendal",
     "email-kit/attachment-opendal",
@@ -30,9 +38,13 @@ attachment-opendal = [
 ]
 transport-all = [
     "attachment-opendal",
-    "email-kit/serde",
     "email-kit/transport-all",
-    "restate-email/service",
+    "transport-resend",
+]
+transport-resend = [
+    "email-kit/serde",
+    "email-kit/transport-resend",
+    "restate-email/resend",
 ]
 
 [dependencies]
@@ -43,8 +55,8 @@ anyhow = "1"
 clap = { version = "4.5", features = ["derive", "env"] }
 figment = { version = "0.10", features = ["env", "json", "toml", "yaml"] }
 opendal = { workspace = true, optional = true }
-serde = { workspace = true, features = ["derive"] }
 restate-sdk = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -54,3 +66,6 @@ url = { version = "2", features = ["serde"] }
 serde_json = { workspace = true }
 tempfile = "3"
 wiremock = "0.6"
+
+[lints]
+workspace = true

@@ -44,6 +44,9 @@ proptest = { workspace = true }
 serde_json = { workspace = true }
 time = { workspace = true, features = ["parsing"] }
 
+[lints]
+workspace = true
+
 [[bench]]
 name = "parsing"
 harness = false

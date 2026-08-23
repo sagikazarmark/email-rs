@@ -34,5 +34,8 @@ time = { workspace = true }
 tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread"] }
 wiremock = "0.6"
 
+[lints]
+workspace = true
+
 [[example]]
 name = "resend_send"

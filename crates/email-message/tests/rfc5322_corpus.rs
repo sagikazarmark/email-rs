@@ -1021,7 +1021,9 @@ fn address_list_flattens_mailboxes_around_named_group() {
 
     match &parsed.as_slice()[0] {
         Address::Mailbox(mailbox) => assert_eq!(mailbox.email().as_str(), "alice@example.com"),
-        other => panic!("index 0: expected Mailbox(alice), got {other:?}"),
+        other @ Address::Group(_) => {
+            panic!("index 0: expected Mailbox(alice), got {other:?}")
+        }
     }
 
     match &parsed.as_slice()[1] {
@@ -1030,12 +1032,16 @@ fn address_list_flattens_mailboxes_around_named_group() {
             assert_eq!(group.members().len(), 1);
             assert_eq!(group.members()[0].email().as_str(), "bob@example.com");
         }
-        other => panic!("index 1: expected Group(Team, [bob]), got {other:?}"),
+        other @ Address::Mailbox(_) => {
+            panic!("index 1: expected Group(Team, [bob]), got {other:?}")
+        }
     }
 
     match &parsed.as_slice()[2] {
         Address::Mailbox(mailbox) => assert_eq!(mailbox.email().as_str(), "dave@example.com"),
-        other => panic!("index 2: expected Mailbox(dave), got {other:?}"),
+        other @ Address::Group(_) => {
+            panic!("index 2: expected Mailbox(dave), got {other:?}")
+        }
     }
 }
 

@@ -204,6 +204,7 @@ impl From<TransportLookupError> for TerminalError {
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn send_request_deserialize_error_to_handler_error(
     error: SendRequestDeserializeError,
 ) -> HandlerError {

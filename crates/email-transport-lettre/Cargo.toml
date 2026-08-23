@@ -29,6 +29,9 @@ email-transport-test = { workspace = true, features = ["conformance"] }
 
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time"] }
 
+[lints]
+workspace = true
+
 [[example]]
 name = "lettre_send"
 required-features = ["rustls-tls"]

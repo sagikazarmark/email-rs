@@ -632,7 +632,10 @@ impl schemars::JsonSchema for Body {
         concat!(module_path!(), "::Body").into()
     }
 
-    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        #[cfg(not(feature = "mime"))]
+        let _ = generator;
+
         let variants = vec![
             schemars::json_schema!({
                 "type": "object",
@@ -664,7 +667,7 @@ impl schemars::JsonSchema for Body {
         #[cfg(feature = "mime")]
         let variants = {
             let mut variants = variants;
-            let part = _generator.subschema_for::<MimePart>();
+            let part = generator.subschema_for::<MimePart>();
             variants.push(schemars::json_schema!({
                 "type": "object",
                 "properties": {

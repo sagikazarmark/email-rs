@@ -77,10 +77,10 @@ pub async fn prepare_attachments<R: AttachmentResolver>(
                 ));
             }
         };
-        let resolved = resolver.resolve(&reference).await?;
-        enforce_attachment_limit(resolved.bytes.len(), limits)?;
-        total_bytes = checked_total(total_bytes, resolved.bytes.len(), limits)?;
-        attachment.set_body(AttachmentBody::Bytes(resolved.bytes));
+        let resolved_attachment = resolver.resolve(&reference).await?;
+        enforce_attachment_limit(resolved_attachment.bytes.len(), limits)?;
+        total_bytes = checked_total(total_bytes, resolved_attachment.bytes.len(), limits)?;
+        attachment.set_body(AttachmentBody::Bytes(resolved_attachment.bytes));
     }
 
     OutboundMessage::new(message.with_attachments(attachments)).map_err(|error| {

@@ -44,6 +44,9 @@ email-transport-resend = { workspace = true, default-features = false, optional 
 [dev-dependencies]
 serde_json = { workspace = true }
 
+[lints]
+workspace = true
+
 # Build docs with every compatible public API feature enabled.
 [package.metadata.docs.rs]
 all-features = true

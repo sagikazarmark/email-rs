@@ -38,6 +38,13 @@ thiserror = "2"
 time = { version = "0.3", default-features = false }
 tokio = "1"
 
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+
 [workspace.metadata.release]
 sign-commit = true
 sign-tag = true

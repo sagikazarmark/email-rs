@@ -195,8 +195,9 @@ impl SchemeRouter {
     where
         R: AttachmentResolver + 'static,
     {
+        let scheme = scheme.into();
         self.resolvers
-            .insert(normalize_scheme(scheme.into()), Box::new(resolver));
+            .insert(normalize_scheme(&scheme), Box::new(resolver));
     }
 
     /// Register a resolver using builder syntax.
@@ -253,6 +254,6 @@ where
     }
 }
 
-fn normalize_scheme(scheme: String) -> String {
+fn normalize_scheme(scheme: &str) -> String {
     scheme.trim_end_matches(&[':', '/'][..]).to_owned()
 }

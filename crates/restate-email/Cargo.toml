@@ -36,11 +36,11 @@ email-transport = { workspace = true, features = ["serde"] }
 
 bytes = { version = "1", optional = true }
 reqwest = { workspace = true, default-features = false, optional = true }
+restate-sdk = { workspace = true, optional = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 serde_path_to_error = { workspace = true, optional = true }
-restate-sdk = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
@@ -49,10 +49,13 @@ email-transport-resend = { workspace = true }
 http = "1"
 http-body-util = "0.1"
 prost = "0.14"
-restate-sdk-shared-core = "7.0"
 reqwest = { workspace = true, features = ["json"], default-features = false }
+restate-sdk-shared-core = "7.0"
 tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
 wiremock = "0.6"
+
+[lints]
+workspace = true
 
 [[test]]
 name = "restate_transport"

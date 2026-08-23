@@ -36,7 +36,7 @@
 //! message and transport crates. It does not enable `wire`, an attachment
 //! adapter, or a provider transport.
 //!
-//! - `attachment-opendal`: the OpenDAL resolver at `attachment::opendal`.
+//! - `attachment-opendal`: the `OpenDAL` resolver at `attachment::opendal`.
 //! - `wire`: RFC 822/MIME parsing and rendering through `wire`.
 //! - `transport-lettre`: the Lettre SMTP adapter at `transport::lettre`.
 //! - `transport-resend`: the Resend adapter at `transport::resend`.
