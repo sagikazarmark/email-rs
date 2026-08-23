@@ -25,3 +25,12 @@ pub(super) const fn hex_val(byte: u8) -> Option<u8> {
         _ => None,
     }
 }
+
+pub(super) fn trim_lwsp_end(value: &[u8]) -> &[u8] {
+    let mut end = value.len();
+    while end > 0 && (value[end - 1] == b' ' || value[end - 1] == b'\t') {
+        end -= 1;
+    }
+
+    &value[..end]
+}

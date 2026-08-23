@@ -1,6 +1,7 @@
 use email_message::{Attachment, AttachmentBody, MessageId};
 
 use super::MessageRenderError;
+use super::mime_render::RenderPart;
 use super::transfer_encoding::encode_base64;
 
 struct EncodedFilenameParameter {
@@ -27,7 +28,7 @@ pub(super) fn partition_attachments(
 
 pub(super) fn attachment_to_mime_part(
     attachment: &Attachment,
-) -> Result<super::RenderPart, MessageRenderError> {
+) -> Result<RenderPart, MessageRenderError> {
     let AttachmentBody::Bytes(raw) = attachment.body() else {
         return Err(MessageRenderError::UnsupportedAttachmentBody);
     };
@@ -67,7 +68,7 @@ pub(super) fn attachment_to_mime_part(
         ));
     }
 
-    Ok(super::RenderPart::Leaf {
+    Ok(RenderPart::Leaf {
         headers,
         body: encode_base64(raw),
     })
