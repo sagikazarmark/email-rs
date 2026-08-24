@@ -334,7 +334,7 @@ async fn malformed_options_return_terminal_400_with_json_path() {
     );
 }
 
-#[cfg(feature = "resend")]
+#[cfg(feature = "transport-resend")]
 #[test]
 fn transport_options_roundtrip_into_typed_slots() {
     use email_kit::transport::resend::ResendSendOptions;
@@ -393,7 +393,7 @@ async fn unknown_transport_option_keys_are_ignored() {
     assert_eq!(sends[0].custom_label.as_deref(), Some("runtime"));
 }
 
-#[cfg(feature = "resend")]
+#[cfg(feature = "transport-resend")]
 #[test]
 fn malformed_transport_option_for_known_key_returns_error() {
     // Resend's `tags` field is a sequence; a string value here is a shape
@@ -505,7 +505,7 @@ async fn send_request_deserialization_uses_service_transport_option_registry() {
     assert_eq!(sends[0].custom_label.as_deref(), Some("runtime"));
 }
 
-#[cfg(feature = "resend")]
+#[cfg(feature = "transport-resend")]
 #[test]
 fn send_request_serde_roundtrip_with_transport_options() {
     use email_kit::transport::resend::ResendSendOptions;

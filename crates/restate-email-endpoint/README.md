@@ -68,6 +68,7 @@ Default features enable the component defaults, queue-payload schemas, RFC 5322 
 - `attachment-opendal`: enables endpoint attachment preparation and the OpenDAL services listed above. It is enabled by default and by `transport-all`.
 - `transport-resend`: enables the Resend transport and provider-option deserialization. It is enabled by default and is the only transport currently exposed by endpoint configuration.
 - `transport-all`: enables attachment preparation and every transport exposed by `email-kit`. SMTP endpoint configuration is not yet exposed, so this remains an explicit opt-in.
+- `transport-all-wasm`: enables attachment preparation and every `email-kit` transport that supports `wasm32-unknown-unknown`.
 
 The binary target requires `attachment-opendal` and `transport-resend`; the default feature set and `transport-all` both satisfy those requirements.
 

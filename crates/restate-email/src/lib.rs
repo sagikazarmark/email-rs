@@ -57,8 +57,8 @@
 //! builds. Disable default features to consume only the SDK-free wire contract.
 //!
 //! - `service`: Restate worker service adapter and transport registry.
-//! - `resend`: registers Resend provider options and enables the Resend worker
-//!   example.
+//! - `transport-resend`: registers Resend provider options and enables the
+//!   Resend worker example.
 //! - `schemars`: JSON Schema implementations and examples for queue contracts.
 //! - `rfc5322-string-compat`: accepts the legacy RFC 5322 string address shape
 //!   supported by `email-message`.
@@ -76,7 +76,7 @@
 //!   verification.
 //! - [`restate_resend_worker`](https://github.com/sagikazarmark/email-rs/blob/main/crates/restate-email/examples/restate_resend_worker.rs)
 //!   wires [`email_kit::transport::resend::ResendTransport`] into the service;
-//!   it requires the `resend` feature.
+//!   it requires the `transport-resend` feature.
 
 mod contract;
 mod options;

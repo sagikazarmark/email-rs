@@ -31,11 +31,12 @@ Use `email_kit::prelude::*` for common message types and transport traits. When 
 - `attachment-opendal`: exposes OpenDAL attachment resolution through `email_kit::attachment::opendal`.
 - `tracing`: enables transport tracing instrumentation.
 - `transport-all`: enables every transport currently provided by `email-kit`.
+- `transport-all-wasm`: enables every transport that supports `wasm32-unknown-unknown`.
 - `transport-lettre`: exposes SMTP support through `email_kit::transport::lettre`.
 - `transport-resend`: exposes Resend support through `email_kit::transport::resend`.
 - `wire`: exposes RFC822 and MIME parsing and rendering through `email_kit::wire`.
 
-The Lettre adapter, and therefore `transport-all`, does not support `wasm32-unknown-unknown`. Use `transport-resend` when targeting Wasm.
+The Lettre adapter, and therefore `transport-all`, does not support `wasm32-unknown-unknown`. Use `transport-all-wasm` (or `transport-resend` directly) when targeting Wasm.
 
 See the [crate documentation](https://docs.rs/email-kit/latest/email_kit/) for API and feature semantics and the [generated feature graph](https://docs.rs/crate/email-kit/latest/features) for activation details.
 

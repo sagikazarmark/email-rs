@@ -41,6 +41,8 @@
 //! - `transport-lettre`: the Lettre SMTP adapter at `transport::lettre`.
 //! - `transport-resend`: the Resend adapter at `transport::resend`.
 //! - `transport-all`: all transport adapters.
+//! - `transport-all-wasm`: all transport adapters that support
+//!   `wasm32-unknown-unknown`.
 //! - `serde`, `schemars`, and `arbitrary`: forward the corresponding data-model
 //!   integrations.
 //! - `tracing`: transport instrumentation through
@@ -50,8 +52,9 @@
 //!
 //! The message, wire, and core transport facades support native and
 //! `wasm32` targets. The Lettre adapter, and therefore `transport-all`, does not
-//! support `wasm32-unknown-unknown`. The Resend adapter supports that target,
-//! but advertises and enforces per-send timeouts only on non-`wasm32` targets.
+//! support `wasm32-unknown-unknown`; use `transport-all-wasm` to enable every
+//! adapter that does. The Resend adapter supports that target, but advertises
+//! and enforces per-send timeouts only on non-`wasm32` targets.
 //!
 //! Namespaced access stays available when that is clearer:
 //!

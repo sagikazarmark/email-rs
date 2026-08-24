@@ -41,10 +41,15 @@ transport-all = [
     "email-kit/transport-all",
     "transport-resend",
 ]
+transport-all-wasm = [
+    "attachment-opendal",
+    "email-kit/transport-all-wasm",
+    "transport-resend",
+]
 transport-resend = [
     "email-kit/serde",
     "email-kit/transport-resend",
-    "restate-email/resend",
+    "restate-email/transport-resend",
 ]
 
 [dependencies]

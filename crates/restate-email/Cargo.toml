@@ -13,8 +13,6 @@ autotests = false
 
 [features]
 default = ["service"]
-# Provider-option deserialization is delegated to email-kit.
-resend = ["email-kit/transport-resend", "service"]
 # Derive JSON Schema for public queue payload types.
 schemars = [
     "dep:schemars",
@@ -26,6 +24,8 @@ schemars = [
 service = ["dep:bytes", "dep:email-kit", "dep:restate-sdk", "dep:serde_path_to_error"]
 # Forward email-message's RFC 5322 string address compatibility into queue schemas.
 rfc5322-string-compat = ["email-message/rfc5322-string-compat"]
+# Provider-option deserialization is delegated to email-kit.
+transport-resend = ["email-kit/transport-resend", "service"]
 
 [dependencies]
 email-kit = { workspace = true, features = ["serde"], optional = true }
@@ -64,7 +64,7 @@ required-features = ["service"]
 
 [[example]]
 name = "restate_resend_worker"
-required-features = ["resend"]
+required-features = ["transport-resend"]
 
 # Build docs with every compatible public API feature enabled.
 [package.metadata.docs.rs]

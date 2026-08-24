@@ -31,7 +31,7 @@ Default features enable the Restate worker service adapter. The SDK-free wire
 contract remains available with default features disabled.
 
 - `service`: enables `Service`, the worker registry, and the `restate-sdk` dependency. This is enabled by default.
-- `resend`: enables Resend provider-option deserialization through `email-kit`.
+- `transport-resend`: enables Resend provider-option deserialization through `email-kit`.
 - `schemars`: derives JSON Schema for public queue payload types and forwards schema support to the message and transport crates.
 - `rfc5322-string-compat`: accepts RFC 5322 string addresses in queue payloads and generated schemas in addition to typed address objects.
 
@@ -116,7 +116,7 @@ Retryable transport failures remain retryable Restate handler failures. Unknown 
 ## Examples
 
 - The [basic worker](examples/restate_email_worker.rs) starts an SDK endpoint with a resolver-decorated example transport: `cargo run -p restate-email --example restate_email_worker`.
-- The [Resend-backed worker](examples/restate_resend_worker.rs) requires `RESEND_API_KEY`, `RESEND_FROM`, and `RESEND_TO`: `cargo run -p restate-email --features resend --example restate_resend_worker`.
+- The [Resend-backed worker](examples/restate_resend_worker.rs) requires `RESEND_API_KEY`, `RESEND_FROM`, and `RESEND_TO`: `cargo run -p restate-email --features transport-resend --example restate_resend_worker`.
 
 The worker examples expose raw Restate SDK endpoints for registration with Restate; they are not plain JSON HTTP handlers. Invoke `Email.send` through Restate ingress. Set `RESTATE_IDENTITY_KEY` (one key or a comma-separated list) to require signed requests. Caller-side examples live in [`email-transport-restate`](../email-transport-restate).
 
