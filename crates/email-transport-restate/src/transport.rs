@@ -7,9 +7,8 @@ use email_transport::{
     Capabilities, ErrorKind, MaybeSend, SendOptions, SendReport, StructuredSendCapability,
     Transport, TransportError, structured_accepted_for,
 };
+use restate_email::{InvocationMode, RestateSendOptions, SendResponse, TransportKey};
 use serde::{Deserialize, Serialize};
-
-use crate::{InvocationMode, RestateSendOptions, SendResponse, TransportKey};
 
 const ERROR_SOURCE_HEADER: &str = "x-restate-error-source";
 const SERVICE_PATH: [&str; 2] = ["Email", "send"];
@@ -32,6 +31,12 @@ const SERVICE_PATH: [&str; 2] = ["Email", "send"];
 /// worker (attachment references, custom envelopes, and so on) is a deployment
 /// assertion made through [`RestateTransportBuilder`].
 ///
+/// # Authentication
+///
+/// [`RestateTransportBuilder::bearer_token`] attaches an
+/// `Authorization: Bearer` header to every ingress request, as required by
+/// Restate Cloud. The token is redacted from `Debug` output.
+///
 /// # Cancellation
 ///
 /// A request may be accepted by Restate even when this side observes an error
@@ -46,6 +51,7 @@ pub struct RestateTransport {
     send_url: reqwest::Url,
     transport: TransportKey,
     invocation_mode: InvocationMode,
+    bearer_token: Option<String>,
     capabilities: Capabilities,
 }
 
@@ -153,6 +159,9 @@ impl RestateTransport {
             .post(url)
             .header(reqwest::header::CONTENT_TYPE, "application/json")
             .body(body);
+        if let Some(bearer_token) = self.bearer_token.as_deref() {
+            request_builder = request_builder.bearer_auth(bearer_token);
+        }
         if let Some(idempotency_key) = options.idempotency_key.as_ref() {
             request_builder = request_builder.header("idempotency-key", idempotency_key.as_str());
         }
@@ -220,6 +229,10 @@ impl std::fmt::Debug for RestateTransport {
             .field("ingress_url", &redacted_url(&self.ingress_url))
             .field("transport", &self.transport)
             .field("invocation_mode", &self.invocation_mode)
+            .field(
+                "bearer_token",
+                &self.bearer_token.as_ref().map(|_| "<redacted>"),
+            )
             .field("capabilities", &self.capabilities)
             .finish_non_exhaustive()
     }
@@ -250,6 +263,7 @@ pub struct RestateTransportBuilder {
     ingress_url: reqwest::Url,
     client: Option<reqwest::Client>,
     invocation_mode: InvocationMode,
+    bearer_token: Option<String>,
     capabilities: Capabilities,
 }
 
@@ -274,6 +288,7 @@ impl RestateTransportBuilder {
             ingress_url,
             client: None,
             invocation_mode: InvocationMode::Queued,
+            bearer_token: None,
             capabilities: Capabilities::new()
                 .with_structured_send(StructuredSendCapability::Supported)
                 .with_idempotency_key(true),
@@ -297,6 +312,21 @@ impl RestateTransportBuilder {
     #[must_use]
     pub const fn invocation_mode(mut self, invocation_mode: InvocationMode) -> Self {
         self.invocation_mode = invocation_mode;
+        self
+    }
+
+    /// Send `Authorization: Bearer <token>` with every ingress request.
+    ///
+    /// Restate Cloud ingress requires an API key here. Self-hosted Restate
+    /// has no built-in ingress authentication, but a fronting reverse proxy
+    /// may expect the same header. Defaults to sending no `Authorization`
+    /// header. The token is redacted from `Debug` output.
+    ///
+    /// Other header schemes can be attached through
+    /// `reqwest::ClientBuilder::default_headers` on a custom [`Self::client`].
+    #[must_use]
+    pub fn bearer_token(mut self, bearer_token: impl Into<String>) -> Self {
+        self.bearer_token = Some(bearer_token.into());
         self
     }
 
@@ -337,6 +367,7 @@ impl RestateTransportBuilder {
             send_url,
             transport: self.transport,
             invocation_mode: self.invocation_mode,
+            bearer_token: self.bearer_token,
             capabilities: self.capabilities,
         }
     }
@@ -349,6 +380,10 @@ impl std::fmt::Debug for RestateTransportBuilder {
             .field("ingress_url", &redacted_url(&self.ingress_url))
             .field("client", &self.client.as_ref().map(|_| "<reqwest::Client>"))
             .field("invocation_mode", &self.invocation_mode)
+            .field(
+                "bearer_token",
+                &self.bearer_token.as_ref().map(|_| "<redacted>"),
+            )
             .field("capabilities", &self.capabilities)
             .finish()
     }
@@ -598,12 +633,14 @@ mod tests {
     }
 
     #[test]
-    fn debug_redacts_client_and_ingress_password() {
+    fn debug_redacts_client_ingress_password_and_bearer_token() {
         let builder = RestateTransport::builder(key(), url("http://user:hunter2@ingress.local"))
-            .client(reqwest::Client::new());
+            .client(reqwest::Client::new())
+            .bearer_token("tok_supersecret");
         let rendered = format!("{builder:?} {:?}", builder.clone().build());
 
         assert!(!rendered.contains("hunter2"));
+        assert!(!rendered.contains("tok_supersecret"));
         assert!(rendered.contains("redacted"));
         assert!(rendered.contains("<reqwest::Client>"));
     }

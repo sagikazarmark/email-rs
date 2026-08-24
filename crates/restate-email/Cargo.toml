@@ -13,8 +13,6 @@ autotests = false
 
 [features]
 default = ["service"]
-# Caller-side transport for invoking the email service through Restate ingress.
-client = ["dep:reqwest", "reqwest/default", "reqwest/json"]
 # Provider-option deserialization is delegated to email-kit.
 resend = ["email-kit/transport-resend", "service"]
 # Derive JSON Schema for public queue payload types.
@@ -35,7 +33,6 @@ email-message = { workspace = true, features = ["serde"] }
 email-transport = { workspace = true, features = ["serde"] }
 
 bytes = { version = "1", optional = true }
-reqwest = { workspace = true, default-features = false, optional = true }
 restate-sdk = { workspace = true, optional = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
@@ -44,22 +41,14 @@ serde_path_to_error = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-email-transport-resend = { workspace = true }
-
 http = "1"
 http-body-util = "0.1"
 prost = "0.14"
-reqwest = { workspace = true, features = ["json"], default-features = false }
 restate-sdk-shared-core = "7.0"
 tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
-wiremock = "0.6"
 
 [lints]
 workspace = true
-
-[[test]]
-name = "restate_transport"
-path = "tests/restate_transport.rs"
 
 [[test]]
 name = "send_request_wire"
@@ -68,14 +57,6 @@ path = "tests/send_request_wire.rs"
 [[test]]
 name = "service_contract"
 path = "tests/service_contract.rs"
-
-[[example]]
-name = "direct_or_restate"
-required-features = ["client"]
-
-[[example]]
-name = "invoke_local_worker"
-required-features = ["client"]
 
 [[example]]
 name = "restate_email_worker"

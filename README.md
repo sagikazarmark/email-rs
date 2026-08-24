@@ -26,6 +26,7 @@
 - [`email-transport`](crates/email-transport): provider-neutral transport traits and send-time options.
 - [`email-transport-lettre`](crates/email-transport-lettre): Lettre SMTP transport adapter.
 - [`email-transport-resend`](crates/email-transport-resend): Resend transport adapter.
+- [`email-transport-restate`](crates/email-transport-restate): Restate ingress transport adapter.
 - [`email-transport-test`](crates/email-transport-test): unpublished test transports and conformance helpers.
 - [`restate-email`](crates/restate-email): Restate worker contracts and service adapter.
 - [`restate-email-endpoint`](crates/restate-email-endpoint): standalone endpoint hosting the Restate email service.
@@ -45,12 +46,9 @@ cargo audit
 cargo deny check
 ```
 
-CI also verifies Rust 1.92, the documented Wasm targets, default and no-default
-configurations, and selected named features independently.
-
 The configured Dagger module exposes its complete local check set through:
 
-```sh
+```bash
 dagger check
 ```
 

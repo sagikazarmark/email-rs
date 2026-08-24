@@ -8,6 +8,15 @@ use url::Url;
 pub struct Config {
     pub transports: BTreeMap<String, TransportConfig>,
     pub attachments: Option<AttachmentConfig>,
+    /// Restate request identity public keys (`publickeyv1_...`).
+    ///
+    /// With at least one key configured the endpoint rejects unsigned
+    /// requests. Listing the old and the new key keeps both valid during
+    /// rotation. Accepts a list or a comma/whitespace-delimited string, so
+    /// the `RESTATE_EMAIL_IDENTITY_KEYS` environment override stays a plain
+    /// string.
+    #[serde(deserialize_with = "identity_keys")]
+    pub identity_keys: Vec<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -44,6 +53,27 @@ impl TransportConfig {
             Self::Resend { .. } => "resend",
         }
     }
+}
+
+fn identity_keys<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum IdentityKeys {
+        List(Vec<String>),
+        Delimited(String),
+    }
+
+    Ok(match IdentityKeys::deserialize(deserializer)? {
+        IdentityKeys::List(keys) => keys,
+        IdentityKeys::Delimited(keys) => keys
+            .split([',', ' ', '\t', '\n'])
+            .filter(|key| !key.is_empty())
+            .map(str::to_owned)
+            .collect(),
+    })
 }
 
 #[cfg(test)]
@@ -105,5 +135,35 @@ mod tests {
         .expect("configuration should parse");
 
         assert!(config.attachments.is_none());
+        assert!(config.identity_keys.is_empty());
+    }
+
+    #[test]
+    fn parses_identity_keys_from_list_and_delimited_string() {
+        let list: Config = Figment::from(Toml::string(
+            r#"
+            identity_keys = ["publickeyv1_old", "publickeyv1_new"]
+
+            [transports.transactional]
+            provider = "resend"
+            api_key = "test-key"
+            "#,
+        ))
+        .extract()
+        .expect("configuration should parse");
+        let delimited: Config = Figment::from(Toml::string(
+            r#"
+            identity_keys = "publickeyv1_old, publickeyv1_new"
+
+            [transports.transactional]
+            provider = "resend"
+            api_key = "test-key"
+            "#,
+        ))
+        .extract()
+        .expect("configuration should parse");
+
+        assert_eq!(list.identity_keys, ["publickeyv1_old", "publickeyv1_new"]);
+        assert_eq!(delimited.identity_keys, list.identity_keys);
     }
 }

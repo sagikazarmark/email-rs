@@ -1,5 +1,3 @@
-#![cfg(feature = "client")]
-
 use std::time::Duration;
 
 use email_message::{Address, Body, Envelope, Message, OutboundMessage};
@@ -7,7 +5,7 @@ use email_transport::{
     Capabilities, CorrelationId, ErrorKind, IdempotencyKey, SendOptions, StructuredSendCapability,
     Transport, TransportOption, TransportOptions,
 };
-use restate_email::{InvocationMode, RestateSendOptions, RestateTransport, TransportKey};
+use email_transport_restate::{InvocationMode, RestateSendOptions, RestateTransport, TransportKey};
 use serde::Serialize;
 use wiremock::matchers::{body_json, header, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -182,6 +180,66 @@ async fn waiting_send_posts_to_the_call_path_and_returns_the_worker_report() {
 }
 
 #[tokio::test]
+async fn bearer_token_is_sent_with_queued_and_waiting_requests() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(SEND_PATH))
+        .and(header("authorization", "Bearer ingress-api-key"))
+        .respond_with(ResponseTemplate::new(202).set_body_json(accepted_body()))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(CALL_PATH))
+        .and(header("authorization", "Bearer ingress-api-key"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(report_body()))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let builder = RestateTransport::builder(transport_key(), ingress_url(&server))
+        .bearer_token("ingress-api-key");
+
+    builder
+        .clone()
+        .build()
+        .send(&message(), &SendOptions::default())
+        .await
+        .expect("authenticated queued send succeeds");
+    builder
+        .invocation_mode(InvocationMode::Sent)
+        .build()
+        .send(&message(), &SendOptions::default())
+        .await
+        .expect("authenticated waiting send succeeds");
+}
+
+#[tokio::test]
+async fn requests_without_bearer_token_omit_the_authorization_header() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(SEND_PATH))
+        .respond_with(ResponseTemplate::new(202).set_body_json(accepted_body()))
+        .mount(&server)
+        .await;
+
+    queued_transport(&server)
+        .send(&message(), &SendOptions::default())
+        .await
+        .expect("unauthenticated send succeeds");
+
+    let requests = server
+        .received_requests()
+        .await
+        .expect("requests are recorded");
+    assert!(
+        requests
+            .iter()
+            .all(|request| !request.headers.contains_key("authorization")),
+        "no request should carry an Authorization header"
+    );
+}
+
+#[tokio::test]
 async fn per_send_option_overrides_queued_default_with_sent() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
@@ -324,6 +382,33 @@ async fn queued_ingress_rejection_is_validation() {
     assert_eq!(error.kind, ErrorKind::Validation);
     assert_eq!(error.http_status, Some(400));
     assert_eq!(error.message, "invalid delay");
+}
+
+#[tokio::test]
+async fn unauthenticated_ingress_rejection_is_authentication() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(SEND_PATH))
+        .respond_with(
+            ResponseTemplate::new(401)
+                .insert_header("x-restate-error-source", "ingress")
+                .set_body_json(serde_json::json!({
+                    "code": 401,
+                    "message": "missing or invalid API key",
+                    "source": "ingress"
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    let error = queued_transport(&server)
+        .send(&message(), &SendOptions::default())
+        .await
+        .expect_err("unauthenticated request should be rejected");
+
+    assert_eq!(error.kind, ErrorKind::Authentication);
+    assert!(error.is_terminal());
+    assert_eq!(error.http_status, Some(401));
 }
 
 #[tokio::test]

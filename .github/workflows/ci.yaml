@@ -79,6 +79,7 @@ jobs:
             email-transport \
             email-transport-lettre \
             email-transport-resend \
+            email-transport-restate \
             email-transport-test \
             restate-email \
             restate-email-endpoint
@@ -115,6 +116,7 @@ jobs:
             email-transport-lettre/pool \
             email-transport-lettre/rustls-tls \
             email-transport-resend/serde \
+            email-transport-restate/schemars \
             email-transport-test/conformance \
             restate-email/resend \
             restate-email/rfc5322-string-compat \

@@ -1,16 +1,15 @@
 //! Restate-backed worker contracts for outbound email delivery.
 //!
-//! This crate exposes the serializable email worker contract, an optional
-//! caller-side ingress transport, and an optional Restate service adapter.
-//! Provider-specific send options cross the queue boundary through the
-//! registry-driven [`SendRequestSeed`], using the provider-keyed wire
-//! representation owned by `email-transport`.
+//! This crate exposes the serializable email worker contract and an optional
+//! Restate service adapter. Provider-specific send options cross the queue
+//! boundary through the registry-driven [`SendRequestSeed`], using the
+//! provider-keyed wire representation owned by `email-transport`.
 //!
 //! The Restate service adapter is available as [`Service`] with the
-//! `service` feature. [`RestateTransport`] is available with `client`; it
-//! returns as soon as Restate has queued the invocation by default and can be
-//! asked to wait for the worker's provider report with [`InvocationMode::Sent`],
-//! either as a transport default or per send through [`RestateSendOptions`].
+//! `service` feature. The caller-side ingress transport lives in the
+//! [`email-transport-restate`](https://docs.rs/email-transport-restate)
+//! crate, which submits this contract through Restate ingress without
+//! depending on `restate-sdk`.
 //!
 //! # Quick start
 //!
@@ -26,14 +25,37 @@
 //! # }
 //! ```
 //!
+//! # Securing the worker
+//!
+//! Restate signs every request it makes to an SDK endpoint when the runtime
+//! is configured with a request identity key. Verify those signatures by
+//! registering the corresponding public keys on the endpoint builder; once at
+//! least one key is registered, unsigned requests are rejected. Registering
+//! several keys keeps both the old and the new key valid during rotation:
+//!
+//! ```rust
+//! # #[cfg(feature = "service")]
+//! # fn build() -> Result<(), Box<dyn std::error::Error>> {
+//! # use restate_email::{Service, StaticTransportRegistry};
+//! # use restate_sdk::{endpoint::Endpoint, service::IntoServiceDefinition};
+//! # let service = Service::new(StaticTransportRegistry::new()).into_service_definition();
+//! let _endpoint = Endpoint::builder()
+//!     .bind(service)
+//!     .identity_key("publickeyv1_w7YHemBctH5Ck2nQRQ47iBBqhNHy4FV7t2Usbye2A6f")?
+//!     .identity_key("publickeyv1_ChjENKeMvCtRnqG2mrBK1HmPKufgFUc98K8B3ononQvp")?
+//!     .build();
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Identity keys authenticate the Restate runtime to the worker; callers
+//! authenticate to Restate ingress separately (see `email-transport-restate`).
+//!
 //! # Features
 //!
 //! The default feature set enables `service` for backwards-compatible worker
 //! builds. Disable default features to consume only the SDK-free wire contract.
 //!
-//! - `client`: caller-side [`email_transport::Transport`] implementation using
-//!   Restate ingress (`/restate/send/Email/send` and `/restate/call/Email/send`).
-//!   This does not enable `restate-sdk`.
 //! - `service`: Restate worker service adapter and transport registry.
 //! - `resend`: registers Resend provider options and enables the Resend worker
 //!   example.
@@ -50,18 +72,12 @@
 //! # Examples
 //!
 //! - [`restate_email_worker`](https://github.com/sagikazarmark/email-rs/blob/main/crates/restate-email/examples/restate_email_worker.rs)
-//!   builds a worker with a custom transport.
+//!   builds a worker with a custom transport and optional identity-key
+//!   verification.
 //! - [`restate_resend_worker`](https://github.com/sagikazarmark/email-rs/blob/main/crates/restate-email/examples/restate_resend_worker.rs)
 //!   wires [`email_kit::transport::resend::ResendTransport`] into the service;
 //!   it requires the `resend` feature.
-//! - [`invoke_local_worker`](https://github.com/sagikazarmark/email-rs/blob/main/crates/restate-email/examples/invoke_local_worker.rs)
-//!   invokes `Email.send` through Restate ingress and waits for the response.
-//! - [`direct_or_restate`](https://github.com/sagikazarmark/email-rs/blob/main/crates/restate-email/examples/direct_or_restate.rs)
-//!   sends through the same application function using either a direct
-//!   provider transport or `RestateTransport`.
 
-#[cfg(feature = "client")]
-mod client;
 mod contract;
 mod options;
 #[cfg(feature = "service")]
@@ -71,8 +87,6 @@ pub mod transport;
 
 // `IdempotencyKey` and `CorrelationId` live in `email-transport` because they
 // flow through `SendOptions` directly.
-#[cfg(feature = "client")]
-pub use client::{RestateTransport, RestateTransportBuilder};
 pub use contract::{SendRequest, SendRequestSeed, SendResponse, TransportKey};
 pub use email_transport::{
     CorrelationId, IdempotencyKey, STRING_NEWTYPE_MAX_BYTES, SendOptions, StringNewtypeError,

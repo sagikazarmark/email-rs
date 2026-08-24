@@ -16,6 +16,8 @@ cargo install restate-email-endpoint
 The `restate-email` binary reads a JSON, YAML, or TOML configuration file and applies `RESTATE_EMAIL_` environment overrides. At least one transport must be configured.
 
 ```toml
+identity_keys = ["publickeyv1_w7YHemBctH5Ck2nQRQ47iBBqhNHy4FV7t2Usbye2A6f"]
+
 [transports.transactional]
 provider = "resend"
 api_key = "re_..."
@@ -40,6 +42,24 @@ The Restate service name is `Email`. Invoke its `send` handler with a `restate_e
 The `[attachments]` section is optional. When present, every configured transport is wrapped with attachment preparation. The resolver key is the reference routing prefix, and all fields other than `type` and `service` are passed to the selected OpenDAL service as operator options. Supported services include `azblob`, `fs`, `gcs`, `http`, and `s3`.
 
 Without `[attachments]`, byte-backed messages work unchanged and provider transports reject unresolved references terminally. Missing objects, unsupported references, access failures, and size violations are terminal; transient storage failures are retryable. Resolution occurs during the existing `send_email` Restate action, and resolved bytes are not journaled. Use immutable or versioned references when retries must resolve identical content.
+
+## Request Identity
+
+Restate signs every request it makes to a service endpoint when the runtime is
+configured with a request identity key. `identity_keys` lists the matching
+`publickeyv1_...` public keys; with at least one key configured the endpoint
+rejects unsigned requests. Multiple keys stay valid at once, so rotation is a
+config change: add the new key, switch the runtime to the new private key, then
+drop the old one. The environment override accepts a comma-separated list:
+
+```sh
+RESTATE_EMAIL_IDENTITY_KEYS="publickeyv1_old,publickeyv1_new" restate-email --config restate-email.toml
+```
+
+Without `identity_keys` the endpoint accepts unsigned requests. Identity keys
+authenticate the Restate runtime to this endpoint; callers authenticate to
+Restate ingress separately (see
+[`email-transport-restate`](../email-transport-restate)).
 
 ## Feature Flags
 

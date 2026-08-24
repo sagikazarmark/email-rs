@@ -1,5 +1,6 @@
 mod config;
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -75,8 +76,12 @@ async fn main() -> Result<()> {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     tracing_subscriber::fmt().with_env_filter(filter).init();
 
-    let config = cli.load_config()?;
-    let registry = create_registry(config)?;
+    let Config {
+        transports,
+        attachments,
+        identity_keys,
+    } = cli.load_config()?;
+    let registry = create_registry(transports, attachments)?;
     let option_registry = transport_option_registry();
     for provider in option_registry.provider_keys() {
         tracing::info!(provider, "registered transport option provider");
@@ -84,7 +89,18 @@ async fn main() -> Result<()> {
     let service = Service::new(registry)
         .with_transport_options(option_registry)
         .into_service_definition();
-    let endpoint = Endpoint::builder().bind(service);
+    let mut endpoint = Endpoint::builder().bind(service);
+    for identity_key in &identity_keys {
+        endpoint = endpoint
+            .identity_key(identity_key)
+            .with_context(|| format!("invalid Restate identity key `{identity_key}`"))?;
+    }
+    if !identity_keys.is_empty() {
+        tracing::info!(
+            keys = identity_keys.len(),
+            "request identity verification enabled"
+        );
+    }
     let bind_addr = format!("0.0.0.0:{}", cli.port);
 
     tracing::info!(%bind_addr, "starting Restate email endpoint");
@@ -96,11 +112,10 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn create_registry(config: Config) -> Result<StaticTransportRegistry> {
-    let Config {
-        transports,
-        attachments,
-    } = config;
+fn create_registry(
+    transports: BTreeMap<String, TransportConfig>,
+    attachments: Option<AttachmentConfig>,
+) -> Result<StaticTransportRegistry> {
     if transports.is_empty() {
         bail!("at least one transport must be configured");
     }
@@ -294,15 +309,17 @@ mod tests {
                 )]),
             },
         );
-        let config = Config {
-            transports: resend_transport_config(&server),
-            attachments: Some(AttachmentConfig {
-                max_attachment_bytes: Some(1024),
-                max_total_bytes: Some(2048),
-                resolvers,
-            }),
-        };
-        let service = Service::new(create_registry(config).expect("registry should build"));
+        let service = Service::new(
+            create_registry(
+                resend_transport_config(&server),
+                Some(AttachmentConfig {
+                    max_attachment_bytes: Some(1024),
+                    max_total_bytes: Some(2048),
+                    resolvers,
+                }),
+            )
+            .expect("registry should build"),
+        );
 
         let response = service
             .send_request(&reference_request("docs:report.bin"))
@@ -333,11 +350,7 @@ mod tests {
             .mount(&server)
             .await;
         let service = Service::new(
-            create_registry(Config {
-                transports: resend_transport_config(&server),
-                attachments: None,
-            })
-            .expect("registry should build"),
+            create_registry(resend_transport_config(&server), None).expect("registry should build"),
         );
 
         let response = service
@@ -377,14 +390,14 @@ mod tests {
             },
         )]);
         let service = Service::new(
-            create_registry(Config {
-                transports: resend_transport_config(&server),
-                attachments: Some(AttachmentConfig {
+            create_registry(
+                resend_transport_config(&server),
+                Some(AttachmentConfig {
                     max_attachment_bytes: Some(4),
                     max_total_bytes: Some(8),
                     resolvers,
                 }),
-            })
+            )
             .expect("registry should build"),
         );
 

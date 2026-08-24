@@ -41,6 +41,22 @@ fn sample_request(from: &str, to: &str) -> Result<SendRequest, Box<dyn std::erro
     })
 }
 
+/// Restate request identity public keys from `RESTATE_IDENTITY_KEY`.
+///
+/// Accepts one key or a comma-separated list. With at least one key the
+/// endpoint rejects unsigned requests; listing the old and the new key keeps
+/// both valid during rotation.
+fn identity_keys() -> Vec<String> {
+    std::env::var("RESTATE_IDENTITY_KEY")
+        .map(|keys| {
+            keys.split([',', ' '])
+                .filter(|key| !key.is_empty())
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let api_key = std::env::var("RESEND_API_KEY")?;
@@ -51,7 +67,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     registry.insert("resend-default", ResendTransport::new(api_key));
 
     let service = Service::new(registry).into_service_definition();
-    let endpoint = Endpoint::builder().bind(service);
+    let mut endpoint = Endpoint::builder().bind(service);
+    // Verify Restate's request identity; multiple keys allow rotation.
+    let identity_keys = identity_keys();
+    for identity_key in &identity_keys {
+        endpoint = endpoint.identity_key(identity_key)?;
+    }
     let address = "127.0.0.1:9081".parse()?;
     let request = sample_request(&from, &to)?;
 
@@ -64,6 +85,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Sample request body:\n{}",
         serde_json::to_string_pretty(&request)?
     );
+    if !identity_keys.is_empty() {
+        println!(
+            "Request identity verification enabled with {} key(s).",
+            identity_keys.len()
+        );
+    }
 
     HttpServer::new(endpoint.build())
         .listen_and_serve(address)

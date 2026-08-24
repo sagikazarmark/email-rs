@@ -1,7 +1,7 @@
 use email_message::{Address, Body, Message, OutboundMessage};
 use email_transport::{SendOptions, SendReport, Transport, TransportError};
 use email_transport_resend::ResendTransport;
-use restate_email::{InvocationMode, RestateTransport, TransportKey};
+use email_transport_restate::{InvocationMode, RestateTransport, TransportKey};
 
 async fn send_application_email<T: Transport>(
     transport: &T,
@@ -33,10 +33,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             InvocationMode::Queued
         };
-        let transport =
+        let mut builder =
             RestateTransport::builder(TransportKey::new("transactional")?, ingress_url.parse()?)
-                .invocation_mode(invocation_mode)
-                .build();
+                .invocation_mode(invocation_mode);
+        // Restate Cloud ingress requires an API key as a bearer token.
+        if let Ok(auth_token) = std::env::var("RESTATE_AUTH_TOKEN") {
+            builder = builder.bearer_token(auth_token);
+        }
+        let transport = builder.build();
         let report = send_application_email(&transport, &message).await?;
         match RestateTransport::invocation_id(&report) {
             Some(invocation_id) => println!("queued as Restate invocation {invocation_id}"),

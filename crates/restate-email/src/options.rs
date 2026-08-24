@@ -74,9 +74,12 @@ impl RestateSendOptions {
 /// Both modes invoke the same `Email.send` handler; they differ in the state
 /// the send has reached when the future resolves and in what the resulting
 /// `SendReport` describes.
+///
+/// The enum is deliberately exhaustive: a transport must implement every
+/// mode, so a new mode is a breaking change rather than a silently ignored
+/// wildcard.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[non_exhaustive]
 pub enum InvocationMode {
     /// Return once Restate has durably accepted the invocation.
     ///
