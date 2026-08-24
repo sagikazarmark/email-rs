@@ -24,6 +24,12 @@ pub struct Config {
 pub struct AttachmentConfig {
     pub max_attachment_bytes: Option<usize>,
     pub max_total_bytes: Option<usize>,
+    // Without `attachment-opendal` no resolver variant exists and the value
+    // type is empty; the field stays so configured resolvers fail loudly.
+    #[cfg_attr(
+        not(feature = "attachment-opendal"),
+        allow(clippy::zero_sized_map_values)
+    )]
     pub resolvers: BTreeMap<String, ResolverConfig>,
 }
 

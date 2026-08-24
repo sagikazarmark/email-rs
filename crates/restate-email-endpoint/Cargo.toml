@@ -16,13 +16,7 @@ path = "src/main.rs"
 doc = false
 
 [features]
-default = [
-    "email-kit/default",
-    "email-kit/tracing",
-    "restate-email/default",
-    "restate-email/rfc5322-string-compat",
-    "restate-email/schemars",
-]
+default = ["minimal", "transport-all"]
 attachment-opendal = [
     "dep:opendal",
     "email-kit/attachment-opendal",
@@ -32,6 +26,13 @@ attachment-opendal = [
     "opendal/services-gcs",
     "opendal/services-http",
     "opendal/services-s3",
+]
+minimal = [
+    "email-kit/default",
+    "email-kit/tracing",
+    "restate-email/default",
+    "restate-email/rfc5322-string-compat",
+    "restate-email/schemars",
 ]
 transport-all = [
     "attachment-opendal",

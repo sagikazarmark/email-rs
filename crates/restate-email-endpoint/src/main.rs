@@ -192,6 +192,12 @@ fn insert_transport<T>(
     }
 }
 
+// Without `attachment-opendal` only the limits are consumed and nothing can
+// fail, which trips these pedantic lints.
+#[cfg_attr(
+    not(feature = "attachment-opendal"),
+    allow(clippy::needless_pass_by_value, clippy::unnecessary_wraps)
+)]
 fn create_attachment_preparation(
     config: AttachmentConfig,
 ) -> Result<(Arc<SchemeRouter>, AttachmentLimits)> {

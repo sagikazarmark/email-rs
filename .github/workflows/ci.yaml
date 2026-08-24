@@ -81,8 +81,7 @@ jobs:
             email-transport-resend \
             email-transport-restate \
             email-transport-test \
-            restate-email \
-            restate-email-endpoint
+            restate-email
           do
             echo "==> cargo test -p $package --no-default-features"
             cargo test -p "$package" --no-default-features --locked
@@ -201,6 +200,11 @@ jobs:
 
       - name: Run clippy
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Run clippy (endpoint, single transports)
+        run: |
+          cargo clippy -p restate-email-endpoint --all-targets --no-default-features --features minimal,transport-lettre --locked -- -D warnings
+          cargo clippy -p restate-email-endpoint --all-targets --no-default-features --features minimal,transport-resend --locked -- -D warnings
 
   audit:
     name: Audit

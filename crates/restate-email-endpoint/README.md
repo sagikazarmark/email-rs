@@ -8,7 +8,7 @@
 ## Install
 
 ```sh
-cargo install restate-email-endpoint --features transport-all
+cargo install restate-email-endpoint
 ```
 
 ## Configuration
@@ -73,15 +73,20 @@ Restate ingress separately (see
 
 ## Feature Flags
 
-Default features enable the component defaults, queue-payload schemas, RFC 5322 string-address compatibility, and tracing. Transports and attachment preparation are explicit opt-ins.
+The default build is batteries-included: `minimal` plus `transport-all`. For a slimmer binary, disable default features and pick `minimal` plus the transports you need.
 
-- `attachment-opendal`: enables endpoint attachment preparation and the OpenDAL services listed above. It is enabled by `transport-all`. Without it, `[attachments]` limits still apply to byte-backed attachments, but resolvers cannot be configured.
-- `transport-lettre`: enables the SMTP transport and its `provider = "smtp"` endpoint configuration. It is an explicit opt-in, also enabled by `transport-all`.
-- `transport-resend`: enables the Resend transport and provider-option deserialization. It is an explicit opt-in, also enabled by `transport-all`.
+- `minimal`: the component defaults, queue-payload schemas, RFC 5322 string-address compatibility, and tracing. Every build wants this.
+- `attachment-opendal`: enables endpoint attachment preparation and the OpenDAL services listed above. It is enabled by `transport-all` and `transport-all-wasm`. Without it, `[attachments]` limits still apply to byte-backed attachments, but resolvers cannot be configured.
+- `transport-lettre`: enables the SMTP transport and its `provider = "smtp"` endpoint configuration. It is enabled by `transport-all`.
+- `transport-resend`: enables the Resend transport and provider-option deserialization. It is enabled by `transport-all` and `transport-all-wasm`.
 - `transport-all`: enables attachment preparation and every transport exposed by `email-kit`.
 - `transport-all-wasm`: enables attachment preparation and every `email-kit` transport that supports `wasm32-unknown-unknown`.
 
-The binary target requires at least one transport feature and fails the build with a clear error without one; `transport-all` is the batteries-included choice.
+The binary target requires at least one transport feature and fails the build with a clear error without one:
+
+```sh
+cargo install restate-email-endpoint --no-default-features --features minimal,transport-lettre
+```
 
 See the [generated feature graph](https://docs.rs/crate/restate-email-endpoint/latest/features) for activation details.
 
