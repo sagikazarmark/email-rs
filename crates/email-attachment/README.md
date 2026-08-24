@@ -22,9 +22,9 @@ async fn resolve() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-`AttachmentResolver` materializes opaque `AttachmentReference` values into bytes. `MapResolver` supports plain in-memory keys, while `SchemeRouter` dispatches references by prefix and strips `scheme:` plus an optional `//` before calling the selected resolver. `prepare_attachments` applies shared per-attachment and total size limits.
+`AttachmentResolver` materializes opaque `AttachmentReference` values into bytes. `MapResolver` supports plain in-memory keys. `SchemeRouter` dispatches references by their leading scheme (`scheme:value`, with an optional cosmetic `//`) and passes the selected resolver either the stripped value (the default) or the full reference. `FallbackResolver` consults a second resolver only when the first reports an unsupported reference, so unrouted or scheme-less keys can find a home without masking authoritative failures such as not-found. `prepare_attachments` applies shared per-attachment and total size limits.
 
-`ResolvingTransport` composes preparation onto any `email-transport` implementation. Byte-only messages use the inner transport's borrowed send path unchanged; reference-backed messages are materialized and delegated as owned messages.
+`AttachmentResolvingTransport` composes preparation onto any `email-transport` implementation. Byte-only messages use the inner transport's borrowed send path unchanged; reference-backed messages are materialized and delegated as owned messages.
 
 ## License
 

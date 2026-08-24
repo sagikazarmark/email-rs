@@ -7,8 +7,8 @@ use anyhow::{Context as _, Result, bail};
 use clap::Parser;
 use email_kit::attachment::opendal::OpendalResolver;
 use email_kit::attachment::{
-    AttachmentResolveError, AttachmentResolver, PreparationLimits, ResolvedAttachment,
-    ResolvingTransport, SchemeRouter,
+    AttachmentLimits, AttachmentResolveError, AttachmentResolver, AttachmentResolvingTransport,
+    ResolvedAttachment, SchemeRouter,
 };
 use email_kit::message::AttachmentReference;
 use email_kit::transport::resend::ResendTransport;
@@ -120,7 +120,7 @@ fn create_registry(config: Config) -> Result<StaticTransportRegistry> {
                 if let Some((resolver, limits)) = &attachment_preparation {
                     registry.insert(
                         key.clone(),
-                        ResolvingTransport::new(
+                        AttachmentResolvingTransport::new(
                             transport,
                             SharedAttachmentResolver(Arc::clone(resolver)),
                         )
@@ -140,8 +140,8 @@ fn create_registry(config: Config) -> Result<StaticTransportRegistry> {
 
 fn create_attachment_preparation(
     config: AttachmentConfig,
-) -> Result<(Arc<SchemeRouter>, PreparationLimits)> {
-    let limits = PreparationLimits::new()
+) -> Result<(Arc<SchemeRouter>, AttachmentLimits)> {
+    let limits = AttachmentLimits::new()
         .with_max_attachment_bytes(config.max_attachment_bytes)
         .with_max_total_bytes(config.max_total_bytes);
     let resolver_max_bytes = config.max_attachment_bytes.unwrap_or(usize::MAX);
@@ -403,7 +403,7 @@ mod tests {
         let mut registry = StaticTransportRegistry::new();
         registry.insert(
             "transactional",
-            ResolvingTransport::new(
+            AttachmentResolvingTransport::new(
                 ResendTransport::builder("test-key").build(),
                 TransientResolver,
             ),

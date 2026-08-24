@@ -1,4 +1,4 @@
-use email_attachment::{MapResolver, PreparationLimits, ResolveErrorKind, prepare_attachments};
+use email_attachment::{AttachmentLimits, MapResolver, ResolveErrorKind, prepare_attachments};
 use email_message::{
     Address, Attachment, AttachmentBody, AttachmentReference, Body, ContentType, Disposition,
     Message, OutboundMessage,
@@ -42,7 +42,7 @@ async fn preparation_materializes_references_and_preserves_attachment_metadata()
             second_reference,
         ]),
         &resolver,
-        &PreparationLimits::default(),
+        &AttachmentLimits::default(),
     )
     .await
     .expect("preparation succeeds");
@@ -69,7 +69,7 @@ async fn preparation_returns_byte_only_messages_unchanged() {
     let prepared = prepare_attachments(
         message.clone(),
         &MapResolver::new(),
-        &PreparationLimits::default(),
+        &AttachmentLimits::default(),
     )
     .await
     .expect("byte-only message passes through");
@@ -79,7 +79,7 @@ async fn preparation_returns_byte_only_messages_unchanged() {
 
 #[tokio::test]
 async fn preparation_enforces_limits_on_byte_only_messages() {
-    let mut limits = PreparationLimits::default();
+    let mut limits = AttachmentLimits::default();
     limits.max_total_bytes = Some(7);
 
     let error = prepare_attachments(
@@ -98,7 +98,7 @@ async fn preparation_enforces_limits_on_byte_only_messages() {
 
 #[tokio::test]
 async fn preparation_enforces_per_attachment_limit() {
-    let mut limits = PreparationLimits::default();
+    let mut limits = AttachmentLimits::default();
     limits.max_attachment_bytes = Some(3);
 
     let error = prepare_attachments(
@@ -117,7 +117,7 @@ async fn preparation_enforces_per_attachment_limit() {
 
 #[tokio::test]
 async fn preparation_enforces_total_limit_across_existing_and_resolved_bytes() {
-    let mut limits = PreparationLimits::default();
+    let mut limits = AttachmentLimits::default();
     limits.max_total_bytes = Some(7);
 
     let error = prepare_attachments(

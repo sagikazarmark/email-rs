@@ -1,7 +1,8 @@
 use std::sync::{Arc, Mutex, PoisonError};
 
 use email_attachment::{
-    AttachmentResolveError, MapResolver, PreparationLimits, ResolveErrorKind, ResolvingTransport,
+    AttachmentLimits, AttachmentResolveError, AttachmentResolvingTransport, MapResolver,
+    ResolveErrorKind,
 };
 use email_message::{
     Address, Attachment, AttachmentBody, AttachmentReference, Body, ContentType, Message,
@@ -78,7 +79,7 @@ impl Transport for RecordingTransport {
 #[tokio::test]
 async fn decorator_borrows_byte_only_messages_without_preparation() {
     let inner = RecordingTransport::default();
-    let transport = ResolvingTransport::new(inner.clone(), MapResolver::new());
+    let transport = AttachmentResolvingTransport::new(inner.clone(), MapResolver::new());
     let message = message_with(Attachment::bytes(content_type(), b"ready"));
 
     transport
@@ -92,8 +93,8 @@ async fn decorator_borrows_byte_only_messages_without_preparation() {
 #[tokio::test]
 async fn decorator_enforces_limits_on_byte_only_messages() {
     let inner = RecordingTransport::default();
-    let transport = ResolvingTransport::new(inner.clone(), MapResolver::new())
-        .with_limits(PreparationLimits::new().with_max_attachment_bytes(Some(3)));
+    let transport = AttachmentResolvingTransport::new(inner.clone(), MapResolver::new())
+        .with_limits(AttachmentLimits::new().with_max_attachment_bytes(Some(3)));
     let message = message_with(Attachment::bytes(content_type(), b"ready"));
 
     let error = transport
@@ -111,7 +112,7 @@ async fn decorator_enforces_limits_on_byte_only_messages() {
 #[tokio::test]
 async fn decorator_resolves_borrowed_references_then_delegates_owned() {
     let inner = RecordingTransport::default();
-    let transport = ResolvingTransport::new(
+    let transport = AttachmentResolvingTransport::new(
         inner.clone(),
         MapResolver::new().with_entry("asset", b"ready"),
     );
@@ -130,7 +131,8 @@ async fn decorator_resolves_borrowed_references_then_delegates_owned() {
 
 #[test]
 fn decorator_preserves_inner_capabilities_and_advertises_references() {
-    let transport = ResolvingTransport::new(RecordingTransport::default(), MapResolver::new());
+    let transport =
+        AttachmentResolvingTransport::new(RecordingTransport::default(), MapResolver::new());
 
     let capabilities = transport.capabilities();
 
@@ -173,7 +175,7 @@ fn resolution_errors_map_to_transport_retry_classification() {
 #[tokio::test]
 async fn reference_backed_message_is_delivered_as_bytes_end_to_end() {
     let inner = MemoryTransport::new();
-    let transport = ResolvingTransport::new(
+    let transport = AttachmentResolvingTransport::new(
         inner.clone(),
         MapResolver::new().with_entry("invoice", b"invoice bytes"),
     );

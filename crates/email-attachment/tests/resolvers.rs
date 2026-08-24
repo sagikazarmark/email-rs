@@ -1,4 +1,7 @@
-use email_attachment::{AttachmentResolver, MapResolver, ResolveErrorKind, SchemeRouter};
+use email_attachment::{
+    AttachmentResolver, FallbackResolver, MapResolver, ResolveErrorKind, SchemeDispatch,
+    SchemeRouter,
+};
 use email_message::AttachmentReference;
 
 #[tokio::test]
@@ -52,4 +55,85 @@ async fn scheme_router_rejects_unregistered_or_unprefixed_references() {
             .expect_err("reference must be routed");
         assert_eq!(error.kind, ResolveErrorKind::UnsupportedReference);
     }
+}
+
+#[tokio::test]
+async fn scheme_router_passes_full_reference_when_configured() {
+    let resolver = MapResolver::new().with_entry("https://example.com/logo.png", b"image");
+    let router =
+        SchemeRouter::new().with_resolver_using("https", resolver, SchemeDispatch::FullReference);
+
+    let resolved_attachment = router
+        .resolve(&AttachmentReference::new("https://example.com/logo.png"))
+        .await
+        .expect("full reference reaches the resolver unchanged");
+
+    assert_eq!(resolved_attachment.bytes, b"image");
+}
+
+#[tokio::test]
+async fn scheme_router_matches_schemes_case_insensitively() {
+    let resolver = MapResolver::new().with_entry("logo", b"image");
+    let router = SchemeRouter::new().with_resolver("asset", resolver);
+
+    let resolved_attachment = router
+        .resolve(&AttachmentReference::new("ASSET:logo"))
+        .await
+        .expect("uppercase scheme routes to the lowercase registration");
+
+    assert_eq!(resolved_attachment.bytes, b"image");
+}
+
+#[tokio::test]
+async fn scheme_router_rejects_invalid_scheme_prefixes() {
+    let router = SchemeRouter::new().with_resolver("asset", MapResolver::new());
+
+    for reference in ["not a scheme:value", "1st:value", ":value"] {
+        let error = router
+            .resolve(&AttachmentReference::new(reference))
+            .await
+            .expect_err("invalid scheme prefix must not route");
+        assert_eq!(error.kind, ResolveErrorKind::UnsupportedReference);
+    }
+}
+
+#[test]
+#[should_panic(expected = "not a valid attachment reference scheme")]
+fn scheme_router_panics_on_invalid_scheme_registration() {
+    let _ = SchemeRouter::new().with_resolver("not a scheme", MapResolver::new());
+}
+
+#[tokio::test]
+async fn fallback_resolver_falls_back_on_unsupported_references() {
+    let router =
+        SchemeRouter::new().with_resolver("asset", MapResolver::new().with_entry("logo", b"image"));
+    let resolver =
+        FallbackResolver::new(router, MapResolver::new().with_entry("plain-key", b"bytes"));
+
+    let from_primary = resolver
+        .resolve(&AttachmentReference::new("asset:logo"))
+        .await
+        .expect("routed reference uses the primary");
+    let from_fallback = resolver
+        .resolve(&AttachmentReference::new("plain-key"))
+        .await
+        .expect("scheme-less reference uses the fallback");
+
+    assert_eq!(from_primary.bytes, b"image");
+    assert_eq!(from_fallback.bytes, b"bytes");
+}
+
+#[tokio::test]
+async fn fallback_resolver_propagates_authoritative_failures() {
+    let resolver = FallbackResolver::new(
+        MapResolver::new(),
+        MapResolver::new().with_entry("missing", b"1"),
+    );
+
+    let error = resolver
+        .resolve(&AttachmentReference::new("missing"))
+        .await
+        .expect_err("not-found is authoritative and must not fall back");
+
+    assert_eq!(error.kind, ResolveErrorKind::NotFound);
 }

@@ -5,35 +5,35 @@ use email_transport::{
 
 use crate::preparation::{enforce_limits, has_attachment_references};
 use crate::{
-    AttachmentResolveError, AttachmentResolver, PreparationLimits, ResolveErrorKind,
+    AttachmentLimits, AttachmentResolveError, AttachmentResolver, ResolveErrorKind,
     prepare_attachments,
 };
 
 /// Transport decorator that resolves attachment references before delivery.
 ///
-/// The configured [`PreparationLimits`] apply to every send, not only to sends
+/// The configured [`AttachmentLimits`] apply to every send, not only to sends
 /// that carry references: a byte-backed message is checked against the same
 /// policy before it is passed through untouched.
-pub struct ResolvingTransport<T, R> {
+pub struct AttachmentResolvingTransport<T, R> {
     inner: T,
     resolver: R,
-    limits: PreparationLimits,
+    limits: AttachmentLimits,
 }
 
-impl<T, R> ResolvingTransport<T, R> {
+impl<T, R> AttachmentResolvingTransport<T, R> {
     /// Wrap `inner` with attachment resolution using unlimited size policy.
     #[must_use]
     pub fn new(inner: T, resolver: R) -> Self {
         Self {
             inner,
             resolver,
-            limits: PreparationLimits::default(),
+            limits: AttachmentLimits::default(),
         }
     }
 
     /// Set the attachment preparation size policy.
     #[must_use]
-    pub const fn with_limits(mut self, limits: PreparationLimits) -> Self {
+    pub const fn with_limits(mut self, limits: AttachmentLimits) -> Self {
         self.limits = limits;
         self
     }
@@ -52,7 +52,7 @@ impl<T, R> ResolvingTransport<T, R> {
 
     /// Return the attachment preparation size policy.
     #[must_use]
-    pub const fn limits(&self) -> &PreparationLimits {
+    pub const fn limits(&self) -> &AttachmentLimits {
         &self.limits
     }
 
@@ -62,7 +62,7 @@ impl<T, R> ResolvingTransport<T, R> {
     }
 }
 
-impl<T, R> Clone for ResolvingTransport<T, R>
+impl<T, R> Clone for AttachmentResolvingTransport<T, R>
 where
     T: Clone,
     R: Clone,
@@ -76,7 +76,7 @@ where
     }
 }
 
-impl<T, R> Transport for ResolvingTransport<T, R>
+impl<T, R> Transport for AttachmentResolvingTransport<T, R>
 where
     T: Transport,
     R: AttachmentResolver,

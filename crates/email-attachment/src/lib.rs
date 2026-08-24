@@ -24,9 +24,9 @@ mod preparation;
 mod resolver;
 mod transport;
 
-pub use preparation::{PreparationLimits, prepare_attachments};
+pub use preparation::{AttachmentLimits, prepare_attachments};
 pub use resolver::{
-    AttachmentResolveError, AttachmentResolver, MapResolver, ResolveErrorKind, ResolvedAttachment,
-    SchemeRouter,
+    AttachmentResolveError, AttachmentResolver, FallbackResolver, MapResolver, ResolveErrorKind,
+    ResolvedAttachment, SchemeDispatch, SchemeRouter,
 };
-pub use transport::ResolvingTransport;
+pub use transport::AttachmentResolvingTransport;

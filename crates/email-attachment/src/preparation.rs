@@ -11,14 +11,14 @@ use crate::{AttachmentResolveError, AttachmentResolver, ResolveErrorKind};
 /// storage, memory, and provider constraints.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct PreparationLimits {
+pub struct AttachmentLimits {
     /// Maximum bytes allowed for one attachment.
     pub max_attachment_bytes: Option<usize>,
     /// Maximum bytes allowed across all attachments in the message.
     pub max_total_bytes: Option<usize>,
 }
 
-impl PreparationLimits {
+impl AttachmentLimits {
     /// Create an unlimited preparation policy.
     #[must_use]
     pub const fn new() -> Self {
@@ -56,10 +56,11 @@ impl PreparationLimits {
 pub async fn prepare_attachments<R: AttachmentResolver>(
     message: OutboundMessage,
     resolver: &R,
-    limits: &PreparationLimits,
+    limits: &AttachmentLimits,
 ) -> Result<OutboundMessage, AttachmentResolveError> {
     if !has_attachment_references(&message) {
         enforce_limits(&message, limits)?;
+
         return Ok(message);
     }
 
@@ -77,7 +78,9 @@ pub async fn prepare_attachments<R: AttachmentResolver>(
                 ));
             }
         };
+
         let resolved_attachment = resolver.resolve(&reference).await?;
+
         enforce_attachment_limit(resolved_attachment.bytes.len(), limits)?;
         total_bytes = checked_total(total_bytes, resolved_attachment.bytes.len(), limits)?;
         attachment.set_body(AttachmentBody::Bytes(resolved_attachment.bytes));
@@ -85,6 +88,7 @@ pub async fn prepare_attachments<R: AttachmentResolver>(
 
     OutboundMessage::new(message.with_attachments(attachments)).map_err(|error| {
         let message = format!("prepared outbound message failed validation: {error}");
+
         AttachmentResolveError::new(ResolveErrorKind::Internal, message).with_source(error)
     })
 }
@@ -96,7 +100,7 @@ pub async fn prepare_attachments<R: AttachmentResolver>(
 /// it happens to carry a reference.
 pub(crate) fn enforce_limits(
     message: &OutboundMessage,
-    limits: &PreparationLimits,
+    limits: &AttachmentLimits,
 ) -> Result<(), AttachmentResolveError> {
     accumulate_byte_backed(message.as_message().attachments(), limits).map(|_| ())
 }
@@ -111,7 +115,7 @@ pub(crate) fn has_attachment_references(message: &OutboundMessage) -> bool {
 
 fn accumulate_byte_backed(
     attachments: &[Attachment],
-    limits: &PreparationLimits,
+    limits: &AttachmentLimits,
 ) -> Result<usize, AttachmentResolveError> {
     let mut total_bytes = 0usize;
 
@@ -127,7 +131,7 @@ fn accumulate_byte_backed(
 
 fn enforce_attachment_limit(
     bytes: usize,
-    limits: &PreparationLimits,
+    limits: &AttachmentLimits,
 ) -> Result<(), AttachmentResolveError> {
     if limits
         .max_attachment_bytes
@@ -144,7 +148,7 @@ fn enforce_attachment_limit(
 fn checked_total(
     current: usize,
     additional: usize,
-    limits: &PreparationLimits,
+    limits: &AttachmentLimits,
 ) -> Result<usize, AttachmentResolveError> {
     let total = current.checked_add(additional).ok_or_else(|| {
         AttachmentResolveError::new(

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use email_kit::attachment::{MapResolver, ResolvingTransport, SchemeRouter};
+use email_kit::attachment::{AttachmentResolvingTransport, MapResolver, SchemeRouter};
 use email_message::ContentType;
 use email_message::{
     Address, Attachment, AttachmentBody, AttachmentReference, Body, EmailAddress, Envelope,
@@ -87,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut registry = StaticTransportRegistry::new();
     registry.insert(
         "transactional",
-        ResolvingTransport::new(ExampleTransport, resolver),
+        AttachmentResolvingTransport::new(ExampleTransport, resolver),
     );
 
     let service = Service::new(registry).into_service_definition();

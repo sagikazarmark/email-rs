@@ -116,10 +116,10 @@ worker is a deployment assertion made on the builder. Unresolved attachment
 references remain disabled by default and can be asserted with
 `.attachment_references(true)` when the worker has a resolver configured.
 
-Attachment preparation composes at registry construction rather than in `Service`. Wrap a provider transport in `email_kit::attachment::ResolvingTransport` to resolve reference-backed attachments inside the existing `send_email` action before provider delivery:
+Attachment preparation composes at registry construction rather than in `Service`. Wrap a provider transport in `email_kit::attachment::AttachmentResolvingTransport` to resolve reference-backed attachments inside the existing `send_email` action before provider delivery:
 
 ```rust
-use email_kit::attachment::{MapResolver, ResolvingTransport, SchemeRouter};
+use email_kit::attachment::{MapResolver, AttachmentResolvingTransport, SchemeRouter};
 use restate_email::StaticTransportRegistry;
 
 let resolver = SchemeRouter::new().with_resolver(
@@ -129,7 +129,7 @@ let resolver = SchemeRouter::new().with_resolver(
 let mut registry = StaticTransportRegistry::new();
 registry.insert(
     "transactional",
-    ResolvingTransport::new(provider_transport, resolver),
+    AttachmentResolvingTransport::new(provider_transport, resolver),
 );
 ```
 
