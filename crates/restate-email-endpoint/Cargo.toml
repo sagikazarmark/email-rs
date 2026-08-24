@@ -13,11 +13,10 @@ categories = ["email", "asynchronous"]
 [[bin]]
 name = "restate-email"
 path = "src/main.rs"
-required-features = ["transport-all"]
 doc = false
 
 [features]
-default = ["attachment-opendal", "email-kit/default", "email-kit/tracing", "restate-email/default", "restate-email/rfc5322-string-compat", "restate-email/schemars", "transport-all"]
+default = ["minimal", "transport-all"]
 attachment-opendal = [
     "dep:opendal",
     "email-kit/attachment-opendal",
@@ -28,20 +27,46 @@ attachment-opendal = [
     "opendal/services-http",
     "opendal/services-s3",
 ]
+minimal = [
+    "email-kit/default",
+    "email-kit/tracing",
+    "restate-email/default",
+    "restate-email/rfc5322-string-compat",
+    "restate-email/schemars",
+]
 transport-all = [
     "attachment-opendal",
-    "email-kit/serde",
     "email-kit/transport-all",
+    "transport-lettre",
+    "transport-resend",
+]
+transport-all-wasm = [
+    "attachment-opendal",
+    "email-kit/transport-all-wasm",
+    "transport-resend",
+]
+transport-lettre = [
+    "dep:email-transport-lettre",
+    "email-kit/serde",
+    "email-kit/transport-lettre",
+    "email-transport-lettre/default",
     "restate-email/service",
+]
+transport-resend = [
+    "email-kit/serde",
+    "email-kit/transport-resend",
+    "restate-email/transport-resend",
 ]
 
 [dependencies]
+email-kit = { workspace = true, default-features = false }
+email-transport-lettre = { workspace = true, optional = true }
+restate-email = { workspace = true, default-features = false }
+
 anyhow = "1"
 clap = { version = "4.5", features = ["derive", "env"] }
-email-kit = { workspace = true, default-features = false }
 figment = { version = "0.10", features = ["env", "json", "toml", "yaml"] }
 opendal = { workspace = true, optional = true }
-restate-email = { workspace = true, default-features = false }
 restate-sdk = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
@@ -53,3 +78,6 @@ url = { version = "2", features = ["serde"] }
 serde_json = { workspace = true }
 tempfile = "3"
 wiremock = "0.6"
+
+[lints]
+workspace = true

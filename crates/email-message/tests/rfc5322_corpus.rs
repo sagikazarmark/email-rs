@@ -732,6 +732,16 @@ fn serde_roundtrip_email_and_message() {
         .expect("message should validate");
     let encoded =
         serde_json::to_string(&attachment_message).expect("attachment message should serialize");
+    let encoded_value: serde_json::Value =
+        serde_json::from_str(&encoded).expect("attachment message should be valid JSON");
+    assert_eq!(
+        encoded_value["attachments"][0]["body"]["reference"],
+        "s3://attachments/report.pdf"
+    );
+    assert!(
+        encoded_value["attachments"][0]["body"].get("uri").is_none(),
+        "attachment references must not use the obsolete URI field"
+    );
     let decoded: Message =
         serde_json::from_str(&encoded).expect("attachment message should deserialize");
     assert_eq!(
@@ -1021,7 +1031,9 @@ fn address_list_flattens_mailboxes_around_named_group() {
 
     match &parsed.as_slice()[0] {
         Address::Mailbox(mailbox) => assert_eq!(mailbox.email().as_str(), "alice@example.com"),
-        other => panic!("index 0: expected Mailbox(alice), got {other:?}"),
+        other @ Address::Group(_) => {
+            panic!("index 0: expected Mailbox(alice), got {other:?}")
+        }
     }
 
     match &parsed.as_slice()[1] {
@@ -1030,12 +1042,16 @@ fn address_list_flattens_mailboxes_around_named_group() {
             assert_eq!(group.members().len(), 1);
             assert_eq!(group.members()[0].email().as_str(), "bob@example.com");
         }
-        other => panic!("index 1: expected Group(Team, [bob]), got {other:?}"),
+        other @ Address::Mailbox(_) => {
+            panic!("index 1: expected Group(Team, [bob]), got {other:?}")
+        }
     }
 
     match &parsed.as_slice()[2] {
         Address::Mailbox(mailbox) => assert_eq!(mailbox.email().as_str(), "dave@example.com"),
-        other => panic!("index 2: expected Mailbox(dave), got {other:?}"),
+        other @ Address::Group(_) => {
+            panic!("index 2: expected Mailbox(dave), got {other:?}")
+        }
     }
 }
 
@@ -1197,6 +1213,22 @@ fn serde_omits_empty_collections_in_message() {
 
 #[cfg(feature = "serde")]
 #[test]
+fn serde_attachment_reference_uses_reference_field() {
+    let reference = email_message::AttachmentReference::new("550e8400-e29b-41d4-a716-446655440000");
+
+    let value = serde_json::to_value(&reference).expect("attachment reference serializes");
+    assert_eq!(
+        value,
+        serde_json::json!({"reference": "550e8400-e29b-41d4-a716-446655440000"})
+    );
+
+    let decoded: email_message::AttachmentReference =
+        serde_json::from_value(value).expect("attachment reference deserializes");
+    assert_eq!(decoded, reference);
+}
+
+#[cfg(feature = "serde")]
+#[test]
 fn serde_attachment_bytes_round_trip_as_base64() {
     use email_message::{Attachment, AttachmentBody, ContentType};
 
@@ -1217,6 +1249,37 @@ fn serde_attachment_bytes_round_trip_as_base64() {
         AttachmentBody::Bytes(bytes) => assert_eq!(bytes.as_slice(), b"report"),
         other => panic!("expected Bytes after roundtrip, got {other:?}"),
     }
+}
+
+#[cfg(feature = "schemars")]
+#[test]
+fn schemars_attachment_reference_uses_reference_field() {
+    let schema = schema_for!(email_message::AttachmentReference);
+    let value = serde_json::to_value(schema).expect("schema serializes");
+
+    assert!(value["properties"].get("reference").is_some());
+    assert!(value["properties"].get("uri").is_none());
+    assert_eq!(value["required"], serde_json::json!(["reference"]));
+}
+
+#[cfg(feature = "schemars")]
+#[test]
+fn schemars_attachment_body_uses_reference_field() {
+    let schema = schema_for!(email_message::AttachmentBody);
+    let value = serde_json::to_value(schema).expect("schema serializes");
+    let reference = value["oneOf"]
+        .as_array()
+        .expect("attachment body schema has alternatives")
+        .iter()
+        .find(|variant| variant["properties"]["type"]["const"] == "reference")
+        .expect("attachment body schema has a reference alternative");
+
+    assert!(reference["properties"].get("reference").is_some());
+    assert!(reference["properties"].get("uri").is_none());
+    assert_eq!(
+        reference["required"],
+        serde_json::json!(["type", "reference"])
+    );
 }
 
 #[cfg(feature = "serde")]

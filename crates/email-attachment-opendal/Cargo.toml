@@ -22,11 +22,12 @@ services-s3 = ["opendal/services-s3"]
 [dependencies]
 email-attachment = { workspace = true }
 email-message = { workspace = true }
-futures-util = { workspace = true }
 opendal = { workspace = true }
+
+futures-util = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
-[package.metadata.docs.rs]
-features = ["services-azblob", "services-fs", "services-gcs", "services-http", "services-s3"]
+[lints]
+workspace = true

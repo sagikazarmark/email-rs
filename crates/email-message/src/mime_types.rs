@@ -1007,6 +1007,8 @@ impl schemars::JsonSchema for MimePart {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::{ContentTransferEncoding, ContentType};
 
     #[test]
@@ -1219,7 +1221,6 @@ mod tests {
         assert_eq!(c.as_str(), "x-myenc");
 
         // Same value can be safely used as a HashMap/HashSet key.
-        use std::collections::HashSet;
         let mut set: HashSet<ContentTransferEncoding> = HashSet::new();
         set.insert(a);
         assert!(set.contains(&b));

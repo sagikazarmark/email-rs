@@ -6,6 +6,20 @@
 //! Provider-specific options are carried through [`TransportOptions`] so the
 //! core API stays transport-agnostic.
 //!
+//! # Quick start
+//!
+//! ```rust
+//! use email_transport::email_message::OutboundMessage;
+//! use email_transport::{SendOptions, SendReport, Transport, TransportError};
+//!
+//! async fn deliver<T: Transport>(
+//!     transport: &T,
+//!     message: &OutboundMessage,
+//! ) -> Result<SendReport, TransportError> {
+//!     transport.send(message, &SendOptions::default()).await
+//! }
+//! ```
+//!
 //! Terminology:
 //!
 //! - A *transport* is the Rust abstraction/implementation used to send mail.

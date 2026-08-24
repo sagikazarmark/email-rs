@@ -5,6 +5,19 @@
 
 **Durable Restate service contracts for outbound email delivery.**
 
+## Quick Start
+
+Bind a transport registry to a Restate endpoint:
+
+```rust
+use restate_email::{Service, StaticTransportRegistry};
+use restate_sdk::{endpoint::Endpoint, service::IntoServiceDefinition};
+
+let registry = StaticTransportRegistry::new();
+let service = Service::new(registry).into_service_definition();
+let endpoint = Endpoint::builder().bind(service).build();
+```
+
 ## Scope Contract
 
 - Defines a serializable, registry-decoded `SendRequest` around a validated `email_message::OutboundMessage`.
@@ -17,9 +30,8 @@
 Default features enable the Restate worker service adapter. The SDK-free wire
 contract remains available with default features disabled.
 
-- `client`: enables `RestateTransport`, a caller-side `email_transport::Transport` that invokes Restate ingress without depending on `restate-sdk`.
-- `service`: enables `ServiceImpl`, the worker registry, and the `restate-sdk` dependency. This is enabled by default.
-- `resend`: enables Resend provider-option deserialization through `email-kit`.
+- `service`: enables `Service`, the worker registry, and the `restate-sdk` dependency. This is enabled by default.
+- `transport-resend`: enables Resend provider-option deserialization through `email-kit`.
 - `schemars`: derives JSON Schema for public queue payload types and forwards schema support to the message and transport crates.
 - `rfc5322-string-compat`: accepts RFC 5322 string addresses in queue payloads and generated schemas in addition to typed address objects.
 
@@ -31,9 +43,9 @@ See the [crate documentation](https://docs.rs/restate-email/latest/restate_email
 - `SendRequestSeed`: registry-driven deserializer for queued requests and provider-specific options.
 - `TransportResolver`: resolves a transport key to a configured `Transport`.
 - `StaticTransportRegistry`: owned registry for fixed-key worker setups.
-- `ServiceImpl`: Restate service wrapper that hydrates provider options and dispatches inside a named, journaled `ctx.run` action.
+- `Service`: Restate service wrapper that hydrates provider options and dispatches inside a named, journaled `ctx.run` action.
 - `SendResponse`: serializable response containing the transport `SendReport`.
-- `RestateTransport`: caller-side transport that submits the same contract through Restate ingress.
+- `InvocationMode` / `RestateSendOptions`: how far a Restate-backed send is followed (`Queued` or `Sent`), as a transport default and as a per-send `"restate"` transport option.
 
 Provider-specific `transport_options` use best-effort union semantics. A caller
 may include slices for every provider it supports; the selected transport takes
@@ -47,21 +59,21 @@ constrain delivery, such as sandbox mode, suppression-list toggles, or
 transport honors or rejects. See the
 [`TransportOption` safety boundary](https://docs.rs/email-transport/latest/email_transport/trait.TransportOption.html).
 
-`RestateTransport` consumes `SendOptions::idempotency_key` as Restate's
-`idempotency-key` ingress header. The key is omitted from the queued
-`SendOptions`, so it is not forwarded to the provider. This makes replaying the
-enqueue safe without accidentally reusing one key across Restate and provider
-idempotency domains.
+## Caller-Side Transport
 
-The ingress client cannot inspect worker capabilities. Its capability setters
-are deployment assertions; unresolved attachment references remain disabled by
-default and can be asserted with `with_attachment_references(true)` when the
-worker has a resolver configured.
+The caller-side ingress transport lives in
+[`email-transport-restate`](https://crates.io/crates/email-transport-restate).
+It submits this crate's `SendRequest` contract through Restate ingress
+(`/restate/send/Email/send` and `/restate/call/Email/send`) without depending
+on `restate-sdk`, follows a send as far as its `InvocationMode` says, and
+authenticates to Restate Cloud ingress with a bearer token.
 
-Attachment preparation composes at registry construction rather than in `ServiceImpl`. Wrap a provider transport in `email_kit::attachment::ResolvingTransport` to resolve reference-backed attachments inside the existing `send_email` action before provider delivery:
+## Attachment Preparation
+
+Attachment preparation composes at registry construction rather than in `Service`. Wrap a provider transport in `email_kit::attachment::AttachmentResolvingTransport` to resolve reference-backed attachments inside the existing `send_email` action before provider delivery:
 
 ```rust
-use email_kit::attachment::{MapResolver, ResolvingTransport, SchemeRouter};
+use email_kit::attachment::{MapResolver, AttachmentResolvingTransport, SchemeRouter};
 use restate_email::StaticTransportRegistry;
 
 let resolver = SchemeRouter::new().with_resolver(
@@ -71,22 +83,31 @@ let resolver = SchemeRouter::new().with_resolver(
 let mut registry = StaticTransportRegistry::new();
 registry.insert(
     "transactional",
-    ResolvingTransport::new(provider_transport, resolver),
+    AttachmentResolvingTransport::new(provider_transport, resolver),
 );
 ```
 
 A queued attachment reference such as `docs:report.txt` is then materialized at delivery time. Resolved bytes are not journaled, so retries may observe changed content; use immutable or versioned references when retry attempts must deliver identical bytes.
 
-Bind the service using Restate's service definition API:
+## Securing the Worker
+
+Restate signs every request it makes to an SDK endpoint when the runtime is
+configured with a request identity key. Register the matching `publickeyv1_...`
+public keys on the endpoint builder to reject unsigned requests:
 
 ```rust
-use restate_email::{ServiceImpl, StaticTransportRegistry};
-use restate_sdk::{endpoint::Endpoint, service::IntoServiceDefinition};
-
-let registry = StaticTransportRegistry::new();
-let service = ServiceImpl::new(registry).into_service_definition();
-let endpoint = Endpoint::builder().bind(service).build();
+let endpoint = Endpoint::builder()
+    .bind(service)
+    .identity_key("publickeyv1_w7YHemBctH5Ck2nQRQ47iBBqhNHy4FV7t2Usbye2A6f")?
+    .identity_key("publickeyv1_ChjENKeMvCtRnqG2mrBK1HmPKufgFUc98K8B3ononQvp")?
+    .build();
 ```
+
+Multiple keys stay valid at once, so rotation is a deployment change: register
+the old and the new key, switch the runtime to the new private key, then drop
+the old one. Identity keys authenticate the Restate runtime to the worker;
+callers authenticate to Restate ingress separately (see
+`email-transport-restate`).
 
 ## Retry Behavior
 
@@ -95,11 +116,9 @@ Retryable transport failures remain retryable Restate handler failures. Unknown 
 ## Examples
 
 - The [basic worker](examples/restate_email_worker.rs) starts an SDK endpoint with a resolver-decorated example transport: `cargo run -p restate-email --example restate_email_worker`.
-- The [local ingress client](examples/invoke_local_worker.rs) sends its reference-backed attachment to `http://127.0.0.1:8080/Email/send` by default: `cargo run -p restate-email --features client --example invoke_local_worker`. Set `RESTATE_INGRESS_URL` to override the ingress URL.
-- The [interchangeable transport example](examples/direct_or_restate.rs) sends through the same application function with either a direct Resend transport or `RestateTransport`: `cargo run -p restate-email --features client --example direct_or_restate`. Set `EMAIL_TO` in both modes, `RESTATE_INGRESS_URL` to select Restate, or `RESEND_API_KEY` for direct delivery.
-- The [Resend-backed worker](examples/restate_resend_worker.rs) requires `RESEND_API_KEY`, `RESEND_FROM`, and `RESEND_TO`: `cargo run -p restate-email --features resend --example restate_resend_worker`.
+- The [Resend-backed worker](examples/restate_resend_worker.rs) requires `RESEND_API_KEY`, `RESEND_FROM`, and `RESEND_TO`: `cargo run -p restate-email --features transport-resend --example restate_resend_worker`.
 
-The worker examples expose raw Restate SDK endpoints for registration with Restate; they are not plain JSON HTTP handlers. Invoke `Email.send` through Restate ingress.
+The worker examples expose raw Restate SDK endpoints for registration with Restate; they are not plain JSON HTTP handlers. Invoke `Email.send` through Restate ingress. Set `RESTATE_IDENTITY_KEY` (one key or a comma-separated list) to require signed requests. Caller-side examples live in [`email-transport-restate`](../email-transport-restate).
 
 ## License
 

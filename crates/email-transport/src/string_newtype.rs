@@ -139,6 +139,23 @@ pub fn __validate_string_newtype(value: &str) -> Result<(), StringNewtypeError> 
 /// a direct `serde` Cargo dep, the kernel provides the path. The Deserialize
 /// impl routes through the generated newtype's `new` constructor, so a
 /// malformed value (CRLF, NUL, oversized, etc.) cannot enter via serde.
+///
+/// # Examples
+///
+/// ```rust
+/// use email_transport::string_newtype;
+///
+/// string_newtype! {
+///     /// Application tenant identifier.
+///     TenantId
+/// }
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let tenant = TenantId::new("acme")?;
+/// assert_eq!(tenant.as_str(), "acme");
+/// # Ok(())
+/// # }
+/// ```
 #[macro_export]
 macro_rules! string_newtype {
     ($(#[$meta:meta])* $name:ident) => {

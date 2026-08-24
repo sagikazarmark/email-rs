@@ -8,7 +8,7 @@ application code can drive directly or through a durable queue.
 ### Delivery
 
 **Transport**:
-A destination an outbound message can be handed to for delivery — a provider adapter, a decorator
+A destination an outbound message can be handed to for delivery: a provider adapter, a decorator
 around one, or a durable queue that eventually reaches one.
 _Avoid_: mailer, sender, driver
 
@@ -32,11 +32,17 @@ An advisory statement about what a transport supports. Capabilities describe int
 enforce it.
 _Avoid_: feature flag, support flag
 
+**Invocation mode**:
+How far a Restate-backed transport follows a send before returning: `Queued` (accepted by
+Restate, the report carries the invocation id) or `Sent` (handed to the provider, the report is
+the worker's). It is a Restate-specific transport option, not a message property.
+_Avoid_: sync/async, blocking, fire-and-forget, one-way/request-response
+
 ### Attachments
 
 **Attachment reference**:
 An opaque, resolver-interpreted string standing in for attachment content that is not yet
-materialized. It may be a URI, a plain key, or a provider identifier — the core never parses it.
+materialized. It may be a URI, a plain key, or a provider identifier; the core never parses it.
 _Avoid_: URL, attachment URI, link
 
 **Attachment resolver**:
@@ -46,5 +52,5 @@ _Avoid_: fetcher, loader, downloader
 
 **Attachment preparation**:
 Materializing every reference-backed attachment in a message into bytes before delivery. It is
-materialization, not an availability check — the send itself is the availability check.
+materialization, not an availability check; the send itself is the availability check.
 _Avoid_: resolution pass, hydration

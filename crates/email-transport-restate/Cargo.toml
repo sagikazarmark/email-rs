@@ -1,0 +1,38 @@
+[package]
+name = "email-transport-restate"
+version = { workspace = true }
+description = "Restate ingress transport implementation for email-transport"
+edition = { workspace = true }
+rust-version = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+keywords = ["email", "restate", "queue", "durable"]
+categories = ["email", "network-programming", "asynchronous"]
+
+[features]
+default = ["reqwest/default"]
+# Derive JSON Schema for the re-exported queue payload types.
+schemars = ["restate-email/schemars"]
+
+[dependencies]
+email-message = { workspace = true, features = ["serde"] }
+email-transport = { workspace = true, features = ["serde"] }
+restate-email = { workspace = true }
+
+reqwest = { workspace = true, default-features = false, features = ["json"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+email-transport-resend = { workspace = true }
+
+tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread"] }
+wiremock = "0.6"
+
+[lints]
+workspace = true
+
+# Build docs with every compatible public API feature enabled.
+[package.metadata.docs.rs]
+all-features = true

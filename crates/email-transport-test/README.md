@@ -58,7 +58,9 @@ async fn example(dir: std::path::PathBuf) -> Result<(), Box<dyn std::error::Erro
         .build_outbound()?;
 
     let report = transport.send(&message, &SendOptions::default()).await?;
-    let path = report.provider_message_id.expect("file path report id");
+    let path = report.provider_message_id.ok_or_else(|| {
+        std::io::Error::other("file transport did not report the output path")
+    })?;
     assert!(std::fs::read(path)?.starts_with(b"From: "));
 
     Ok(())

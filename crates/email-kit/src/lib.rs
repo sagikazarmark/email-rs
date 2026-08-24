@@ -15,28 +15,7 @@
 //! - Enable the `wire` feature for `wire`, which re-exports
 //!   `email-message-wire`.
 //!
-//! # Features
-//!
-//! The default feature set forwards the default features of the always-present
-//! message and transport crates. It does not enable `wire`, an attachment
-//! adapter, or a provider transport.
-//!
-//! - `attachment-opendal`: the OpenDAL resolver at `attachment::opendal`.
-//! - `wire`: RFC 822/MIME parsing and rendering through `wire`.
-//! - `transport-lettre`: the Lettre SMTP adapter at `transport::lettre`.
-//! - `transport-resend`: the Resend adapter at `transport::resend`.
-//! - `transport-all`: all transport adapters.
-//! - `serde`, `schemars`, and `arbitrary`: forward the corresponding data-model
-//!   integrations.
-//! - `tracing`: transport instrumentation through
-//!   `transport::TracingTransport`.
-//!
-//! # Platform support
-//!
-//! The message, wire, and core transport facades support native and
-//! `wasm32` targets. Individual provider adapters may differ; in particular,
-//! the Resend adapter advertises and enforces per-send timeouts only on
-//! non-`wasm32` targets.
+//! # Quick start
 //!
 //! Use [`prelude`] when you want the common message types, wire helpers, and
 //! transport traits in scope:
@@ -50,6 +29,32 @@
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! # Features
+//!
+//! The default feature set forwards the default features of the always-present
+//! message and transport crates. It does not enable `wire`, an attachment
+//! adapter, or a provider transport.
+//!
+//! - `attachment-opendal`: the `OpenDAL` resolver at `attachment::opendal`.
+//! - `wire`: RFC 822/MIME parsing and rendering through `wire`.
+//! - `transport-lettre`: the Lettre SMTP adapter at `transport::lettre`.
+//! - `transport-resend`: the Resend adapter at `transport::resend`.
+//! - `transport-all`: all transport adapters.
+//! - `transport-all-wasm`: all transport adapters that support
+//!   `wasm32-unknown-unknown`.
+//! - `serde`, `schemars`, and `arbitrary`: forward the corresponding data-model
+//!   integrations.
+//! - `tracing`: transport instrumentation through
+//!   `transport::TracingTransport`.
+//!
+//! # Platform support
+//!
+//! The message, wire, and core transport facades support native and
+//! `wasm32` targets. The Lettre adapter, and therefore `transport-all`, does not
+//! support `wasm32-unknown-unknown`; use `transport-all-wasm` to enable every
+//! adapter that does. The Resend adapter supports that target, but advertises
+//! and enforces per-send timeouts only on non-`wasm32` targets.
 //!
 //! Namespaced access stays available when that is clearer:
 //!

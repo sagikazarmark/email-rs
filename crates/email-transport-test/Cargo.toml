@@ -19,11 +19,15 @@ conformance = ["dep:time"]
 email-message = { workspace = true }
 email-message-wire = { workspace = true }
 email-transport = { workspace = true }
-time = { workspace = true, features = ["formatting"], optional = true }
+
+time = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = "3"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true
 
 [package.metadata.release]
 release = false

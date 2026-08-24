@@ -16,7 +16,8 @@ email-transport = { workspace = true }
 
 [dev-dependencies]
 email-transport-test = { workspace = true }
+
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
-[package.metadata.docs.rs]
-all-features = true
+[lints]
+workspace = true

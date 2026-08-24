@@ -7,7 +7,7 @@ use restate_email::{
 };
 use serde::de::DeserializeSeed as _;
 
-#[cfg(feature = "resend")]
+#[cfg(feature = "transport-resend")]
 use email_kit::transport::transport_option_registry;
 
 fn fixture_message() -> Result<email_message::OutboundMessage, Box<dyn std::error::Error>> {
@@ -80,7 +80,7 @@ fn send_request_wire_fixture_matches_base_payload() -> Result<(), Box<dyn std::e
     Ok(())
 }
 
-#[cfg(feature = "resend")]
+#[cfg(feature = "transport-resend")]
 fn resend_fixture_request() -> Result<SendRequest, Box<dyn std::error::Error>> {
     use email_kit::transport::resend::ResendSendOptions;
 
@@ -100,7 +100,7 @@ fn resend_fixture_request() -> Result<SendRequest, Box<dyn std::error::Error>> {
     })
 }
 
-#[cfg(feature = "resend")]
+#[cfg(feature = "transport-resend")]
 #[test]
 fn send_request_wire_fixture_matches_resend_payload() -> Result<(), Box<dyn std::error::Error>> {
     use email_kit::transport::resend::ResendSendOptions;

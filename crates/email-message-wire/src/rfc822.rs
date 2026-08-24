@@ -546,6 +546,7 @@ pub fn render_rfc822(message: &Message) -> Result<Vec<u8>, MessageRenderError> {
 ///
 /// Returns [`MessageRenderError`] when headers or MIME parts cannot be rendered
 /// according to this crate's RFC822 constraints.
+#[allow(clippy::too_many_lines)]
 pub fn render_rfc822_with(
     message: &Message,
     options: &RenderOptions,

@@ -16,7 +16,8 @@ use lettre::{AsyncTransport as _, Tokio1Executor};
 /// Construct the Lettre client directly when advanced TLS, authentication, or
 /// pool configuration is required, then pass it to [`Self::from_client`]. The
 /// transport is cheap to clone; clones share both Lettre's connection pool and
-/// the private sender adapter.
+/// the private sender adapter. Construct pooled clients and call transport
+/// methods from within a Tokio runtime.
 #[derive(Clone)]
 pub struct LettreTransport {
     sender: Arc<dyn RawSender>,
@@ -46,8 +47,12 @@ impl LettreTransport {
     /// # Errors
     ///
     /// Returns Lettre's SMTP configuration error when the URL is invalid.
+    ///
+    /// # Panics
+    ///
     /// When the `pool` feature is enabled, call this from within a Tokio
-    /// runtime because Lettre starts its pool maintenance task while building.
+    /// runtime because Lettre starts its pool maintenance task while building
+    /// and may panic if no runtime is active.
     #[cfg(any(feature = "native-tls", feature = "rustls-tls"))]
     pub fn from_url(connection_url: &str) -> Result<Self, SmtpError> {
         let client = AsyncSmtpTransport::<Tokio1Executor>::from_url(connection_url)?
@@ -235,6 +240,7 @@ fn classify_smtp_error(error: &SmtpError, status: Option<u16>) -> ErrorKind {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
+#[allow(clippy::struct_excessive_bools)]
 struct SmtpFailureFacts {
     timeout: bool,
     transient: bool,

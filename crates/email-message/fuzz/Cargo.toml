@@ -13,7 +13,7 @@ doc = false
 bench = false
 
 [dependencies]
-email-message = { path = "..", features = ["arbitrary"] }
+email-message = { path = ".." }
 
 libfuzzer-sys = "0.4"
 

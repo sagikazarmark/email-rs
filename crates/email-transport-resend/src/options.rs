@@ -6,24 +6,19 @@ use serde_json::Value;
 /// Resend-specific options for a single send attempt.
 ///
 /// This is the one typed value inserted into [`email_transport::SendOptions::transport_options`]
-/// for Resend. With the `serde` feature enabled, the same shape can also be
-/// serialized through `SendOptions`' provider-keyed `transport_options` wire
-/// shape under [`TransportOption::provider_key`].
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+/// for Resend. The type always implements [`serde::Serialize`] so enabling
+/// `email-transport`'s `serde` feature elsewhere does not invalidate typed
+/// insertion. Resend's `serde` feature additionally enables deserialization
+/// for provider-keyed queue payloads.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 #[non_exhaustive]
 pub struct ResendSendOptions {
     /// Resend dashboard tags attached to the email.
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Vec::is_empty")
-    )]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<ResendTag>,
     /// Optional Resend template render settings.
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template: Option<ResendTemplate>,
 }
 
@@ -89,8 +84,8 @@ impl ResendSendOptions {
 /// through `error.message`. Callers who need build-time validation
 /// against current Resend rules should layer their own newtype on
 /// top of this struct.
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub struct ResendTag {
     /// Tag name used for filtering in Resend.
     pub name: String,
@@ -120,8 +115,8 @@ where
 }
 
 /// A Resend template id and the variables used to render it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub struct ResendTemplate {
     /// Resend template identifier, for example `tmpl_...`.
     pub id: String,
@@ -131,10 +126,7 @@ pub struct ResendTemplate {
     /// deterministic across processes. Resend's API receives the variables as
     /// a JSON object regardless of map type, so duplicate keys remain
     /// non-representable on the wire by RFC 8259.
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variables: Option<BTreeMap<String, Value>>,
 }
 
@@ -171,5 +163,25 @@ impl ResendTemplate {
                 .map(|(key, value)| (key.into(), value.into())),
         );
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::{ResendSendOptions, ResendTemplate};
+
+    #[test]
+    fn serialization_omits_empty_optional_values() {
+        assert_eq!(
+            serde_json::to_value(ResendSendOptions::default()).expect("options should serialize"),
+            json!({})
+        );
+        assert_eq!(
+            serde_json::to_value(ResendTemplate::new("tmpl_123"))
+                .expect("template should serialize"),
+            json!({ "id": "tmpl_123" })
+        );
     }
 }

@@ -1,0 +1,21 @@
+# Template for restate-email.toml (gitignored). The stack copies it there on
+# first start; edit the copy and `docker compose restart restate-email`.
+
+# Deliver through the Mailpit mock SMTP server.
+[transports.transactional]
+provider = "smtp"
+url = "smtp://mailpit:1025"
+
+# Resolve `docs:...` attachment references from the RustFS bucket.
+[attachments]
+max_attachment_bytes = 26214400 # 25 MiB
+max_total_bytes = 41943040      # 40 MiB
+
+[attachments.resolvers.docs]
+type = "opendal"
+service = "s3"
+access_key_id = "rustfsadmin"
+bucket = "attachments"
+endpoint = "http://rustfs:9000"
+region = "us-east-1"
+secret_access_key = "rustfsadmin"

@@ -35,6 +35,9 @@ serde_json = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tracing-subscriber = "0.3"
 
+[lints]
+workspace = true
+
 # Build docs with every compatible public API feature enabled.
 [package.metadata.docs.rs]
 all-features = true

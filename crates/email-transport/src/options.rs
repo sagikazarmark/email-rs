@@ -115,6 +115,7 @@ impl SendOptions {
     /// Queue adapters can use this when the idempotency key belongs to the
     /// queue invocation rather than the eventual provider request.
     #[cfg(feature = "serde")]
+    #[must_use]
     pub fn serializable_without_idempotency_key(&self) -> impl serde::Serialize + '_ {
         SendOptionsWithoutIdempotencyKey(self)
     }
@@ -435,7 +436,7 @@ impl schemars::JsonSchema for TransportOptions {
 /// Rust type that owns that wire shape; that mapping is exposed through
 /// [`TransportOptionsSeed`] and [`SendOptionsSeed`], which implement
 /// [`serde::de::DeserializeSeed`] so the registry can drive any serde
-/// deserializer (JSON, CBOR, MessagePack, postcard, ...) directly into typed
+/// deserializer (JSON, CBOR, `MessagePack`, postcard, ...) directly into typed
 /// slots without an intermediate `serde_json::Value`.
 #[cfg(feature = "serde")]
 #[derive(Default)]
@@ -577,13 +578,13 @@ impl TransportOptionRegistry {
     /// staging type built by a downstream crate that cannot drive
     /// [`SendOptionsSeed`] directly) reach for. For deserializing a whole
     /// [`SendOptions`] or [`TransportOptions`] from a serde format, prefer
-    /// [`Self::send_options_seed`] / [`Self::transport_options_seed`] — those
+    /// [`Self::send_options_seed`] / [`Self::transport_options_seed`]; those
     /// have a richer strict-vs-ignore policy via builder methods.
     ///
     /// Returns `Ok(true)` when a registered option type consumed the value and
     /// `Ok(false)` for unknown provider keys. Unknown keys are intentionally not
     /// errors so queue payloads can be forwarded across workers with different
-    /// provider feature sets — the caller is expected to either propagate or
+    /// provider feature sets; the caller is expected to either propagate or
     /// suppress that signal as the surrounding context requires.
     ///
     /// # Errors
@@ -610,8 +611,8 @@ impl TransportOptionRegistry {
 }
 
 #[cfg(feature = "serde")]
-fn decode_transport_option<'de, T>(
-    deserializer: &mut dyn erased_serde::Deserializer<'de>,
+fn decode_transport_option<T>(
+    deserializer: &mut dyn erased_serde::Deserializer<'_>,
     options: &mut TransportOptions,
 ) -> Result<(), erased_serde::Error>
 where
@@ -635,7 +636,7 @@ pub struct TransportOptionsSeed<'a> {
 }
 
 #[cfg(feature = "serde")]
-impl<'a> TransportOptionsSeed<'a> {
+impl TransportOptionsSeed<'_> {
     /// Skip provider keys that the registry has no decoder for instead of
     /// erroring, so payloads can flow across workers compiled with different
     /// adapter feature sets.
@@ -651,7 +652,7 @@ impl<'a> TransportOptionsSeed<'a> {
 }
 
 #[cfg(feature = "serde")]
-impl<'de, 'a> serde::de::DeserializeSeed<'de> for TransportOptionsSeed<'a> {
+impl<'de> serde::de::DeserializeSeed<'de> for TransportOptionsSeed<'_> {
     type Value = TransportOptions;
 
     fn deserialize<D>(self, deserializer: D) -> Result<TransportOptions, D::Error>
@@ -672,7 +673,7 @@ struct TransportOptionsVisitor<'a> {
 }
 
 #[cfg(feature = "serde")]
-impl<'de, 'a> serde::de::Visitor<'de> for TransportOptionsVisitor<'a> {
+impl<'de> serde::de::Visitor<'de> for TransportOptionsVisitor<'_> {
     type Value = TransportOptions;
 
     fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -721,7 +722,7 @@ struct TransportOptionDecoderSeed<'a> {
 }
 
 #[cfg(feature = "serde")]
-impl<'de, 'a> serde::de::DeserializeSeed<'de> for TransportOptionDecoderSeed<'a> {
+impl<'de> serde::de::DeserializeSeed<'de> for TransportOptionDecoderSeed<'_> {
     type Value = ();
 
     fn deserialize<D>(self, deserializer: D) -> Result<(), D::Error>
@@ -749,7 +750,7 @@ pub struct SendOptionsSeed<'a> {
 }
 
 #[cfg(feature = "serde")]
-impl<'a> SendOptionsSeed<'a> {
+impl SendOptionsSeed<'_> {
     /// Skip unknown provider keys inside `transport_options` instead of
     /// erroring. See [`TransportOptionsSeed::ignore_unknown_provider_keys`].
     #[must_use]
@@ -760,7 +761,7 @@ impl<'a> SendOptionsSeed<'a> {
 }
 
 #[cfg(feature = "serde")]
-impl<'de, 'a> serde::de::DeserializeSeed<'de> for SendOptionsSeed<'a> {
+impl<'de> serde::de::DeserializeSeed<'de> for SendOptionsSeed<'_> {
     type Value = SendOptions;
 
     fn deserialize<D>(self, deserializer: D) -> Result<SendOptions, D::Error>
@@ -801,7 +802,7 @@ enum SendOptionsField {
 }
 
 #[cfg(feature = "serde")]
-impl<'de, 'a> serde::de::Visitor<'de> for SendOptionsVisitor<'a> {
+impl<'de> serde::de::Visitor<'de> for SendOptionsVisitor<'_> {
     type Value = SendOptions;
 
     fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -1050,7 +1051,7 @@ mod tests {
         assert_eq!(
             value
                 .get("additionalProperties")
-                .and_then(|value| value.as_bool()),
+                .and_then(serde_json::Value::as_bool),
             Some(true)
         );
     }
@@ -1184,7 +1185,7 @@ mod tests {
             .deserialize_send_options(json)
             .expect("deserialize");
 
-        // Exhaustive destructure, intentionally without `..` — adding a field
+        // Exhaustive destructure, intentionally without `..`; adding a field
         // to `SendOptions` is a compile error here until this test is updated.
         let SendOptions {
             envelope,
@@ -1450,7 +1451,7 @@ mod tests {
             registry: &'a TransportOptionRegistry,
         }
 
-        impl<'de, 'a> DeserializeSeed<'de> for WrapperSeed<'a> {
+        impl<'de> DeserializeSeed<'de> for WrapperSeed<'_> {
             type Value = SendOptions;
             fn deserialize<D>(self, deserializer: D) -> Result<SendOptions, D::Error>
             where
@@ -1462,7 +1463,7 @@ mod tests {
             }
         }
 
-        impl<'de, 'a> Visitor<'de> for WrapperVisitor<'a> {
+        impl<'de> Visitor<'de> for WrapperVisitor<'_> {
             type Value = SendOptions;
             fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 f.write_str("a wrapper map containing a `send_options` field")

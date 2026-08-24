@@ -224,12 +224,12 @@ async fn resolves_a_path_from_the_configured_operator() {
         .expect("fixture is written");
     let resolver = OpendalResolver::new(operator, 1024);
 
-    let resolved = resolver
+    let resolved_attachment = resolver
         .resolve(&AttachmentReference::new("reports/weekly.pdf"))
         .await
         .expect("stored attachment resolves");
 
-    assert_eq!(resolved.bytes, b"pdf bytes");
+    assert_eq!(resolved_attachment.bytes, b"pdf bytes");
 }
 
 #[tokio::test]
@@ -292,12 +292,12 @@ async fn resolves_full_bytes_when_stat_underreports_content_length() {
     let operator = Operator::from_parts(OperationContext::default(), Arc::new(service));
     let resolver = OpendalResolver::new(operator, 1024);
 
-    let resolved = resolver
+    let resolved_attachment = resolver
         .resolve(&AttachmentReference::new("attachment.bin"))
         .await
         .expect("attachment resolves despite stale metadata");
 
-    assert_eq!(resolved.bytes, b"full attachment bytes");
+    assert_eq!(resolved_attachment.bytes, b"full attachment bytes");
 }
 
 #[tokio::test]

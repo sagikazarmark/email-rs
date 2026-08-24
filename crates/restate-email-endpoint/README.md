@@ -16,6 +16,8 @@ cargo install restate-email-endpoint
 The `restate-email` binary reads a JSON, YAML, or TOML configuration file and applies `RESTATE_EMAIL_` environment overrides. At least one transport must be configured.
 
 ```toml
+identity_keys = ["publickeyv1_w7YHemBctH5Ck2nQRQ47iBBqhNHy4FV7t2Usbye2A6f"]
+
 [transports.transactional]
 provider = "resend"
 api_key = "re_..."
@@ -39,14 +41,52 @@ The Restate service name is `Email`. Invoke its `send` handler with a `restate_e
 
 The `[attachments]` section is optional. When present, every configured transport is wrapped with attachment preparation. The resolver key is the reference routing prefix, and all fields other than `type` and `service` are passed to the selected OpenDAL service as operator options. Supported services include `azblob`, `fs`, `gcs`, `http`, and `s3`.
 
+With the `transport-lettre` feature (also enabled by `transport-all`), SMTP transports are configured through a Lettre connection URL:
+
+```toml
+[transports.notifications]
+provider = "smtp"
+url = "smtps://user:password@smtp.example.com:465"
+```
+
+The URL carries credentials, host, port, EHLO name, and TLS mode (`smtp://`, `smtps://`, and the `?tls=` query parameter) as documented by Lettre's `AsyncSmtpTransport::from_url`.
+
 Without `[attachments]`, byte-backed messages work unchanged and provider transports reject unresolved references terminally. Missing objects, unsupported references, access failures, and size violations are terminal; transient storage failures are retryable. Resolution occurs during the existing `send_email` Restate action, and resolved bytes are not journaled. Use immutable or versioned references when retries must resolve identical content.
+
+## Request Identity
+
+Restate signs every request it makes to a service endpoint when the runtime is
+configured with a request identity key. `identity_keys` lists the matching
+`publickeyv1_...` public keys; with at least one key configured the endpoint
+rejects unsigned requests. Multiple keys stay valid at once, so rotation is a
+config change: add the new key, switch the runtime to the new private key, then
+drop the old one. The environment override accepts a comma-separated list:
+
+```sh
+RESTATE_EMAIL_IDENTITY_KEYS="publickeyv1_old,publickeyv1_new" restate-email --config restate-email.toml
+```
+
+Without `identity_keys` the endpoint accepts unsigned requests. Identity keys
+authenticate the Restate runtime to this endpoint; callers authenticate to
+Restate ingress separately (see
+[`email-transport-restate`](../email-transport-restate)).
 
 ## Feature Flags
 
-Default features enable the component defaults, queue-payload schemas, RFC 5322 string-address compatibility, and all available transports.
+The default build is batteries-included: `minimal` plus `transport-all`. For a slimmer binary, disable default features and pick `minimal` plus the transports you need.
 
-- `attachment-opendal`: enables endpoint attachment preparation and the OpenDAL services listed above. It is enabled by `transport-all`.
-- `transport-all`: enables attachment preparation and every transport exposed by `email-kit`. The endpoint configuration currently supports Resend; SMTP endpoint configuration is not yet exposed. The binary target requires this feature.
+- `minimal`: the component defaults, queue-payload schemas, RFC 5322 string-address compatibility, and tracing. Every build wants this.
+- `attachment-opendal`: enables endpoint attachment preparation and the OpenDAL services listed above. It is enabled by `transport-all` and `transport-all-wasm`. Without it, `[attachments]` limits still apply to byte-backed attachments, but resolvers cannot be configured.
+- `transport-lettre`: enables the SMTP transport and its `provider = "smtp"` endpoint configuration. It is enabled by `transport-all`.
+- `transport-resend`: enables the Resend transport and provider-option deserialization. It is enabled by `transport-all` and `transport-all-wasm`.
+- `transport-all`: enables attachment preparation and every transport exposed by `email-kit`.
+- `transport-all-wasm`: enables attachment preparation and every `email-kit` transport that supports `wasm32-unknown-unknown`.
+
+The binary target requires at least one transport feature and fails the build with a clear error without one:
+
+```sh
+cargo install restate-email-endpoint --no-default-features --features minimal,transport-lettre
+```
 
 See the [generated feature graph](https://docs.rs/crate/restate-email-endpoint/latest/features) for activation details.
 

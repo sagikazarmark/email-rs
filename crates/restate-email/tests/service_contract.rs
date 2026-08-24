@@ -12,7 +12,7 @@ use email_message::{Address, Attachment, AttachmentBody, Body, Mailbox, Message,
 use email_message::{ContentType, Envelope};
 use email_transport::{SendReport, Transport, TransportError};
 use restate_email::{
-    CorrelationId, IdempotencyKey, SendOptions, SendRequest, SendRequestSeed, ServiceImpl,
+    CorrelationId, IdempotencyKey, SendOptions, SendRequest, SendRequestSeed, Service,
     StaticTransportRegistry, TransportKey, TransportOption, TransportOptionRegistry,
 };
 use restate_sdk_shared_core::Version;
@@ -242,7 +242,7 @@ async fn send_dispatches_message_and_options() {
     let transport = RecordingTransport::default();
     let mut registry = StaticTransportRegistry::new();
     registry.insert("transactional", transport.clone());
-    let service = ServiceImpl::new(registry);
+    let service = Service::new(registry);
 
     let response = service
         .send_request(&request)
@@ -284,7 +284,7 @@ async fn raw_protocol_endpoint_emits_run_command_for_send_side_effect() {
     let transport = RecordingTransport::default();
     let mut registry = StaticTransportRegistry::new();
     registry.insert("transactional", transport);
-    let service = ServiceImpl::new(registry);
+    let service = Service::new(registry);
 
     let response = invoke_protocol_sdk_endpoint(&service, &request_with_attachment());
     let (status, headers, body) = collect_response_body(response).await;
@@ -309,7 +309,7 @@ async fn malformed_options_return_terminal_400_with_json_path() {
     option_registry
         .register::<PathTestOptions>()
         .expect("path test option should register");
-    let service = ServiceImpl::new(registry).with_transport_options(option_registry);
+    let service = Service::new(registry).with_transport_options(option_registry);
     let mut payload =
         serde_json::to_value(request_with_attachment()).expect("request should serialize");
     payload["options"]["transport_options"] = serde_json::json!({
@@ -334,7 +334,7 @@ async fn malformed_options_return_terminal_400_with_json_path() {
     );
 }
 
-#[cfg(feature = "resend")]
+#[cfg(feature = "transport-resend")]
 #[test]
 fn transport_options_roundtrip_into_typed_slots() {
     use email_kit::transport::resend::ResendSendOptions;
@@ -381,7 +381,7 @@ async fn unknown_transport_option_keys_are_ignored() {
     let transport = RecordingTransport::default();
     let mut registry = StaticTransportRegistry::new();
     registry.insert("transactional", transport.clone());
-    let service = ServiceImpl::new(registry).with_transport_options(custom_registry);
+    let service = Service::new(registry).with_transport_options(custom_registry);
 
     service
         .send_request(&request)
@@ -393,7 +393,7 @@ async fn unknown_transport_option_keys_are_ignored() {
     assert_eq!(sends[0].custom_label.as_deref(), Some("runtime"));
 }
 
-#[cfg(feature = "resend")]
+#[cfg(feature = "transport-resend")]
 #[test]
 fn malformed_transport_option_for_known_key_returns_error() {
     // Resend's `tags` field is a sequence; a string value here is a shape
@@ -494,7 +494,7 @@ async fn send_request_deserialization_uses_service_transport_option_registry() {
     let json = serde_json::to_value(&request).expect("serialize");
 
     let back = deserialize_send_request(json, &custom_registry);
-    let service = ServiceImpl::new(registry).with_transport_options(custom_registry);
+    let service = Service::new(registry).with_transport_options(custom_registry);
 
     service
         .send_request(&back)
@@ -505,7 +505,7 @@ async fn send_request_deserialization_uses_service_transport_option_registry() {
     assert_eq!(sends[0].custom_label.as_deref(), Some("runtime"));
 }
 
-#[cfg(feature = "resend")]
+#[cfg(feature = "transport-resend")]
 #[test]
 fn send_request_serde_roundtrip_with_transport_options() {
     use email_kit::transport::resend::ResendSendOptions;

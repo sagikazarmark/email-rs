@@ -382,31 +382,26 @@ fn render_part(
                     }
                 }
                 header_boundary_value
+            } else if let Some(value) = boundary {
+                validate_boundary(&value)?;
+                value
             } else {
-                match boundary {
-                    Some(value) => {
-                        validate_boundary(&value)?;
-                        value
+                // Cap auto-generation attempts so an adversarial body whose
+                // bytes contain successive `--=_email_message_boundary_N` lines
+                // cannot spin the renderer indefinitely.
+                const MAX_AUTO_BOUNDARY_ATTEMPTS: usize = 128;
+                let mut chosen = None;
+                for _ in 0..MAX_AUTO_BOUNDARY_ATTEMPTS {
+                    let candidate = next_boundary(boundary_counter);
+                    validate_boundary(&candidate)?;
+                    if !multipart_parts_conflict_with_boundary(&parts, &candidate) {
+                        chosen = Some(candidate);
+                        break;
                     }
-                    None => {
-                        // Cap auto-generation attempts so an adversarial body whose
-                        // bytes contain successive `--=_email_message_boundary_N` lines
-                        // cannot spin the renderer indefinitely.
-                        const MAX_AUTO_BOUNDARY_ATTEMPTS: usize = 128;
-                        let mut chosen = None;
-                        for _ in 0..MAX_AUTO_BOUNDARY_ATTEMPTS {
-                            let candidate = next_boundary(boundary_counter);
-                            validate_boundary(&candidate)?;
-                            if !multipart_parts_conflict_with_boundary(&parts, &candidate) {
-                                chosen = Some(candidate);
-                                break;
-                            }
-                        }
-                        match chosen {
-                            Some(value) => value,
-                            None => return Err(MessageRenderError::InvalidMimeBoundary),
-                        }
-                    }
+                }
+                match chosen {
+                    Some(value) => value,
+                    None => return Err(MessageRenderError::InvalidMimeBoundary),
                 }
             };
 

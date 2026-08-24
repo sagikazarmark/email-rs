@@ -229,7 +229,7 @@ fn map_resend_error(error: resend_rs::Error) -> TransportError {
         resend_rs::Error::Http(error) => {
             let kind = if error.is_timeout() {
                 ErrorKind::Timeout
-            } else if error.is_builder() || error.is_request() {
+            } else if error.is_builder() {
                 ErrorKind::Validation
             } else {
                 ErrorKind::TransientNetwork
@@ -357,19 +357,30 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn send_without_base_url_or_key_will_fail_network() {
+    async fn connection_failure_is_transient() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("port should bind");
+        let address = listener.local_addr().expect("address should be available");
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.expect("connection should arrive");
+            drop(stream);
+        });
         let transport = ResendTransport::builder("invalid")
             .base_url(
-                "http://127.0.0.1:9/"
+                format!("http://{address}/")
                     .parse()
                     .expect("base URL should parse"),
             )
             .build();
+        let options = SendOptions::new().with_timeout(std::time::Duration::from_secs(1));
         let result = transport
-            .send(&minimal_message(), &SendOptions::default())
-            .await;
+            .send(&minimal_message(), &options)
+            .await
+            .expect_err("connection should fail");
+        server.await.expect("server task should finish");
 
-        assert!(result.is_err(), "invalid key call should fail in test env");
+        assert_eq!(result.kind, ErrorKind::TransientNetwork);
     }
 
     #[tokio::test]

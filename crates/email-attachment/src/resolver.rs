@@ -11,6 +11,12 @@ use email_transport::{BoxFut, MaybeSend, RuntimeBound};
 /// string.
 pub trait AttachmentResolver: RuntimeBound {
     /// Resolve `reference` into attachment bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns a resolver-defined [`AttachmentResolveError`] classified by
+    /// [`ResolveErrorKind`] when the reference is unsupported, unavailable,
+    /// denied, too large, transiently inaccessible, or cannot be processed.
     fn resolve<'a>(
         &'a self,
         reference: &'a AttachmentReference,
@@ -153,13 +159,16 @@ impl AttachmentResolver for MapResolver {
         reference: &AttachmentReference,
     ) -> Result<ResolvedAttachment, AttachmentResolveError> {
         self.entries
-            .get(reference.uri())
+            .get(reference.as_str())
             .cloned()
             .map(ResolvedAttachment::new)
             .ok_or_else(|| {
                 AttachmentResolveError::new(
                     ResolveErrorKind::NotFound,
-                    format!("attachment reference `{}` was not found", reference.uri()),
+                    format!(
+                        "attachment reference `{}` was not found",
+                        reference.as_str()
+                    ),
                 )
             })
     }
@@ -167,12 +176,24 @@ impl AttachmentResolver for MapResolver {
 
 /// Resolver combinator that routes references by their leading scheme.
 ///
-/// Both `scheme:value` and `scheme://value` select the resolver registered for
-/// `scheme`. The selected resolver receives only `value`; the router strips the
-/// leading `scheme:` and an optional `//` before dispatch.
+/// A reference is treated as `scheme:value`; the router is not a URI parser.
+/// It splits on the first `:`, matches the scheme case-insensitively, and
+/// performs no authority parsing, percent-decoding, or path normalization on
+/// the value: `scheme://path/to/thing` routes `path/to/thing` as one opaque
+/// value, with the `//` treated as cosmetic.
+///
+/// By default the selected resolver receives only the value, with `scheme:`
+/// and an optional `//` stripped. Register with
+/// [`SchemeDispatch::FullReference`] to pass the original reference through
+/// unchanged, for resolvers that need the whole reference, such as an HTTP
+/// fetcher registered for `https`.
+///
+/// A reference without a registered, valid scheme prefix
+/// fails with [`ResolveErrorKind::UnsupportedReference`]; wrap the router in a
+/// [`FallbackResolver`] to give plain, scheme-less keys a home.
 #[derive(Default)]
 pub struct SchemeRouter {
-    resolvers: BTreeMap<String, Box<dyn ErasedAttachmentResolver>>,
+    routes: BTreeMap<String, Route>,
 }
 
 impl SchemeRouter {
@@ -180,26 +201,90 @@ impl SchemeRouter {
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            resolvers: BTreeMap::new(),
+            routes: BTreeMap::new(),
         }
     }
 
     /// Register or replace the resolver for `scheme`.
+    ///
+    /// The resolver receives the reference value with `scheme:` and an
+    /// optional `//` stripped; use [`SchemeRouter::register_with`] to choose a
+    /// different dispatch mode.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `scheme` is not a valid scheme token: a letter followed by
+    /// letters, digits, `+`, `-`, or `.`.
     pub fn register<R>(&mut self, scheme: impl Into<String>, resolver: R)
     where
         R: AttachmentResolver + 'static,
     {
-        self.resolvers
-            .insert(normalize_scheme(scheme.into()), Box::new(resolver));
+        self.register_with(scheme, resolver, SchemeDispatch::StrippedValue);
+    }
+
+    /// Register or replace the resolver for `scheme` with an explicit dispatch
+    /// mode.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `scheme` is not a valid scheme token: a letter followed by
+    /// letters, digits, `+`, `-`, or `.`.
+    pub fn register_with<R>(
+        &mut self,
+        scheme: impl Into<String>,
+        resolver: R,
+        dispatch: SchemeDispatch,
+    ) where
+        R: AttachmentResolver + 'static,
+    {
+        let scheme = normalize_scheme(&scheme.into());
+        assert!(
+            is_valid_scheme(&scheme),
+            "`{scheme}` is not a valid attachment reference scheme"
+        );
+
+        self.routes.insert(
+            scheme,
+            Route {
+                resolver: Box::new(resolver),
+                dispatch,
+            },
+        );
     }
 
     /// Register a resolver using builder syntax.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `scheme` is not a valid scheme token: a letter followed by
+    /// letters, digits, `+`, `-`, or `.`.
     #[must_use]
     pub fn with_resolver<R>(mut self, scheme: impl Into<String>, resolver: R) -> Self
     where
         R: AttachmentResolver + 'static,
     {
         self.register(scheme, resolver);
+        self
+    }
+
+    /// Register a resolver with an explicit dispatch mode using builder
+    /// syntax.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `scheme` is not a valid scheme token: a letter followed by
+    /// letters, digits, `+`, `-`, or `.`.
+    #[must_use]
+    pub fn with_resolver_using<R>(
+        mut self,
+        scheme: impl Into<String>,
+        resolver: R,
+        dispatch: SchemeDispatch,
+    ) -> Self
+    where
+        R: AttachmentResolver + 'static,
+    {
+        self.register_with(scheme, resolver, dispatch);
         self
     }
 }
@@ -209,23 +294,109 @@ impl AttachmentResolver for SchemeRouter {
         &self,
         reference: &AttachmentReference,
     ) -> Result<ResolvedAttachment, AttachmentResolveError> {
-        let route = reference.uri().split_once(':');
-        let resolver = route.and_then(|(scheme, _)| self.resolvers.get(scheme));
-        match (resolver, route) {
-            (Some(resolver), Some((_, value))) => {
-                let value = value.strip_prefix("//").unwrap_or(value);
-                resolver.resolve(&AttachmentReference::new(value)).await
-            }
-            (None, _) => Err(AttachmentResolveError::new(
+        let route = reference
+            .as_str()
+            .split_once(':')
+            .filter(|(scheme, _)| is_valid_scheme(scheme))
+            .and_then(|(scheme, value)| {
+                self.routes
+                    .get(&scheme.to_ascii_lowercase())
+                    .map(|route| (route, value))
+            });
+        let Some((route, value)) = route else {
+            return Err(AttachmentResolveError::new(
                 ResolveErrorKind::UnsupportedReference,
                 format!(
                     "no attachment resolver is registered for reference `{}`",
-                    reference.uri()
+                    reference.as_str()
                 ),
-            )),
-            _ => unreachable!("a resolver requires a parsed route"),
+            ));
+        };
+
+        match route.dispatch {
+            SchemeDispatch::StrippedValue => {
+                let value = value.strip_prefix("//").unwrap_or(value);
+                route
+                    .resolver
+                    .resolve(&AttachmentReference::new(value))
+                    .await
+            }
+            SchemeDispatch::FullReference => route.resolver.resolve(reference).await,
         }
     }
+}
+
+/// How a [`SchemeRouter`] presents a routed reference to the selected
+/// resolver.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SchemeDispatch {
+    /// Pass only the value after `scheme:`, with an optional `//` stripped.
+    #[default]
+    StrippedValue,
+    /// Pass the original reference through unchanged, scheme included.
+    FullReference,
+}
+
+/// Resolver combinator that consults a fallback for unsupported references.
+///
+/// The fallback runs only when the primary fails with
+/// [`ResolveErrorKind::UnsupportedReference`]: the primary could not interpret
+/// the reference at all, so another resolver may claim it. Every other
+/// failure, including [`ResolveErrorKind::NotFound`], is authoritative and
+/// propagates unchanged, so missing content, denied access, and transient
+/// faults are never masked by the fallback.
+///
+/// Combines naturally with [`SchemeRouter`], which reports unrouted
+/// references as unsupported: wrapping a router gives plain, scheme-less keys
+/// a home.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct FallbackResolver<P, F> {
+    primary: P,
+    fallback: F,
+}
+
+impl<P, F> FallbackResolver<P, F> {
+    /// Combine `primary` with `fallback`.
+    #[must_use]
+    pub const fn new(primary: P, fallback: F) -> Self {
+        Self { primary, fallback }
+    }
+
+    /// Return the primary resolver.
+    #[must_use]
+    pub const fn primary(&self) -> &P {
+        &self.primary
+    }
+
+    /// Return the fallback resolver.
+    #[must_use]
+    pub const fn fallback(&self) -> &F {
+        &self.fallback
+    }
+}
+
+impl<P, F> AttachmentResolver for FallbackResolver<P, F>
+where
+    P: AttachmentResolver,
+    F: AttachmentResolver,
+{
+    async fn resolve(
+        &self,
+        reference: &AttachmentReference,
+    ) -> Result<ResolvedAttachment, AttachmentResolveError> {
+        match self.primary.resolve(reference).await {
+            Err(error) if error.kind == ResolveErrorKind::UnsupportedReference => {
+                self.fallback.resolve(reference).await
+            }
+            result => result,
+        }
+    }
+}
+
+struct Route {
+    resolver: Box<dyn ErasedAttachmentResolver>,
+    dispatch: SchemeDispatch,
 }
 
 trait ErasedAttachmentResolver: RuntimeBound {
@@ -247,6 +418,19 @@ where
     }
 }
 
-fn normalize_scheme(scheme: String) -> String {
-    scheme.trim_end_matches(&[':', '/'][..]).to_owned()
+fn normalize_scheme(scheme: &str) -> String {
+    scheme
+        .trim_end_matches(&[':', '/'][..])
+        .to_ascii_lowercase()
+}
+
+fn is_valid_scheme(scheme: &str) -> bool {
+    let mut characters = scheme.chars();
+
+    characters
+        .next()
+        .is_some_and(|character| character.is_ascii_alphabetic())
+        && characters.all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '+' | '-' | '.')
+        })
 }

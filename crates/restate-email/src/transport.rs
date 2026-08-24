@@ -46,7 +46,7 @@ pub enum TransportLookupError {
 /// Fixed-key transport registry for common worker setups.
 ///
 /// The registry is intentionally small: populate it during startup with one or
-/// more transport profiles, then pass it to [`crate::ServiceImpl`]. It is not a
+/// more transport profiles, then pass it to [`crate::Service`]. It is not a
 /// hot-reload registry; build your own [`TransportResolver`] if routes need to
 /// change while the process is running.
 #[derive(Default)]
@@ -156,8 +156,8 @@ mod tests {
             .expect("transport should resolve");
 
         assert!(std::ptr::addr_eq(
-            first as *const DynTransport,
-            second as *const DynTransport
+            std::ptr::from_ref::<DynTransport>(first),
+            std::ptr::from_ref::<DynTransport>(second)
         ));
     }
 }

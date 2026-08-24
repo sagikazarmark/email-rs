@@ -11,10 +11,14 @@ keywords = ["email", "mime", "rfc822", "smtp"]
 categories = ["email", "encoding"]
 
 [dependencies]
-base64 = "0.22"
 email-message = { workspace = true, features = ["mime"] }
+
+base64 = "0.22"
 thiserror = { workspace = true }
 time = { workspace = true, features = ["formatting", "parsing"] }
 
 [dev-dependencies]
 proptest = { workspace = true }
+
+[lints]
+workspace = true

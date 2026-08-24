@@ -197,12 +197,12 @@ pub(super) fn push_header_line(
     // When soft-folding is enabled, target the caller's preferred width;
     // otherwise pin preferred to the hard limit so the helper emits one
     // line per header up to the RFC 5322 ceiling.
-    let first_preferred = soft_fold_at
-        .map(|target| target.saturating_sub(name_len + 2).min(first_hard))
-        .unwrap_or(first_hard);
-    let continuation_preferred = soft_fold_at
-        .map(|target| target.saturating_sub(1).min(continuation_hard))
-        .unwrap_or(continuation_hard);
+    let first_preferred = soft_fold_at.map_or(first_hard, |target| {
+        target.saturating_sub(name_len + 2).min(first_hard)
+    });
+    let continuation_preferred = soft_fold_at.map_or(continuation_hard, |target| {
+        target.saturating_sub(1).min(continuation_hard)
+    });
 
     let lines = split_header_value_for_folding(
         value,

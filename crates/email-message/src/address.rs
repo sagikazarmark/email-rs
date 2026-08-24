@@ -1291,7 +1291,7 @@ fn parse_address_items(input: &str) -> Result<Vec<Address>, AddressBackendError>
                 if group.name.is_some() {
                     items.push(Address::Group(convert_group(group)?));
                 } else {
-                    for addr in group.addresses.iter() {
+                    for addr in &group.addresses {
                         items.push(Address::Mailbox(convert_mailbox(addr)?));
                     }
                 }

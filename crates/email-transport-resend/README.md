@@ -30,7 +30,7 @@ async fn send() -> Result<(), Box<dyn std::error::Error>> {
 
 Default features enable reqwest's default HTTP/TLS stack and serde support.
 
-- `serde`: enables serialization for `ResendSendOptions` and forwards serde support to `email-transport`.
+- `serde`: enables queue/wire deserialization for `ResendSendOptions` and forwards serde support to `email-transport`. Resend option types always implement `Serialize` so feature unification remains additive.
 
 See the [crate documentation](https://docs.rs/email-transport-resend/latest/email_transport_resend/) for API and feature semantics and the [generated feature graph](https://docs.rs/crate/email-transport-resend/latest/features) for activation details.
 

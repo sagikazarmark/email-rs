@@ -1229,7 +1229,9 @@ fn parse_to_header_with_mixed_mailbox_and_group_preserves_all_items() {
 
     match &to[0] {
         Address::Mailbox(mailbox) => assert_eq!(mailbox.email().as_str(), "alice@example.com"),
-        other => panic!("expected first item to be a Mailbox, got {other:?}"),
+        other @ Address::Group(_) => {
+            panic!("expected first item to be a Mailbox, got {other:?}")
+        }
     }
     match &to[1] {
         Address::Group(group) => {
@@ -1237,11 +1239,15 @@ fn parse_to_header_with_mixed_mailbox_and_group_preserves_all_items() {
             assert_eq!(group.members().len(), 1);
             assert_eq!(group.members()[0].email().as_str(), "bob@team.com");
         }
-        other => panic!("expected second item to be a Group, got {other:?}"),
+        other @ Address::Mailbox(_) => {
+            panic!("expected second item to be a Group, got {other:?}")
+        }
     }
     match &to[2] {
         Address::Mailbox(mailbox) => assert_eq!(mailbox.email().as_str(), "dave@example.com"),
-        other => panic!("expected third item to be a Mailbox, got {other:?}"),
+        other @ Address::Group(_) => {
+            panic!("expected third item to be a Mailbox, got {other:?}")
+        }
     }
 }
 
@@ -1629,7 +1635,7 @@ fn parse_rejects_multipart_fan_out_beyond_max_parts() {
     // Construct a single-level multipart with MAX_MULTIPART_PARTS + 1
     // empty parts. Each part has `Content-Type: text/plain`.
     let mut body = String::new();
-    for _ in 0..(MAX_MULTIPART_PARTS + 1) {
+    for _ in 0..=MAX_MULTIPART_PARTS {
         body.push_str("--b\r\nContent-Type: text/plain\r\n\r\nx\r\n");
     }
     body.push_str("--b--\r\n");

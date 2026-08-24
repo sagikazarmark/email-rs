@@ -3,6 +3,24 @@
 //! An [`OpendalResolver`] reads paths from one [`opendal::Operator`] configured
 //! by the application at startup. Attachment references never configure a
 //! service, endpoint, bucket, or credentials.
+//!
+//! # Quick start
+//!
+//! ```rust
+//! use email_attachment_opendal::{OpendalResolver, opendal::Operator};
+//!
+//! fn resolver(operator: Operator) -> OpendalResolver {
+//!     OpendalResolver::new(operator, 25 * 1024 * 1024)
+//! }
+//! ```
+//!
+//! # Cargo features
+//!
+//! The default feature forwards `OpenDAL`'s default feature set. The
+//! `services-azblob`, `services-fs`, `services-gcs`, `services-http`,
+//! `services-memory`, and `services-s3` features enable the corresponding
+//! `OpenDAL` services. Other services can be enabled on a direct `opendal`
+//! dependency used to construct the operator.
 
 use email_attachment::{
     AttachmentResolveError, AttachmentResolver, ResolveErrorKind, ResolvedAttachment,
@@ -11,7 +29,7 @@ use email_message::AttachmentReference;
 use futures_util::TryStreamExt;
 use opendal::Operator;
 
-/// Resolves attachment paths through a pre-configured OpenDAL operator.
+/// Resolves attachment paths through a pre-configured `OpenDAL` operator.
 ///
 /// Where the service supports `stat`, an oversized object is rejected before
 /// any bytes are read. The resolver then retains at most one byte past the
@@ -46,7 +64,7 @@ impl AttachmentResolver for OpendalResolver {
         reference: &AttachmentReference,
     ) -> Result<ResolvedAttachment, AttachmentResolveError> {
         // OpenDAL trims paths before dispatch, so validate and use that same form.
-        let path = reference.uri().trim();
+        let path = reference.as_str().trim();
         if !is_relative_path_within_root(path) {
             return Err(AttachmentResolveError::new(
                 ResolveErrorKind::UnsupportedReference,
@@ -130,5 +148,5 @@ fn too_large(path: &str, max_bytes: usize) -> AttachmentResolveError {
     )
 }
 
-/// The OpenDAL version used by this adapter.
+/// The `OpenDAL` version used by this adapter.
 pub use opendal;
