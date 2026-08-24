@@ -31,23 +31,28 @@ services:
   restate-email:
     build:
       context: ../..
-      args:
-        # All transports (SMTP + Resend) and all OpenDAL attachment resolver services.
-        FEATURES: transport-all
-    ports:
-      - 127.0.0.1:9080:9080
     environment:
       CONFIG_FILE: /etc/restate-email/restate-email.toml
     volumes:
-      - ./restate-email.toml:/etc/restate-email/restate-email.toml:ro
+      - ./config:/etc/restate-email
     depends_on:
       mailpit:
         condition: service_started
       rustfs:
         condition: service_healthy
-    # Init containers: create the attachment bucket, then upload the sample
+    # Init containers: seed the endpoint configuration from the example on
+    # first start, create the attachment bucket, then upload the sample
     # attachment, before the endpoint starts.
     pre_start:
+      - command:
+          - /bin/sh
+          - -c
+          - |
+            if [ ! -e /etc/restate-email/restate-email.toml ]; then
+              cp /etc/restate-email/restate-email.example.toml /etc/restate-email/restate-email.toml
+              chmod 0666 /etc/restate-email/restate-email.toml
+              echo "created config/restate-email.toml from the example"
+            fi
       - image: minio/mc:latest
         environment:
           MC_HOST_rustfs: http://rustfsadmin:rustfsadmin@rustfs:9000

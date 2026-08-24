@@ -1,6 +1,5 @@
-# Copy this file to restate-email.toml (gitignored) before starting the stack:
-#
-#   cp restate-email.example.toml restate-email.toml
+# Template for restate-email.toml (gitignored). The stack copies it there on
+# first start; edit the copy and `docker compose restart restate-email`.
 
 # Deliver through the Mailpit mock SMTP server.
 [transports.transactional]
