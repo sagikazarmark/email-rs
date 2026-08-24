@@ -40,7 +40,7 @@
 //!
 //! Restate Cloud ingress requires an API key as a bearer token; configure it
 //! with [`RestateTransportBuilder::bearer_token`]. Self-hosted Restate has no
-//! built-in ingress authentication — a fronting reverse proxy that expects
+//! built-in ingress authentication; a fronting reverse proxy that expects
 //! the same `Authorization: Bearer` header is covered by the same setter,
 //! and any other header scheme can be attached to a custom
 //! [`reqwest::Client`] passed to [`RestateTransportBuilder::client`].

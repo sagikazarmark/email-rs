@@ -578,13 +578,13 @@ impl TransportOptionRegistry {
     /// staging type built by a downstream crate that cannot drive
     /// [`SendOptionsSeed`] directly) reach for. For deserializing a whole
     /// [`SendOptions`] or [`TransportOptions`] from a serde format, prefer
-    /// [`Self::send_options_seed`] / [`Self::transport_options_seed`] — those
+    /// [`Self::send_options_seed`] / [`Self::transport_options_seed`]; those
     /// have a richer strict-vs-ignore policy via builder methods.
     ///
     /// Returns `Ok(true)` when a registered option type consumed the value and
     /// `Ok(false)` for unknown provider keys. Unknown keys are intentionally not
     /// errors so queue payloads can be forwarded across workers with different
-    /// provider feature sets — the caller is expected to either propagate or
+    /// provider feature sets; the caller is expected to either propagate or
     /// suppress that signal as the surrounding context requires.
     ///
     /// # Errors
@@ -1185,7 +1185,7 @@ mod tests {
             .deserialize_send_options(json)
             .expect("deserialize");
 
-        // Exhaustive destructure, intentionally without `..` — adding a field
+        // Exhaustive destructure, intentionally without `..`; adding a field
         // to `SendOptions` is a compile error here until this test is updated.
         let SendOptions {
             envelope,

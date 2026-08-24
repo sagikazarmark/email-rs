@@ -18,8 +18,8 @@ let transport = RestateTransport::new(
 
 `RestateTransport` implements `email_transport::Transport`, so the same
 application code can hand a message to a durable Restate queue or to a direct
-provider adapter. The wire contract it submits — and the worker that consumes
-it — live in [`restate-email`](https://crates.io/crates/restate-email); this
+provider adapter. The wire contract it submits (and the worker that consumes
+it) live in [`restate-email`](https://crates.io/crates/restate-email); this
 crate never depends on `restate-sdk`.
 
 ## Invocation Modes

@@ -38,7 +38,7 @@ docker compose up -d --build
 
 The first run builds the endpoint image from source, which takes a few minutes. Once everything is
 up, the init hooks have seeded `config/restate-email.toml`, created the `attachments` bucket,
-uploaded `hello.txt`, and registered the deployment — the `Email` service with its `send` handler
+uploaded `hello.txt`, and registered the deployment; the `Email` service with its `send` handler
 shows up in the Restate UI at <http://localhost:9070>.
 
 ### 2. Send an email
@@ -70,7 +70,7 @@ The response reports the delivery, e.g. `{"report":{"provider":"smtp","accepted"
 
 ### 3. Check the delivery in Mailpit
 
-Open the Mailpit UI at <http://localhost:8025> — the message should be there with `hello.txt`
+Open the Mailpit UI at <http://localhost:8025>; the message should be there with `hello.txt`
 attached. Or use the [Mailpit API](https://mailpit.axllent.org/docs/api-v1/):
 
 ```sh
@@ -87,7 +87,7 @@ docker compose restart restate-email
 ```
 
 Restate keeps the registered deployment, so nothing else needs to change. To start over from the
-template, delete the file and recreate the stack — the seeding hook only runs when the container is
+template, delete the file and recreate the stack; the seeding hook only runs when the container is
 created:
 
 ```sh

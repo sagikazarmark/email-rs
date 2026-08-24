@@ -18,7 +18,7 @@ recoverable (`RestateTransport::invocation_id`) without changing any kernel type
 - **A `Delivered | Queued` return enum on `Transport::send`.** Type-level distinction between a
   provider handoff and a queue handoff. Rejected: it changes eight trait signatures in
   `email-transport`, every adapter and decorator, `ErasedTransport`, the conformance suite, and the
-  `SendResponse` wire contract, to express a bit that the `provider` field already carries — and
+  `SendResponse` wire contract, to express a bit that the `provider` field already carries;
   the distinction it draws ("delivered") overclaims what any transport knows.
 - **A `handoff` field on `SendReport`.** Cheap because the struct is `#[non_exhaustive]` and the
   wire form can `serde(default)` it. Deferred: today it would be redundant with `provider`. It is

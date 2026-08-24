@@ -176,7 +176,7 @@ impl AttachmentResolver for MapResolver {
 
 /// Resolver combinator that routes references by their leading scheme.
 ///
-/// A reference is treated as `scheme:value` — the router is not a URI parser.
+/// A reference is treated as `scheme:value`; the router is not a URI parser.
 /// It splits on the first `:`, matches the scheme case-insensitively, and
 /// performs no authority parsing, percent-decoding, or path normalization on
 /// the value: `scheme://path/to/thing` routes `path/to/thing` as one opaque
@@ -185,7 +185,7 @@ impl AttachmentResolver for MapResolver {
 /// By default the selected resolver receives only the value, with `scheme:`
 /// and an optional `//` stripped. Register with
 /// [`SchemeDispatch::FullReference`] to pass the original reference through
-/// unchanged — for resolvers that need the whole reference, such as an HTTP
+/// unchanged, for resolvers that need the whole reference, such as an HTTP
 /// fetcher registered for `https`.
 ///
 /// A reference without a registered, valid scheme prefix
@@ -343,7 +343,7 @@ pub enum SchemeDispatch {
 /// The fallback runs only when the primary fails with
 /// [`ResolveErrorKind::UnsupportedReference`]: the primary could not interpret
 /// the reference at all, so another resolver may claim it. Every other
-/// failure — including [`ResolveErrorKind::NotFound`] — is authoritative and
+/// failure, including [`ResolveErrorKind::NotFound`], is authoritative and
 /// propagates unchanged, so missing content, denied access, and transient
 /// faults are never masked by the fallback.
 ///

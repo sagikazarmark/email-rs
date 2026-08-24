@@ -6,10 +6,10 @@ status: superseded
 
 `SendOptions` intentionally has no `Deserialize` implementation: provider-specific options live in
 a `TypeId`-keyed map, so decoding them requires a `TransportOptionRegistry` and must go through
-`SendOptionsSeed`. Restate's handler input decoding is an associated function —
-`Deserialize::deserialize(bytes: &mut Bytes)`, no `&self` — so the generated handler cannot reach
-`ServiceImpl::transport_options` to drive that seed. `RawSendOptions` bridges the two: it decodes
-eagerly into `BTreeMap<String, serde_value::Value>` at the handler boundary, and the seed runs
+`SendOptionsSeed`. Restate's handler input decoding is an associated function
+(`Deserialize::deserialize(bytes: &mut Bytes)`, with no `&self`), so the generated handler cannot
+reach `ServiceImpl::transport_options` to drive that seed. `RawSendOptions` bridges the two: it
+decodes eagerly into `BTreeMap<String, serde_value::Value>` at the handler boundary, and the seed runs
 afterwards inside `ServiceImpl::send_request`.
 
 This is a workaround for an upstream limitation, not a design goal. It is recorded here because a
@@ -23,7 +23,7 @@ SDK.
 
 - `RawSendOptions` mirrors `SendOptions` field by field and is kept in sync by hand. There is no
   drift guard, so a new `SendOptions` field is silently dropped in both directions on the queue
-  path — unlike `SendOptionsSeed`, which is guarded by an exhaustive destructure in its round-trip
+  path, unlike `SendOptionsSeed`, which is guarded by an exhaustive destructure in its round-trip
   test.
 - Payloads are decoded twice, and `serde-value` appears in `restate-email`'s public API, making a
   bump there a breaking change for this crate.
