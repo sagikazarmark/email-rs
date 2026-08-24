@@ -6,3 +6,4 @@
 devenv.local.nix
 /target/
 /var/
+/restate-email.toml

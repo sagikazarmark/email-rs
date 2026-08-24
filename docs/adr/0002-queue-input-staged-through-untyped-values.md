@@ -8,9 +8,9 @@ status: superseded
 a `TypeId`-keyed map, so decoding them requires a `TransportOptionRegistry` and must go through
 `SendOptionsSeed`. Restate's handler input decoding is an associated function
 (`Deserialize::deserialize(bytes: &mut Bytes)`, with no `&self`), so the generated handler cannot
-reach `ServiceImpl::transport_options` to drive that seed. `RawSendOptions` bridges the two: it
+reach `Service::transport_options` to drive that seed. `RawSendOptions` bridges the two: it
 decodes eagerly into `BTreeMap<String, serde_value::Value>` at the handler boundary, and the seed runs
-afterwards inside `ServiceImpl::send_request`.
+afterwards inside `Service::send_request`.
 
 This is a workaround for an upstream limitation, not a design goal. It is recorded here because a
 reader who knows `email-transport` ships a perfectly good `DeserializeSeed` will otherwise wonder

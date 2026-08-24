@@ -17,7 +17,7 @@ fn resolver(operator: Operator) -> OpendalResolver {
 
 `OpendalResolver` reads attachment paths through an `opendal::Operator` configured at application startup. References cannot select a service, endpoint, bucket, root, or credentials. Each resolver is limited to its operator's configured store and root.
 
-The resolver requires a per-attachment byte limit. It checks metadata before reading when `stat` is available and otherwise reads through a capped reader.
+The resolver requires a per-attachment byte limit. When `stat` reports a size over the limit, the read is rejected early; otherwise the content is read through a capped reader that retains at most one byte past the limit, so oversized attachments fail regardless of what `stat` reported.
 
 Register multiple resolvers with `email_attachment::SchemeRouter` to use multiple stores. For a resolver registered as `assets`, both `assets:images/logo.png` and `assets://images/logo.png` are passed to the resolver as `images/logo.png`.
 
