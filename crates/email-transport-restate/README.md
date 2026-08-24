@@ -41,7 +41,7 @@ invocation:
 ```rust
 use std::time::Duration;
 
-use email_transport::{SendOptions, TransportOptions};
+use email_transport::SendOptions;
 use email_transport_restate::{
     InvocationMode, RestateSendOptions, RestateTransport, TransportKey,
 };
@@ -54,13 +54,11 @@ let transport = RestateTransport::builder(
 .attachment_references(true)
 .build();
 
-let mut transport_options = TransportOptions::default();
-transport_options.insert(
+let options = SendOptions::new().with_transport_option(
     RestateSendOptions::new()
         .with_invocation_mode(InvocationMode::Queued)
         .with_delay(Duration::from_secs(60)),
 );
-let options = SendOptions::new().with_transport_options(transport_options);
 ```
 
 The `restate` slice is forwarded in the queued payload like every other

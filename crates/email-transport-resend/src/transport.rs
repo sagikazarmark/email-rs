@@ -92,6 +92,12 @@ impl ResendTransport {
     }
 }
 
+impl From<Resend> for ResendTransport {
+    fn from(client: Resend) -> Self {
+        Self::from_client(client)
+    }
+}
+
 impl Transport for ResendTransport {
     fn capabilities(&self) -> Capabilities {
         Capabilities::new()
@@ -352,6 +358,17 @@ mod tests {
             .build();
         let client = resend_rs::Resend::with_config(config);
         let transport = ResendTransport::from_client(client);
+
+        assert_eq!(transport.client().base_url(), "https://api.test/");
+    }
+
+    #[test]
+    fn from_converts_initialized_resend_client() {
+        let base_url = url::Url::parse("https://api.test/").expect("base url parses");
+        let config = resend_rs::ConfigBuilder::new("k")
+            .base_url(base_url)
+            .build();
+        let transport = ResendTransport::from(resend_rs::Resend::with_config(config));
 
         assert_eq!(transport.client().base_url(), "https://api.test/");
     }

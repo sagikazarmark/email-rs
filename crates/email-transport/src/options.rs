@@ -89,6 +89,33 @@ impl SendOptions {
         self
     }
 
+    /// Insert or replace the provider option value of type `T`.
+    ///
+    /// Slots are keyed by type, exactly like [`TransportOptions::insert`].
+    /// Unlike [`Self::with_transport_options`], this keeps options of other
+    /// types already present, so calls chain across providers.
+    #[cfg(feature = "serde")]
+    #[must_use]
+    pub fn with_transport_option<T>(mut self, value: T) -> Self
+    where
+        T: TransportOption + serde::Serialize,
+    {
+        self.transport_options.insert(value);
+        self
+    }
+
+    /// Insert or replace the provider option value of type `T`.
+    ///
+    /// Slots are keyed by type, exactly like [`TransportOptions::insert`].
+    /// Unlike [`Self::with_transport_options`], this keeps options of other
+    /// types already present, so calls chain across providers.
+    #[cfg(not(feature = "serde"))]
+    #[must_use]
+    pub fn with_transport_option<T: TransportOption>(mut self, value: T) -> Self {
+        self.transport_options.insert(value);
+        self
+    }
+
     /// Set the provider-call timeout for this attempt.
     #[must_use]
     pub const fn with_timeout(mut self, timeout: Duration) -> Self {
@@ -326,6 +353,29 @@ impl TransportOptions {
                 value: Box::new(value),
             },
         );
+    }
+
+    /// Insert or replace the option value of type `T`, by value.
+    ///
+    /// Builder-style counterpart of [`Self::insert`].
+    #[cfg(feature = "serde")]
+    #[must_use]
+    pub fn with<T>(mut self, value: T) -> Self
+    where
+        T: TransportOption + serde::Serialize,
+    {
+        self.insert(value);
+        self
+    }
+
+    /// Insert or replace the option value of type `T`, by value.
+    ///
+    /// Builder-style counterpart of [`Self::insert`].
+    #[cfg(not(feature = "serde"))]
+    #[must_use]
+    pub fn with<T: TransportOption>(mut self, value: T) -> Self {
+        self.insert(value);
+        self
     }
 
     /// Return the stored option of type `T`, if present.
@@ -1592,6 +1642,52 @@ mod tests {
             Some("value")
         );
         assert!(options.get::<TestOption>().is_none());
+    }
+
+    #[test]
+    fn transport_options_with_inserts_by_value() {
+        let options = TransportOptions::default().with(TestOption(String::from("value")));
+
+        assert_eq!(
+            options.get::<TestOption>().map(|value| value.0.as_str()),
+            Some("value")
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn send_options_with_transport_option_chains_across_providers() {
+        let options = SendOptions::new()
+            .with_transport_option(TestOption(String::from("value")))
+            .with_transport_option(OtherTestOption { value: 42 });
+
+        assert_eq!(
+            options
+                .transport_options
+                .get::<TestOption>()
+                .map(|value| value.0.as_str()),
+            Some("value")
+        );
+        assert_eq!(
+            options.transport_options.get::<OtherTestOption>(),
+            Some(&OtherTestOption { value: 42 })
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn send_options_with_transport_option_replaces_same_type() {
+        let options = SendOptions::new()
+            .with_transport_option(TestOption(String::from("first")))
+            .with_transport_option(TestOption(String::from("second")));
+
+        assert_eq!(
+            options
+                .transport_options
+                .get::<TestOption>()
+                .map(|value| value.0.as_str()),
+            Some("second")
+        );
     }
 
     #[test]

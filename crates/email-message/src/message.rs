@@ -230,6 +230,24 @@ impl AttachmentReference {
     }
 }
 
+impl From<String> for AttachmentReference {
+    fn from(reference: String) -> Self {
+        Self { reference }
+    }
+}
+
+impl From<&str> for AttachmentReference {
+    fn from(reference: &str) -> Self {
+        Self::from(reference.to_owned())
+    }
+}
+
+impl AsRef<str> for AttachmentReference {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
 /// Inline bytes or an unresolved external attachment reference.
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1886,6 +1904,16 @@ mod tests {
         let reference = AttachmentReference::new("550e8400-e29b-41d4-a716-446655440000");
 
         assert_eq!(reference.as_str(), "550e8400-e29b-41d4-a716-446655440000");
+    }
+
+    #[test]
+    fn attachment_reference_converts_from_strings() {
+        let from_str = AttachmentReference::from("s3://bucket/key");
+        let from_string = AttachmentReference::from(String::from("s3://bucket/key"));
+
+        assert_eq!(from_str, from_string);
+        assert_eq!(from_str, AttachmentReference::new("s3://bucket/key"));
+        assert_eq!(from_str.as_ref(), "s3://bucket/key");
     }
 
     #[test]

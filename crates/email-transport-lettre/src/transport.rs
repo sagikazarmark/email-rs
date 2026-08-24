@@ -101,6 +101,12 @@ impl LettreTransport {
     }
 }
 
+impl From<AsyncSmtpTransport<Tokio1Executor>> for LettreTransport {
+    fn from(client: AsyncSmtpTransport<Tokio1Executor>) -> Self {
+        Self::from_client(client)
+    }
+}
+
 impl Transport for LettreTransport {
     fn capabilities(&self) -> Capabilities {
         Capabilities::new()
@@ -668,6 +674,16 @@ mod tests {
         assert!(rendered.contains("<redacted lettre SMTP sender>"));
         assert!(!rendered.contains("smtp.secret.example"));
         assert!(!rendered.contains("super-secret-password"));
+    }
+
+    #[tokio::test]
+    async fn from_converts_initialized_lettre_client() {
+        let client =
+            lettre::AsyncSmtpTransport::<lettre::Tokio1Executor>::builder_dangerous("smtp.example")
+                .build();
+        let transport = LettreTransport::from(client);
+
+        assert!(format!("{transport:?}").contains("<redacted lettre SMTP sender>"));
     }
 
     #[test]
