@@ -1,0 +1,100 @@
+name: restate-email-example
+
+services:
+  restate:
+    hostname: restate
+    image: docker.restate.dev/restatedev/restate:latest
+    ports:
+      - 127.0.0.1:8080:8080 # ingress
+      - 127.0.0.1:9070:9070 # admin API + UI
+    environment:
+      RESTATE_INGRESS__ADVERTISED_ADDRESS: "http://127.0.0.1:8080"
+      RESTATE_ADMIN__ADVERTISED_ADDRESS: "http://127.0.0.1:9070"
+    volumes:
+      - restate-data:/restate-data
+    depends_on:
+      restate-email:
+        condition: service_started
+    # Registers the email endpoint deployment using the restate CLI bundled in
+    # the server image, retrying until both the admin API and the endpoint are
+    # ready. Registration is idempotent, so restarts are safe.
+    post_start:
+      - command:
+          - /bin/sh
+          - -c
+          - |
+            until restate deployments register --yes http://restate-email:9080 2>/dev/null || restate deployments list 2>/dev/null | grep -q 'restate-email:9080'; do
+              echo "waiting to register the email endpoint deployment..."
+              sleep 2
+            done
+
+  restate-email:
+    build:
+      context: ../..
+      args:
+        # All transports (SMTP + Resend) and all OpenDAL attachment resolver services.
+        FEATURES: transport-all
+    ports:
+      - 127.0.0.1:9080:9080
+    environment:
+      CONFIG_FILE: /etc/restate-email/restate-email.toml
+    volumes:
+      - ./restate-email.toml:/etc/restate-email/restate-email.toml:ro
+    depends_on:
+      mailpit:
+        condition: service_started
+      rustfs:
+        condition: service_healthy
+    # Init containers: create the attachment bucket, then upload the sample
+    # attachment, before the endpoint starts.
+    pre_start:
+      - image: minio/mc:latest
+        environment:
+          MC_HOST_rustfs: http://rustfsadmin:rustfsadmin@rustfs:9000
+        command: ["mb", "--ignore-existing", "rustfs/attachments"]
+      - image: curlimages/curl:latest
+        command:
+          [
+            "-sSf",
+            "--retry",
+            "5",
+            "--aws-sigv4",
+            "aws:amz:us-east-1:s3",
+            "--user",
+            "rustfsadmin:rustfsadmin",
+            "-X",
+            "PUT",
+            "--data-binary",
+            "Hello World",
+            "http://rustfs:9000/attachments/hello.txt",
+          ]
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - 127.0.0.1:8025:8025 # web UI + API; SMTP (1025) stays on the compose network
+
+  rustfs:
+    image: rustfs/rustfs:latest
+    ports:
+      - 127.0.0.1:9000:9000 # S3 API
+      - 127.0.0.1:9001:9001 # console
+    environment:
+      RUSTFS_ACCESS_KEY: rustfsadmin
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_SECRET_KEY: rustfsadmin
+      RUSTFS_VOLUMES: /data
+    volumes:
+      - rustfs-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+
+volumes:
+  restate-data:
+  rustfs-data:

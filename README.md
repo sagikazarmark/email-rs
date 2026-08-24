@@ -31,6 +31,10 @@
 - [`restate-email`](crates/restate-email): Restate worker contracts and service adapter.
 - [`restate-email-endpoint`](crates/restate-email-endpoint): standalone endpoint hosting the Restate email service.
 
+## Examples
+
+- [`examples/restate-endpoint`](examples/restate-endpoint): Docker Compose stack running the Restate email endpoint against Restate, a Mailpit mock SMTP server, and RustFS-backed attachment resolution.
+
 ## Development
 
 CI runs the following workspace checks:
