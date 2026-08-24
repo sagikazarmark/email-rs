@@ -89,10 +89,11 @@ impl SendOptions {
         self
     }
 
-    /// Insert or replace one provider-specific option.
+    /// Insert or replace the provider option value of type `T`.
     ///
-    /// Unlike [`Self::with_transport_options`], this keeps options already
-    /// present for other providers, so calls chain across providers.
+    /// Slots are keyed by type, exactly like [`TransportOptions::insert`].
+    /// Unlike [`Self::with_transport_options`], this keeps options of other
+    /// types already present, so calls chain across providers.
     #[cfg(feature = "serde")]
     #[must_use]
     pub fn with_transport_option<T>(mut self, value: T) -> Self
@@ -103,10 +104,11 @@ impl SendOptions {
         self
     }
 
-    /// Insert or replace one provider-specific option.
+    /// Insert or replace the provider option value of type `T`.
     ///
-    /// Unlike [`Self::with_transport_options`], this keeps options already
-    /// present for other providers, so calls chain across providers.
+    /// Slots are keyed by type, exactly like [`TransportOptions::insert`].
+    /// Unlike [`Self::with_transport_options`], this keeps options of other
+    /// types already present, so calls chain across providers.
     #[cfg(not(feature = "serde"))]
     #[must_use]
     pub fn with_transport_option<T: TransportOption>(mut self, value: T) -> Self {
@@ -1674,7 +1676,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "serde")]
-    fn send_options_with_transport_option_replaces_same_provider() {
+    fn send_options_with_transport_option_replaces_same_type() {
         let options = SendOptions::new()
             .with_transport_option(TestOption(String::from("first")))
             .with_transport_option(TestOption(String::from("second")));
