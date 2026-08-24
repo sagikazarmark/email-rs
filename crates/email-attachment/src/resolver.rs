@@ -159,13 +159,16 @@ impl AttachmentResolver for MapResolver {
         reference: &AttachmentReference,
     ) -> Result<ResolvedAttachment, AttachmentResolveError> {
         self.entries
-            .get(reference.uri())
+            .get(reference.as_str())
             .cloned()
             .map(ResolvedAttachment::new)
             .ok_or_else(|| {
                 AttachmentResolveError::new(
                     ResolveErrorKind::NotFound,
-                    format!("attachment reference `{}` was not found", reference.uri()),
+                    format!(
+                        "attachment reference `{}` was not found",
+                        reference.as_str()
+                    ),
                 )
             })
     }
@@ -216,7 +219,7 @@ impl AttachmentResolver for SchemeRouter {
         &self,
         reference: &AttachmentReference,
     ) -> Result<ResolvedAttachment, AttachmentResolveError> {
-        let route = reference.uri().split_once(':');
+        let route = reference.as_str().split_once(':');
         let resolver = route.and_then(|(scheme, _)| self.resolvers.get(scheme));
         match (resolver, route) {
             (Some(resolver), Some((_, value))) => {
@@ -227,7 +230,7 @@ impl AttachmentResolver for SchemeRouter {
                 ResolveErrorKind::UnsupportedReference,
                 format!(
                     "no attachment resolver is registered for reference `{}`",
-                    reference.uri()
+                    reference.as_str()
                 ),
             )),
             _ => unreachable!("a resolver requires a parsed route"),

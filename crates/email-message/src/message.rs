@@ -203,8 +203,7 @@ impl<'a> arbitrary::Arbitrary<'a> for Header {
 /// An unresolved external attachment body reference.
 ///
 /// The value is opaque and interpreted entirely by the configured resolver. It
-/// may be a URI, a plain key, or a provider identifier. The `uri` field and
-/// accessor retain their names for wire compatibility. Wire renderers reject
+/// may be a URI, a plain key, or a provider identifier. Wire renderers reject
 /// references until a preparation layer replaces them with bytes.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -212,20 +211,22 @@ impl<'a> arbitrary::Arbitrary<'a> for Header {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub struct AttachmentReference {
-    uri: String,
+    reference: String,
 }
 
 impl AttachmentReference {
     /// Creates a reference from an application-defined opaque value.
     #[must_use]
-    pub fn new(uri: impl Into<String>) -> Self {
-        Self { uri: uri.into() }
+    pub fn new(reference: impl Into<String>) -> Self {
+        Self {
+            reference: reference.into(),
+        }
     }
 
-    /// Returns the resolver-interpreted value.
+    /// Returns the resolver-interpreted string reference.
     #[must_use]
-    pub fn uri(&self) -> &str {
-        &self.uri
+    pub fn as_str(&self) -> &str {
+        self.reference.as_str()
     }
 }
 
@@ -260,7 +261,7 @@ impl serde::Serialize for AttachmentBody {
             Self::Reference(reference) => {
                 let mut value = serializer.serialize_struct("AttachmentBody", 2)?;
                 value.serialize_field("type", "reference")?;
-                value.serialize_field("uri", reference.uri())?;
+                value.serialize_field("reference", reference.as_str())?;
                 value.end()
             }
         }
@@ -279,7 +280,7 @@ impl<'de> serde::Deserialize<'de> for AttachmentBody {
         #[serde(tag = "type", rename_all = "snake_case")]
         enum RawAttachmentBody {
             Bytes { bytes: String },
-            Reference { uri: String },
+            Reference { reference: String },
         }
 
         Ok(match RawAttachmentBody::deserialize(deserializer)? {
@@ -291,7 +292,9 @@ impl<'de> serde::Deserialize<'de> for AttachmentBody {
                     })?;
                 Self::Bytes(decoded)
             }
-            RawAttachmentBody::Reference { uri } => Self::Reference(AttachmentReference::new(uri)),
+            RawAttachmentBody::Reference { reference } => {
+                Self::Reference(AttachmentReference::new(reference))
+            }
         })
     }
 }
@@ -325,9 +328,9 @@ impl schemars::JsonSchema for AttachmentBody {
                     "type": "object",
                     "properties": {
                         "type": {"const": "reference"},
-                        "uri": {"type": "string"}
+                        "reference": {"type": "string"}
                     },
-                    "required": ["type", "uri"]
+                    "required": ["type", "reference"]
                 }
             ]
         })
@@ -1879,10 +1882,10 @@ mod tests {
     }
 
     #[test]
-    fn attachment_reference_constructor_preserves_uri() {
-        let reference = AttachmentReference::new("s3://bucket/path/report.pdf");
+    fn attachment_reference_constructor_preserves_reference() {
+        let reference = AttachmentReference::new("550e8400-e29b-41d4-a716-446655440000");
 
-        assert_eq!(reference.uri(), "s3://bucket/path/report.pdf");
+        assert_eq!(reference.as_str(), "550e8400-e29b-41d4-a716-446655440000");
     }
 
     #[test]

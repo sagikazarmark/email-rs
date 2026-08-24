@@ -64,7 +64,7 @@ impl AttachmentResolver for OpendalResolver {
         reference: &AttachmentReference,
     ) -> Result<ResolvedAttachment, AttachmentResolveError> {
         // OpenDAL trims paths before dispatch, so validate and use that same form.
-        let path = reference.uri().trim();
+        let path = reference.as_str().trim();
         if !is_relative_path_within_root(path) {
             return Err(AttachmentResolveError::new(
                 ResolveErrorKind::UnsupportedReference,
