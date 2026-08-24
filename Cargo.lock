@@ -947,7 +947,7 @@ dependencies = [
 
 [[package]]
 name = "email-attachment"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "email-message",
  "email-transport",
@@ -957,7 +957,7 @@ dependencies = [
 
 [[package]]
 name = "email-attachment-opendal"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "email-attachment",
  "email-message",
@@ -968,7 +968,7 @@ dependencies = [
 
 [[package]]
 name = "email-kit"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "email-attachment",
  "email-attachment-opendal",
@@ -982,7 +982,7 @@ dependencies = [
 
 [[package]]
 name = "email-message"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "addr-spec",
  "arbitrary",
@@ -999,7 +999,7 @@ dependencies = [
 
 [[package]]
 name = "email-message-wire"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "base64 0.23.1",
  "email-message",
@@ -1010,7 +1010,7 @@ dependencies = [
 
 [[package]]
 name = "email-transport"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "email-message",
  "erased-serde",
@@ -1028,7 +1028,7 @@ dependencies = [
 
 [[package]]
 name = "email-transport-lettre"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "email-message",
  "email-message-wire",
@@ -1040,7 +1040,7 @@ dependencies = [
 
 [[package]]
 name = "email-transport-resend"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "email-message",
  "email-transport",
@@ -1057,7 +1057,7 @@ dependencies = [
 
 [[package]]
 name = "email-transport-restate"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "email-message",
  "email-transport",
@@ -1072,7 +1072,7 @@ dependencies = [
 
 [[package]]
 name = "email-transport-test"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "email-message",
  "email-message-wire",
@@ -3344,7 +3344,7 @@ dependencies = [
 
 [[package]]
 name = "restate-email"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "bytes",
  "email-kit",
@@ -3365,7 +3365,7 @@ dependencies = [
 
 [[package]]
 name = "restate-email-endpoint"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "clap",
