@@ -13,6 +13,9 @@ COPY . ./
 RUN cargo fetch --locked
 
 ARG TARGETPLATFORM
+# Cargo features for the endpoint build; defaults to every transport and
+# attachment resolver.
+ARG FEATURES="transport-all"
 
 RUN xx-apt-get update && \
     xx-apt-get install -y \
@@ -21,7 +24,7 @@ RUN xx-apt-get update && \
     libc6-dev \
     pkg-config
 
-RUN xx-cargo build --locked --release --bin restate-email
+RUN xx-cargo build --locked --release --bin restate-email --features "$FEATURES"
 RUN xx-verify ./target/$(xx-cargo --print-target-triple)/release/restate-email
 RUN cp ./target/$(xx-cargo --print-target-triple)/release/restate-email /usr/local/bin/restate-email
 

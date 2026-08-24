@@ -1,26 +1,37 @@
 mod config;
 
+#[cfg(not(any(feature = "transport-lettre", feature = "transport-resend")))]
+compile_error!(
+    "at least one transport feature (`transport-lettre` or `transport-resend`) must be enabled"
+);
+
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result, bail};
 use clap::Parser;
+#[cfg(feature = "attachment-opendal")]
 use email_kit::attachment::opendal::OpendalResolver;
 use email_kit::attachment::{
     AttachmentLimits, AttachmentResolveError, AttachmentResolver, AttachmentResolvingTransport,
     ResolvedAttachment, SchemeRouter,
 };
 use email_kit::message::AttachmentReference;
+#[cfg(feature = "transport-lettre")]
+use email_kit::transport::lettre::LettreTransport;
+#[cfg(feature = "transport-resend")]
 use email_kit::transport::resend::ResendTransport;
-use email_kit::transport::transport_option_registry;
+use email_kit::transport::{Transport, transport_option_registry};
 use figment::Figment;
 use figment::providers::{Env, Format, Json, Toml, Yaml};
 use restate_email::{Service, StaticTransportRegistry};
 use restate_sdk::{endpoint::Endpoint, http_server::HttpServer, service::IntoServiceDefinition};
 use tracing_subscriber::EnvFilter;
 
-use crate::config::{AttachmentConfig, Config, ResolverConfig, TransportConfig};
+#[cfg(feature = "attachment-opendal")]
+use crate::config::ResolverConfig;
+use crate::config::{AttachmentConfig, Config, TransportConfig};
 
 #[derive(Parser, Debug)]
 #[command(version)]
@@ -126,24 +137,30 @@ fn create_registry(
     for (key, transport) in transports {
         let provider = transport.provider_name();
         match transport {
+            #[cfg(feature = "transport-resend")]
             TransportConfig::Resend { api_key, base_url } => {
                 let mut builder = ResendTransport::builder(api_key);
                 if let Some(base_url) = base_url {
                     builder = builder.base_url(base_url);
                 }
-                let transport = builder.build();
-                if let Some((resolver, limits)) = &attachment_preparation {
-                    registry.insert(
-                        key.clone(),
-                        AttachmentResolvingTransport::new(
-                            transport,
-                            SharedAttachmentResolver(Arc::clone(resolver)),
-                        )
-                        .with_limits(*limits),
-                    );
-                } else {
-                    registry.insert(key.clone(), transport);
-                }
+                insert_transport(
+                    &mut registry,
+                    &key,
+                    builder.build(),
+                    attachment_preparation.as_ref(),
+                );
+            }
+            #[cfg(feature = "transport-lettre")]
+            TransportConfig::Smtp { url } => {
+                let transport = LettreTransport::from_url(url.as_str()).with_context(|| {
+                    format!("failed to configure SMTP transport `{key}` from its connection URL")
+                })?;
+                insert_transport(
+                    &mut registry,
+                    &key,
+                    transport,
+                    attachment_preparation.as_ref(),
+                );
             }
         }
 
@@ -153,33 +170,61 @@ fn create_registry(
     Ok(registry)
 }
 
+fn insert_transport<T>(
+    registry: &mut StaticTransportRegistry,
+    key: &str,
+    transport: T,
+    attachment_preparation: Option<&(Arc<SchemeRouter>, AttachmentLimits)>,
+) where
+    T: Transport + 'static,
+{
+    if let Some((resolver, limits)) = attachment_preparation {
+        registry.insert(
+            key,
+            AttachmentResolvingTransport::new(
+                transport,
+                SharedAttachmentResolver(Arc::clone(resolver)),
+            )
+            .with_limits(*limits),
+        );
+    } else {
+        registry.insert(key, transport);
+    }
+}
+
 fn create_attachment_preparation(
     config: AttachmentConfig,
 ) -> Result<(Arc<SchemeRouter>, AttachmentLimits)> {
     let limits = AttachmentLimits::new()
         .with_max_attachment_bytes(config.max_attachment_bytes)
         .with_max_total_bytes(config.max_total_bytes);
-    let resolver_max_bytes = config.max_attachment_bytes.unwrap_or(usize::MAX);
-    let mut router = SchemeRouter::new();
+    let router = SchemeRouter::new();
 
-    for (scheme, resolver) in config.resolvers {
-        match resolver {
-            ResolverConfig::Opendal { service, options } => {
-                let operator = opendal::Operator::via_iter(&service, options).with_context(|| {
-                    format!(
-                        "failed to configure attachment resolver `{scheme}` with OpenDAL service `{service}`"
-                    )
-                })?;
-                router.register(&scheme, OpendalResolver::new(operator, resolver_max_bytes));
-                tracing::info!(resolver = %scheme, service, "registered attachment resolver");
+    #[cfg(feature = "attachment-opendal")]
+    let router = {
+        let mut router = router;
+        let resolver_max_bytes = config.max_attachment_bytes.unwrap_or(usize::MAX);
+        for (scheme, resolver) in config.resolvers {
+            match resolver {
+                ResolverConfig::Opendal { service, options } => {
+                    let operator = opendal::Operator::via_iter(&service, options)
+                        .with_context(|| {
+                            format!(
+                                "failed to configure attachment resolver `{scheme}` with OpenDAL service `{service}`"
+                            )
+                        })?;
+                    router.register(&scheme, OpendalResolver::new(operator, resolver_max_bytes));
+                    tracing::info!(resolver = %scheme, service, "registered attachment resolver");
+                }
             }
         }
-    }
+        router
+    };
 
     Ok((Arc::new(router), limits))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "attachment-opendal", feature = "transport-resend"))]
 mod tests {
     use std::collections::BTreeMap;
 

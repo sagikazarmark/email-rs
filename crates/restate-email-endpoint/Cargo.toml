@@ -13,18 +13,15 @@ categories = ["email", "asynchronous"]
 [[bin]]
 name = "restate-email"
 path = "src/main.rs"
-required-features = ["attachment-opendal", "transport-resend"]
 doc = false
 
 [features]
 default = [
-    "attachment-opendal",
     "email-kit/default",
     "email-kit/tracing",
     "restate-email/default",
     "restate-email/rfc5322-string-compat",
     "restate-email/schemars",
-    "transport-resend",
 ]
 attachment-opendal = [
     "dep:opendal",
@@ -39,12 +36,20 @@ attachment-opendal = [
 transport-all = [
     "attachment-opendal",
     "email-kit/transport-all",
+    "transport-lettre",
     "transport-resend",
 ]
 transport-all-wasm = [
     "attachment-opendal",
     "email-kit/transport-all-wasm",
     "transport-resend",
+]
+transport-lettre = [
+    "dep:email-transport-lettre",
+    "email-kit/serde",
+    "email-kit/transport-lettre",
+    "email-transport-lettre/default",
+    "restate-email/service",
 ]
 transport-resend = [
     "email-kit/serde",
@@ -54,6 +59,7 @@ transport-resend = [
 
 [dependencies]
 email-kit = { workspace = true, default-features = false }
+email-transport-lettre = { workspace = true, optional = true }
 restate-email = { workspace = true, default-features = false }
 
 anyhow = "1"

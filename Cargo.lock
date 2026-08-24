@@ -3370,6 +3370,7 @@ dependencies = [
  "anyhow",
  "clap",
  "email-kit",
+ "email-transport-lettre",
  "figment",
  "opendal",
  "restate-email",

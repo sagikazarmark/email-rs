@@ -30,6 +30,7 @@ pub struct AttachmentConfig {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum ResolverConfig {
+    #[cfg(feature = "attachment-opendal")]
     Opendal {
         service: String,
         #[serde(flatten)]
@@ -40,17 +41,27 @@ pub enum ResolverConfig {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "provider", rename_all = "kebab-case")]
 pub enum TransportConfig {
+    #[cfg(feature = "transport-resend")]
     Resend {
         api_key: String,
         #[serde(default)]
         base_url: Option<Url>,
     },
+    /// SMTP delivery through Lettre.
+    ///
+    /// The URL carries credentials, host, port, and TLS mode as documented by
+    /// Lettre's `AsyncSmtpTransport::from_url` (`smtp://` or `smtps://`).
+    #[cfg(feature = "transport-lettre")]
+    Smtp { url: Url },
 }
 
 impl TransportConfig {
     pub const fn provider_name(&self) -> &'static str {
         match self {
+            #[cfg(feature = "transport-resend")]
             Self::Resend { .. } => "resend",
+            #[cfg(feature = "transport-lettre")]
+            Self::Smtp { .. } => "smtp",
         }
     }
 }
@@ -83,14 +94,11 @@ mod tests {
 
     use super::*;
 
+    #[cfg(feature = "attachment-opendal")]
     #[test]
     fn parses_optional_attachment_preparation() {
         let config: Config = Figment::from(Toml::string(
             r#"
-            [transports.transactional]
-            provider = "resend"
-            api_key = "test-key"
-
             [attachments]
             max_attachment_bytes = 26214400
             max_total_bytes = 41943040
@@ -124,6 +132,17 @@ mod tests {
 
     #[test]
     fn attachment_preparation_is_absent_by_default() {
+        let config: Config = Figment::from(Toml::string(""))
+            .extract()
+            .expect("configuration should parse");
+
+        assert!(config.attachments.is_none());
+        assert!(config.identity_keys.is_empty());
+    }
+
+    #[cfg(feature = "transport-resend")]
+    #[test]
+    fn parses_resend_transport() {
         let config: Config = Figment::from(Toml::string(
             r#"
             [transports.transactional]
@@ -134,8 +153,32 @@ mod tests {
         .extract()
         .expect("configuration should parse");
 
-        assert!(config.attachments.is_none());
-        assert!(config.identity_keys.is_empty());
+        let Some(TransportConfig::Resend { api_key, base_url }) =
+            config.transports.get("transactional")
+        else {
+            panic!("transactional transport should be Resend");
+        };
+        assert_eq!(api_key, "test-key");
+        assert!(base_url.is_none());
+    }
+
+    #[cfg(feature = "transport-lettre")]
+    #[test]
+    fn parses_smtp_transport() {
+        let config: Config = Figment::from(Toml::string(
+            r#"
+            [transports.transactional]
+            provider = "smtp"
+            url = "smtp://mailpit:1025"
+            "#,
+        ))
+        .extract()
+        .expect("configuration should parse");
+
+        let Some(TransportConfig::Smtp { url }) = config.transports.get("transactional") else {
+            panic!("transactional transport should be SMTP");
+        };
+        assert_eq!(url.as_str(), "smtp://mailpit:1025");
     }
 
     #[test]
@@ -143,10 +186,6 @@ mod tests {
         let list: Config = Figment::from(Toml::string(
             r#"
             identity_keys = ["publickeyv1_old", "publickeyv1_new"]
-
-            [transports.transactional]
-            provider = "resend"
-            api_key = "test-key"
             "#,
         ))
         .extract()
@@ -154,10 +193,6 @@ mod tests {
         let delimited: Config = Figment::from(Toml::string(
             r#"
             identity_keys = "publickeyv1_old, publickeyv1_new"
-
-            [transports.transactional]
-            provider = "resend"
-            api_key = "test-key"
             "#,
         ))
         .extract()
