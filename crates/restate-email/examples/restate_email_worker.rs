@@ -8,7 +8,7 @@ use email_message::{
 };
 use email_transport::{ErrorKind, SendOptions, SendReport, Transport, TransportError};
 use restate_email::{
-    CorrelationId, IdempotencyKey, SendRequest, ServiceImpl, StaticTransportRegistry, TransportKey,
+    CorrelationId, IdempotencyKey, SendRequest, Service, StaticTransportRegistry, TransportKey,
 };
 use restate_sdk::{endpoint::Endpoint, http_server::HttpServer, service::IntoServiceDefinition};
 
@@ -90,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ResolvingTransport::new(ExampleTransport, resolver),
     );
 
-    let service = ServiceImpl::new(registry).into_service_definition();
+    let service = Service::new(registry).into_service_definition();
     let endpoint = Endpoint::builder().bind(service);
     let address = std::env::var("RESTATE_EMAIL_WORKER_ADDR")
         .unwrap_or_else(|_| String::from("127.0.0.1:9080"))
@@ -99,7 +99,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Restate worker example listening on http://{address}");
     println!("Register this SDK endpoint with Restate, then invoke through Restate ingress.");
-    println!("Restate ingress path: POST /Email/send");
+    println!(
+        "Restate ingress paths: POST /restate/send/Email/send (queue) or /restate/call/Email/send (wait)"
+    );
     println!(
         "Sample request body:\n{}",
         serde_json::to_string_pretty(&request)?

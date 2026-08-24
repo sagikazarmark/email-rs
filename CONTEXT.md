@@ -32,6 +32,12 @@ An advisory statement about what a transport supports. Capabilities describe int
 enforce it.
 _Avoid_: feature flag, support flag
 
+**Invocation mode**:
+How far a Restate-backed transport follows a send before returning — `Queued` (accepted by
+Restate, the report carries the invocation id) or `Sent` (handed to the provider, the report is
+the worker's). It is a Restate-specific transport option, not a message property.
+_Avoid_: sync/async, blocking, fire-and-forget, one-way/request-response
+
 ### Attachments
 
 **Attachment reference**:

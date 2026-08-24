@@ -9,10 +9,7 @@ use email_kit::transport::transport_option_registry;
 use email_transport::{ErrorKind, TransportError, TransportOptionRegistry};
 use restate_sdk::errors::{HandlerError, TerminalError};
 use restate_sdk::prelude::{Context, ContextSideEffects, HandlerResult, Json, RunFuture};
-use restate_sdk::serde::{
-    Deserialize as RestateDeserialize, InputMetadata, OutputMetadata, PayloadMetadata,
-    Serialize as RestateSerialize,
-};
+use restate_sdk::serde::{Deserialize, InputMetadata, OutputMetadata, PayloadMetadata, Serialize};
 use serde::de::DeserializeSeed as _;
 
 use crate::{SendRequest, SendRequestSeed, SendResponse, TransportLookupError, TransportResolver};
@@ -23,12 +20,12 @@ use crate::{SendRequest, SendRequestSeed, SendResponse, TransportLookupError, Tr
 /// more transports in a [`StaticTransportRegistry`](crate::StaticTransportRegistry),
 /// and bind it to a Restate endpoint through
 /// [`IntoServiceDefinition`](restate_sdk::service::IntoServiceDefinition).
-pub struct ServiceImpl<T> {
+pub struct Service<T> {
     transports: Arc<T>,
     transport_options: Arc<TransportOptionRegistry>,
 }
 
-impl<T> Clone for ServiceImpl<T> {
+impl<T> Clone for Service<T> {
     fn clone(&self) -> Self {
         Self {
             transports: Arc::clone(&self.transports),
@@ -37,7 +34,7 @@ impl<T> Clone for ServiceImpl<T> {
     }
 }
 
-impl<T> ServiceImpl<T>
+impl<T> Service<T>
 where
     T: TransportResolver + Send + Sync + 'static,
 {
@@ -93,10 +90,10 @@ where
 /// Restate service for queued email delivery.
 ///
 /// The service is exposed as `Email.send` through Restate ingress. Callers that
-/// are not running behind Restate should use [`ServiceImpl::send_request`] to
+/// are not running behind Restate should use [`Service::send_request`] to
 /// exercise the same dispatch path without the service protocol.
 #[restate_sdk::service(name = "Email")]
-impl<T> ServiceImpl<T>
+impl<T> Service<T>
 where
     T: TransportResolver + Send + Sync + 'static,
 {
@@ -155,7 +152,7 @@ impl SeededJson<SendRequest> {
     }
 }
 
-impl<T> RestateDeserialize for SeededJson<T> {
+impl<T> Deserialize for SeededJson<T> {
     type Error = Infallible;
 
     fn deserialize(bytes: &mut Bytes) -> Result<Self, Self::Error> {
@@ -166,7 +163,7 @@ impl<T> RestateDeserialize for SeededJson<T> {
     }
 }
 
-impl<T> RestateSerialize for SeededJson<T> {
+impl<T> Serialize for SeededJson<T> {
     type Error = Infallible;
 
     fn serialize(&self) -> Result<Bytes, Self::Error> {
@@ -215,7 +212,9 @@ fn transport_error_to_handler_error(error: TransportError) -> HandlerError {
     if error.is_retryable() {
         return error.into();
     }
+
     let code = transport_terminal_code(&error);
+
     TerminalError::new_with_code(code, error.to_string()).into()
 }
 
@@ -325,7 +324,7 @@ mod tests {
 
     #[tokio::test]
     async fn service_send_maps_lookup_error_to_terminal() {
-        let service = ServiceImpl::new(StubRegistry {
+        let service = Service::new(StubRegistry {
             error: Some(TransportLookupError::UnknownKey {
                 key: "transactional".to_owned(),
             }),
@@ -342,13 +341,13 @@ mod tests {
 
     #[test]
     fn service_discovers_and_binds() {
-        let service = ServiceImpl::new(StubRegistry {
+        let service = Service::new(StubRegistry {
             error: Some(TransportLookupError::UnknownKey {
                 key: "transactional".to_owned(),
             }),
         });
 
-        let discovery = <ServiceImpl<StubRegistry> as Discoverable>::discover();
+        let discovery = <Service<StubRegistry> as Discoverable>::discover();
         assert_eq!(discovery.name.as_str(), "Email");
         assert_eq!(discovery.ty, RestateServiceType::Service);
         assert_eq!(discovery.handlers.len(), 1);

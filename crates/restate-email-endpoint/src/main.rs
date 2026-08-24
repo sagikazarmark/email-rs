@@ -15,7 +15,7 @@ use email_kit::transport::resend::ResendTransport;
 use email_kit::transport::transport_option_registry;
 use figment::Figment;
 use figment::providers::{Env, Format, Json, Toml, Yaml};
-use restate_email::{ServiceImpl, StaticTransportRegistry};
+use restate_email::{Service, StaticTransportRegistry};
 use restate_sdk::{endpoint::Endpoint, http_server::HttpServer, service::IntoServiceDefinition};
 use tracing_subscriber::EnvFilter;
 
@@ -81,7 +81,7 @@ async fn main() -> Result<()> {
     for provider in option_registry.provider_keys() {
         tracing::info!(provider, "registered transport option provider");
     }
-    let service = ServiceImpl::new(registry)
+    let service = Service::new(registry)
         .with_transport_options(option_registry)
         .into_service_definition();
     let endpoint = Endpoint::builder().bind(service);
@@ -302,7 +302,7 @@ mod tests {
                 resolvers,
             }),
         };
-        let service = ServiceImpl::new(create_registry(config).expect("registry should build"));
+        let service = Service::new(create_registry(config).expect("registry should build"));
 
         let response = service
             .send_request(&reference_request("docs:report.bin"))
@@ -332,7 +332,7 @@ mod tests {
             .expect(1)
             .mount(&server)
             .await;
-        let service = ServiceImpl::new(
+        let service = Service::new(
             create_registry(Config {
                 transports: resend_transport_config(&server),
                 attachments: None,
@@ -376,7 +376,7 @@ mod tests {
                 )]),
             },
         )]);
-        let service = ServiceImpl::new(
+        let service = Service::new(
             create_registry(Config {
                 transports: resend_transport_config(&server),
                 attachments: Some(AttachmentConfig {
@@ -408,7 +408,7 @@ mod tests {
                 TransientResolver,
             ),
         );
-        let transient_service = ServiceImpl::new(registry);
+        let transient_service = Service::new(registry);
         let error = transient_service
             .send_request(&reference_request("docs:report.bin"))
             .await

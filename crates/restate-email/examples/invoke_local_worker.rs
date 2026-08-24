@@ -44,11 +44,12 @@ fn sample_request() -> Result<SendRequest, Box<dyn std::error::Error>> {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let base_url = std::env::var("RESTATE_INGRESS_URL")
         .unwrap_or_else(|_| String::from("http://127.0.0.1:8080"));
-    let request_url = format!("{}/Email/send", base_url.trim_end_matches('/'));
+    let request_url = format!("{}/restate/call/Email/send", base_url.trim_end_matches('/'));
     let request = sample_request()?;
 
     println!("POST {request_url}");
     println!("This client targets Restate ingress, not the raw SDK endpoint.");
+    println!("The call path waits for the worker; /restate/send/Email/send would only queue it.");
     println!("Request body:\n{}", serde_json::to_string_pretty(&request)?);
 
     let response = reqwest::Client::new()

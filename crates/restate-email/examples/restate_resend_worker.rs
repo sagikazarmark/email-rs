@@ -5,7 +5,7 @@ use email_message::ContentType;
 use email_message::{Address, Attachment, Body, EmailAddress, Envelope, Message, OutboundMessage};
 use email_transport::SendOptions;
 use restate_email::{
-    CorrelationId, IdempotencyKey, SendRequest, ServiceImpl, StaticTransportRegistry, TransportKey,
+    CorrelationId, IdempotencyKey, SendRequest, Service, StaticTransportRegistry, TransportKey,
 };
 use restate_sdk::{endpoint::Endpoint, http_server::HttpServer, service::IntoServiceDefinition};
 
@@ -50,14 +50,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut registry = StaticTransportRegistry::new();
     registry.insert("resend-default", ResendTransport::new(api_key));
 
-    let service = ServiceImpl::new(registry).into_service_definition();
+    let service = Service::new(registry).into_service_definition();
     let endpoint = Endpoint::builder().bind(service);
     let address = "127.0.0.1:9081".parse()?;
     let request = sample_request(&from, &to)?;
 
     println!("Restate Resend worker example listening on http://{address}");
     println!("Register this SDK endpoint with Restate, then invoke through Restate ingress.");
-    println!("Restate ingress path: POST /Email/send");
+    println!(
+        "Restate ingress paths: POST /restate/send/Email/send (queue) or /restate/call/Email/send (wait)"
+    );
     println!(
         "Sample request body:\n{}",
         serde_json::to_string_pretty(&request)?

@@ -6,19 +6,22 @@
 //! registry-driven [`SendRequestSeed`], using the provider-keyed wire
 //! representation owned by `email-transport`.
 //!
-//! The Restate service adapter is available as [`ServiceImpl`] with the
-//! `service` feature. `RestateTransport` is available with `client`.
+//! The Restate service adapter is available as [`Service`] with the
+//! `service` feature. [`RestateTransport`] is available with `client`; it
+//! returns as soon as Restate has queued the invocation by default and can be
+//! asked to wait for the worker's provider report with [`InvocationMode::Sent`],
+//! either as a transport default or per send through [`RestateSendOptions`].
 //!
 //! # Quick start
 //!
 //! ```rust
 //! # #[cfg(feature = "service")]
 //! # {
-//! use restate_email::{ServiceImpl, StaticTransportRegistry};
+//! use restate_email::{Service, StaticTransportRegistry};
 //! use restate_sdk::{endpoint::Endpoint, service::IntoServiceDefinition};
 //!
 //! let registry = StaticTransportRegistry::new();
-//! let service = ServiceImpl::new(registry).into_service_definition();
+//! let service = Service::new(registry).into_service_definition();
 //! let _endpoint = Endpoint::builder().bind(service).build();
 //! # }
 //! ```
@@ -29,7 +32,8 @@
 //! builds. Disable default features to consume only the SDK-free wire contract.
 //!
 //! - `client`: caller-side [`email_transport::Transport`] implementation using
-//!   Restate ingress. This does not enable `restate-sdk`.
+//!   Restate ingress (`/restate/send/Email/send` and `/restate/call/Email/send`).
+//!   This does not enable `restate-sdk`.
 //! - `service`: Restate worker service adapter and transport registry.
 //! - `resend`: registers Resend provider options and enables the Resend worker
 //!   example.
@@ -40,7 +44,7 @@
 //! # Platform support
 //!
 //! This crate targets native Restate workers. Transport implementations may
-//! support additional platforms, but [`ServiceImpl`] depends on Restate's
+//! support additional platforms, but [`Service`] depends on Restate's
 //! native endpoint/runtime integration.
 //!
 //! # Examples
@@ -51,7 +55,7 @@
 //!   wires [`email_kit::transport::resend::ResendTransport`] into the service;
 //!   it requires the `resend` feature.
 //! - [`invoke_local_worker`](https://github.com/sagikazarmark/email-rs/blob/main/crates/restate-email/examples/invoke_local_worker.rs)
-//!   invokes `Email.send` through Restate ingress and validates the response.
+//!   invokes `Email.send` through Restate ingress and waits for the response.
 //! - [`direct_or_restate`](https://github.com/sagikazarmark/email-rs/blob/main/crates/restate-email/examples/direct_or_restate.rs)
 //!   sends through the same application function using either a direct
 //!   provider transport or `RestateTransport`.
@@ -59,6 +63,7 @@
 #[cfg(feature = "client")]
 mod client;
 mod contract;
+mod options;
 #[cfg(feature = "service")]
 mod service;
 #[cfg(feature = "service")]
@@ -67,15 +72,16 @@ pub mod transport;
 // `IdempotencyKey` and `CorrelationId` live in `email-transport` because they
 // flow through `SendOptions` directly.
 #[cfg(feature = "client")]
-pub use client::RestateTransport;
+pub use client::{RestateTransport, RestateTransportBuilder};
 pub use contract::{SendRequest, SendRequestSeed, SendResponse, TransportKey};
 pub use email_transport::{
     CorrelationId, IdempotencyKey, STRING_NEWTYPE_MAX_BYTES, SendOptions, StringNewtypeError,
     TransportOption, TransportOptionRegistry, TransportOptionRegistryError, TransportOptions,
     TransportOptionsSeed,
 };
+pub use options::{InvocationMode, RestateSendOptions};
 #[cfg(feature = "service")]
-pub use service::{ServiceImpl, ServiceImplClient};
+pub use service::{Service, ServiceClient};
 #[cfg(feature = "service")]
 pub use transport::{
     CatchAllTransportResolver, RuntimeBound, StaticTransportRegistry, TransportLookupError,

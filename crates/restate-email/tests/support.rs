@@ -7,7 +7,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use http::Request;
 use http_body_util::{BodyExt as _, Full};
 use prost::Message as ProstMessage;
-use restate_email::{SendRequest, ServiceImpl, TransportResolver};
+use restate_email::{SendRequest, Service, TransportResolver};
 use restate_sdk::endpoint::{Endpoint, HandleOptions, ProtocolMode};
 use restate_sdk::service::IntoServiceDefinition as _;
 use restate_sdk_shared_core::Version;
@@ -60,7 +60,7 @@ const OUTPUT_COMMAND_MESSAGE_TYPE: u16 = 0x0401;
 const RUN_COMMAND_MESSAGE_TYPE: u16 = 0x0411;
 
 pub(crate) fn invoke_protocol_sdk_endpoint<T>(
-    service: &ServiceImpl<T>,
+    service: &Service<T>,
     request: &SendRequest,
 ) -> http::Response<restate_sdk::endpoint::ResponseBody>
 where
@@ -73,7 +73,7 @@ where
 }
 
 pub(crate) fn invoke_protocol_sdk_endpoint_with_payload<T>(
-    service: &ServiceImpl<T>,
+    service: &Service<T>,
     payload: Bytes,
 ) -> http::Response<restate_sdk::endpoint::ResponseBody>
 where

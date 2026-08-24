@@ -1,7 +1,7 @@
 use email_message::{Address, Body, Message, OutboundMessage};
 use email_transport::{SendOptions, SendReport, Transport, TransportError};
 use email_transport_resend::ResendTransport;
-use restate_email::{RestateTransport, TransportKey};
+use restate_email::{InvocationMode, RestateTransport, TransportKey};
 
 async fn send_application_email<T: Transport>(
     transport: &T,
@@ -26,13 +26,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let message = message(&recipient)?;
 
     if let Ok(ingress_url) = std::env::var("RESTATE_INGRESS_URL") {
-        let transport = RestateTransport::new(
-            ingress_url.parse()?,
-            TransportKey::new("transactional")?,
-            reqwest::Client::new(),
-        );
+        // Set RESTATE_WAIT=1 to wait for the worker's provider report instead
+        // of returning as soon as Restate has queued the invocation.
+        let invocation_mode = if std::env::var_os("RESTATE_WAIT").is_some() {
+            InvocationMode::Sent
+        } else {
+            InvocationMode::Queued
+        };
+        let transport =
+            RestateTransport::builder(TransportKey::new("transactional")?, ingress_url.parse()?)
+                .invocation_mode(invocation_mode)
+                .build();
         let report = send_application_email(&transport, &message).await?;
-        println!("sent durably through {}", report.provider);
+        match RestateTransport::invocation_id(&report) {
+            Some(invocation_id) => println!("queued as Restate invocation {invocation_id}"),
+            None => println!("sent durably through {}", report.provider),
+        }
     } else {
         let transport = ResendTransport::new(std::env::var("RESEND_API_KEY")?);
         let report = send_application_email(&transport, &message).await?;

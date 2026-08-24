@@ -1,83 +1,127 @@
 //! Caller-side transport that invokes the email worker through Restate ingress.
 
+use std::time::Duration;
+
 use email_message::OutboundMessage;
 use email_transport::{
     Capabilities, ErrorKind, MaybeSend, SendOptions, SendReport, StructuredSendCapability,
-    Transport, TransportError,
+    Transport, TransportError, structured_accepted_for,
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{SendResponse, TransportKey};
+use crate::{InvocationMode, RestateSendOptions, SendResponse, TransportKey};
 
 const ERROR_SOURCE_HEADER: &str = "x-restate-error-source";
+const SERVICE_PATH: [&str; 2] = ["Email", "send"];
 
 /// Email transport backed by a Restate `Email.send` ingress invocation.
 ///
+/// The transport follows a send as far as its [`InvocationMode`] says: in the
+/// default [`InvocationMode::Queued`] mode it returns once Restate has durably
+/// accepted the invocation and reports the invocation id; in
+/// [`InvocationMode::Sent`] mode it waits for the worker and returns the
+/// worker's provider report. A per-send [`RestateSendOptions`] overrides the
+/// configured mode and may delay the invocation.
+///
+/// # Capabilities
+///
 /// The worker's capabilities cannot be discovered through ingress. The
-/// capability setters are therefore deployment assertions made by the caller.
-/// Defaults are conservative except for ingress idempotency, which this adapter
-/// implements directly.
-#[derive(Clone, Debug)]
+/// defaults describe the ingress hop itself: structured sends are the only
+/// thing `Email.send` accepts, and `SendOptions::idempotency_key` is consumed
+/// as Restate's `idempotency-key` header in both modes. Everything about the
+/// worker (attachment references, custom envelopes, and so on) is a deployment
+/// assertion made through [`RestateTransportBuilder`].
+///
+/// # Cancellation
+///
+/// A request may be accepted by Restate even when this side observes an error
+/// while reading the response. This is the trait-level cancellation caveat;
+/// use `SendOptions::idempotency_key` so that a retry attaches to the same
+/// invocation instead of enqueueing a second one.
+#[derive(Clone)]
 pub struct RestateTransport {
     client: reqwest::Client,
-    endpoint: reqwest::Url,
+    ingress_url: reqwest::Url,
+    call_url: reqwest::Url,
+    send_url: reqwest::Url,
     transport: TransportKey,
+    invocation_mode: InvocationMode,
     capabilities: Capabilities,
 }
 
 impl RestateTransport {
-    /// Create a transport targeting `Email.send` at the ingress base URL.
+    /// `SendReport::provider` reported for sends accepted by Restate in
+    /// [`InvocationMode::Queued`] mode.
+    pub const PROVIDER: &'static str = "restate";
+
+    /// Create a transport with default settings.
     ///
-    /// `SendOptions::idempotency_key` is consumed as Restate's
-    /// `idempotency-key` request header. It is deliberately omitted from the
-    /// queued [`SendOptions`], so the provider does not receive the same key.
+    /// Equivalent to `RestateTransport::builder(transport, ingress_url).build()`.
     ///
     /// # Panics
     ///
-    /// Panics if `ingress_base_url` cannot contain hierarchical path segments.
+    /// Panics if `ingress_url` cannot carry hierarchical path segments (for
+    /// example a `mailto:` or `data:` URL). Such a URL can never address a
+    /// Restate ingress, so this is a programming error rather than an input
+    /// error.
     #[must_use]
-    pub fn new(
-        ingress_base_url: reqwest::Url,
-        transport: TransportKey,
-        client: reqwest::Client,
-    ) -> Self {
-        let mut endpoint = ingress_base_url;
-        endpoint.set_query(None);
-        endpoint.set_fragment(None);
-        endpoint
-            .path_segments_mut()
-            .expect("Restate ingress base URL must support path segments")
-            .pop_if_empty()
-            .extend(["Email", "send"]);
+    pub fn new(transport: TransportKey, ingress_url: reqwest::Url) -> Self {
+        Self::builder(transport, ingress_url).build()
+    }
 
-        Self {
-            client,
-            endpoint,
-            transport,
-            capabilities: Capabilities::new().with_idempotency_key(true),
+    /// Start configuring a transport for `transport` behind `ingress_url`.
+    ///
+    /// Any query and fragment on `ingress_url` are discarded; a path prefix is
+    /// preserved so ingress can sit behind a reverse proxy.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `ingress_url` cannot carry hierarchical path segments (for
+    /// example a `mailto:` or `data:` URL). Such a URL can never address a
+    /// Restate ingress, so this is a programming error rather than an input
+    /// error.
+    #[must_use]
+    pub fn builder(transport: TransportKey, ingress_url: reqwest::Url) -> RestateTransportBuilder {
+        RestateTransportBuilder::new(transport, ingress_url)
+    }
+
+    /// Return the configured transport key.
+    #[must_use]
+    pub const fn transport_key(&self) -> &TransportKey {
+        &self.transport
+    }
+
+    /// Return the normalized ingress base URL.
+    #[must_use]
+    pub const fn ingress_url(&self) -> &reqwest::Url {
+        &self.ingress_url
+    }
+
+    /// Return the invocation mode used when a send carries no override.
+    #[must_use]
+    pub const fn invocation_mode(&self) -> InvocationMode {
+        self.invocation_mode
+    }
+
+    /// Return the HTTP client used for ingress requests.
+    #[must_use]
+    pub const fn client(&self) -> &reqwest::Client {
+        &self.client
+    }
+
+    /// Return the Restate invocation id carried by a queued report.
+    ///
+    /// Reports produced in [`InvocationMode::Queued`] mode name
+    /// [`Self::PROVIDER`] as the provider and the invocation id as the
+    /// provider message id. The id can be used with Restate's
+    /// `/restate/attach/{id}` and `/restate/output/{id}` endpoints. Returns
+    /// `None` for reports produced by any other provider.
+    #[must_use]
+    pub fn invocation_id(report: &SendReport) -> Option<&str> {
+        if report.provider != Self::PROVIDER {
+            return None;
         }
-    }
-
-    /// Replace the advertised capabilities with deployment-known worker
-    /// capabilities.
-    #[must_use]
-    pub const fn with_capabilities(mut self, capabilities: Capabilities) -> Self {
-        self.capabilities = capabilities;
-        self
-    }
-
-    /// Assert the deployed worker's structured-send support level.
-    #[must_use]
-    pub const fn with_structured_send(mut self, value: StructuredSendCapability) -> Self {
-        self.capabilities.structured_send = value;
-        self
-    }
-
-    /// Assert whether the deployed worker resolves attachment references.
-    #[must_use]
-    pub const fn with_attachment_references(mut self, value: bool) -> Self {
-        self.capabilities.attachment_references = value;
-        self
+        report.provider_message_id.as_deref()
     }
 
     async fn invoke(
@@ -85,6 +129,13 @@ impl RestateTransport {
         message: &OutboundMessage,
         options: &SendOptions,
     ) -> Result<SendReport, TransportError> {
+        let restate_options = options.transport_options.get::<RestateSendOptions>();
+        let invocation_mode = restate_options
+            .and_then(|restate| restate.invocation_mode)
+            .unwrap_or(self.invocation_mode);
+        let delay = restate_options.and_then(|restate| restate.delay);
+        let url = self.endpoint_for(invocation_mode, delay)?;
+
         let request = IngressSendRequest {
             transport: &self.transport,
             message,
@@ -99,7 +150,7 @@ impl RestateTransport {
         })?;
         let mut request_builder = self
             .client
-            .post(self.endpoint.clone())
+            .post(url)
             .header(reqwest::header::CONTENT_TYPE, "application/json")
             .body(body);
         if let Some(idempotency_key) = options.idempotency_key.as_ref() {
@@ -112,11 +163,65 @@ impl RestateTransport {
             return Err(map_error_response(response).await);
         }
 
-        response
-            .json::<SendResponse>()
-            .await
-            .map(|response| response.report)
-            .map_err(map_response_decode_error)
+        match invocation_mode {
+            InvocationMode::Queued => {
+                let accepted = response
+                    .json::<IngressSendAccepted>()
+                    .await
+                    .map_err(map_response_decode_error)?;
+
+                Ok(SendReport::new(Self::PROVIDER)
+                    .with_provider_message_id(accepted.invocation_id)
+                    .with_accepted(structured_accepted_for(
+                        message.as_message(),
+                        options,
+                        self.capabilities,
+                    )))
+            }
+            InvocationMode::Sent => response
+                .json::<SendResponse>()
+                .await
+                .map(|response| response.report)
+                .map_err(map_response_decode_error),
+        }
+    }
+
+    fn endpoint_for(
+        &self,
+        invocation_mode: InvocationMode,
+        delay: Option<Duration>,
+    ) -> Result<reqwest::Url, TransportError> {
+        match invocation_mode {
+            InvocationMode::Queued => {
+                let mut url = self.send_url.clone();
+                if let Some(delay) = delay {
+                    url.query_pairs_mut()
+                        .append_pair("delay", &format_delay(delay));
+                }
+                Ok(url)
+            }
+            InvocationMode::Sent => {
+                if delay.is_some() {
+                    return Err(TransportError::new(
+                        ErrorKind::Validation,
+                        "Restate delay requires InvocationMode::Queued",
+                    ));
+                }
+                Ok(self.call_url.clone())
+            }
+        }
+    }
+}
+
+impl std::fmt::Debug for RestateTransport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RestateTransport")
+            .field("client", &"<reqwest::Client>")
+            .field("ingress_url", &redacted_url(&self.ingress_url))
+            .field("transport", &self.transport)
+            .field("invocation_mode", &self.invocation_mode)
+            .field("capabilities", &self.capabilities)
+            .finish_non_exhaustive()
     }
 }
 
@@ -132,6 +237,120 @@ impl Transport for RestateTransport {
     ) -> impl core::future::Future<Output = Result<SendReport, TransportError>> + MaybeSend + 'a
     {
         self.invoke(message, options)
+    }
+}
+
+/// Builder for [`RestateTransport`].
+///
+/// Created through [`RestateTransport::builder`]. Every setter has a default,
+/// so `build` never fails.
+#[derive(Clone)]
+pub struct RestateTransportBuilder {
+    transport: TransportKey,
+    ingress_url: reqwest::Url,
+    client: Option<reqwest::Client>,
+    invocation_mode: InvocationMode,
+    capabilities: Capabilities,
+}
+
+impl RestateTransportBuilder {
+    /// Start configuring a transport for `transport` behind `ingress_url`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `ingress_url` cannot carry hierarchical path segments; see
+    /// [`RestateTransport::builder`].
+    #[must_use]
+    pub fn new(transport: TransportKey, mut ingress_url: reqwest::Url) -> Self {
+        assert!(
+            !ingress_url.cannot_be_a_base(),
+            "Restate ingress URL must support path segments"
+        );
+        ingress_url.set_query(None);
+        ingress_url.set_fragment(None);
+
+        Self {
+            transport,
+            ingress_url,
+            client: None,
+            invocation_mode: InvocationMode::Queued,
+            capabilities: Capabilities::new()
+                .with_structured_send(StructuredSendCapability::Supported)
+                .with_idempotency_key(true),
+        }
+    }
+
+    /// Set the HTTP client used for ingress requests.
+    ///
+    /// Defaults to `reqwest::Client::new()`. Request-level limits such as
+    /// connect or read timeouts belong on this client;
+    /// `SendOptions::timeout` is forwarded to the worker instead.
+    #[must_use]
+    pub fn client(mut self, client: reqwest::Client) -> Self {
+        self.client = Some(client);
+        self
+    }
+
+    /// Set the invocation mode used when a send carries no override.
+    ///
+    /// Defaults to [`InvocationMode::Queued`].
+    #[must_use]
+    pub const fn invocation_mode(mut self, invocation_mode: InvocationMode) -> Self {
+        self.invocation_mode = invocation_mode;
+        self
+    }
+
+    /// Replace the advertised capabilities with deployment-known worker
+    /// capabilities.
+    ///
+    /// The default advertises structured sends and ingress idempotency only.
+    #[must_use]
+    pub const fn capabilities(mut self, capabilities: Capabilities) -> Self {
+        self.capabilities = capabilities;
+        self
+    }
+
+    /// Assert the deployed worker's structured-send support level.
+    #[must_use]
+    pub const fn structured_send(mut self, value: StructuredSendCapability) -> Self {
+        self.capabilities.structured_send = value;
+        self
+    }
+
+    /// Assert whether the deployed worker resolves attachment references.
+    #[must_use]
+    pub const fn attachment_references(mut self, value: bool) -> Self {
+        self.capabilities.attachment_references = value;
+        self
+    }
+
+    /// Build the configured transport.
+    #[must_use]
+    pub fn build(self) -> RestateTransport {
+        let call_url = endpoint(&self.ingress_url, "call");
+        let send_url = endpoint(&self.ingress_url, "send");
+
+        RestateTransport {
+            client: self.client.unwrap_or_default(),
+            ingress_url: self.ingress_url,
+            call_url,
+            send_url,
+            transport: self.transport,
+            invocation_mode: self.invocation_mode,
+            capabilities: self.capabilities,
+        }
+    }
+}
+
+impl std::fmt::Debug for RestateTransportBuilder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RestateTransportBuilder")
+            .field("transport", &self.transport)
+            .field("ingress_url", &redacted_url(&self.ingress_url))
+            .field("client", &self.client.as_ref().map(|_| "<reqwest::Client>"))
+            .field("invocation_mode", &self.invocation_mode)
+            .field("capabilities", &self.capabilities)
+            .finish()
     }
 }
 
@@ -159,11 +378,48 @@ impl Serialize for IngressSendRequest<'_> {
     }
 }
 
+/// Body of a Restate `202 Accepted` response to a one-way send.
+///
+/// `status` (`Accepted` or `PreviouslyAccepted` on idempotent replay) and any
+/// other field are deliberately ignored.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IngressSendAccepted {
+    invocation_id: String,
+}
+
 #[derive(Deserialize)]
 struct RestateErrorResponse {
     code: Option<u16>,
     message: Option<String>,
     source: Option<String>,
+}
+
+/// Build `{base}/restate/{kind}/Email/send` from the normalized ingress base.
+fn endpoint(base: &reqwest::Url, kind: &str) -> reqwest::Url {
+    let mut url = base.clone();
+    url.path_segments_mut()
+        .expect("ingress URL is validated by RestateTransportBuilder::new")
+        .pop_if_empty()
+        .extend(["restate", kind])
+        .extend(SERVICE_PATH);
+    url
+}
+
+/// Encode a delay as whole milliseconds, rounded up, in Restate's humantime
+/// form.
+fn format_delay(delay: Duration) -> String {
+    let millis = delay.as_millis() + u128::from(!delay.subsec_nanos().is_multiple_of(1_000_000));
+    format!("{millis}ms")
+}
+
+fn redacted_url(url: &reqwest::Url) -> reqwest::Url {
+    let mut url = url.clone();
+    if url.password().is_some() {
+        // Only cannot-be-a-base URLs reject a password, and those never reach here.
+        let _ = url.set_password(Some("redacted"));
+    }
+    url
 }
 
 async fn map_error_response(response: reqwest::Response) -> TransportError {
@@ -261,5 +517,94 @@ fn network_error_kind(error: &reqwest::Error) -> Option<ErrorKind> {
         Some(ErrorKind::TransientNetwork)
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn key() -> TransportKey {
+        TransportKey::new_unchecked("transactional")
+    }
+
+    fn url(input: &str) -> reqwest::Url {
+        input.parse().expect("URL parses")
+    }
+
+    #[test]
+    fn builder_derives_call_and_send_endpoints_under_a_path_prefix() {
+        let transport = RestateTransport::new(key(), url("http://ingress.local/proxy/"));
+
+        assert_eq!(
+            transport.call_url.as_str(),
+            "http://ingress.local/proxy/restate/call/Email/send"
+        );
+        assert_eq!(
+            transport.send_url.as_str(),
+            "http://ingress.local/proxy/restate/send/Email/send"
+        );
+        assert_eq!(
+            transport.ingress_url().as_str(),
+            "http://ingress.local/proxy/"
+        );
+    }
+
+    #[test]
+    fn builder_strips_query_and_fragment() {
+        let transport =
+            RestateTransport::new(key(), url("http://ingress.local?tenant=blue#configuration"));
+
+        assert_eq!(transport.ingress_url().as_str(), "http://ingress.local/");
+        assert_eq!(
+            transport.send_url.as_str(),
+            "http://ingress.local/restate/send/Email/send"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Restate ingress URL must support path segments")]
+    fn builder_rejects_urls_that_cannot_be_a_base() {
+        let _ = RestateTransport::builder(key(), url("mailto:ops@example.com"));
+    }
+
+    #[test]
+    fn default_capabilities_describe_the_ingress_hop() {
+        let capabilities = RestateTransport::new(key(), url("http://ingress.local")).capabilities;
+
+        assert_eq!(
+            capabilities.structured_send,
+            StructuredSendCapability::Supported
+        );
+        assert!(capabilities.idempotency_key);
+        assert!(!capabilities.timeout);
+        assert!(!capabilities.attachment_references);
+    }
+
+    #[test]
+    fn format_delay_rounds_up_to_whole_milliseconds() {
+        assert_eq!(format_delay(Duration::from_millis(1500)), "1500ms");
+        assert_eq!(format_delay(Duration::new(1, 1)), "1001ms");
+        assert_eq!(format_delay(Duration::ZERO), "0ms");
+    }
+
+    #[test]
+    fn invocation_id_is_only_read_from_restate_reports() {
+        let queued = SendReport::new(RestateTransport::PROVIDER).with_provider_message_id("inv_1");
+        let sent = SendReport::new("resend").with_provider_message_id("msg_1");
+
+        assert_eq!(RestateTransport::invocation_id(&queued), Some("inv_1"));
+        assert_eq!(RestateTransport::invocation_id(&sent), None);
+    }
+
+    #[test]
+    fn debug_redacts_client_and_ingress_password() {
+        let builder = RestateTransport::builder(key(), url("http://user:hunter2@ingress.local"))
+            .client(reqwest::Client::new());
+        let rendered = format!("{builder:?} {:?}", builder.clone().build());
+
+        assert!(!rendered.contains("hunter2"));
+        assert!(rendered.contains("redacted"));
+        assert!(rendered.contains("<reqwest::Client>"));
     }
 }
