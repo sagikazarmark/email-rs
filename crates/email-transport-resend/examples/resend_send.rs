@@ -1,5 +1,5 @@
 use email_message::{Address, Body, Message};
-use email_transport::{IdempotencyKey, SendOptions, Transport, TransportOptions};
+use email_transport::{IdempotencyKey, SendOptions, Transport};
 use email_transport_resend::{ResendSendOptions, ResendTransport};
 
 #[tokio::main]
@@ -16,19 +16,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .subject("Hello World")
     .build_outbound()?;
 
-    let mut transport_options = TransportOptions::default();
-    transport_options.insert(ResendSendOptions::new().with_tag("env", "local"));
-    // transport_options.insert(
-    //     ResendSendOptions::new()
-    //         .with_template(
-    //             email_transport_resend::ResendTemplate::new("tmpl_123")
-    //                 .with_variables([("name", serde_json::json!("Mark"))]),
-    //         ),
-    // );
-
     let options = SendOptions::new()
         .with_idempotency_key(IdempotencyKey::new("example-idempotency-key")?)
-        .with_transport_options(transport_options);
+        .with_transport_option(ResendSendOptions::new().with_tag("env", "local"));
+    // Templates go through the same option type:
+    // .with_transport_option(
+    //     ResendSendOptions::new().with_template(
+    //         email_transport_resend::ResendTemplate::new("tmpl_123")
+    //             .with_variables([("name", serde_json::json!("Mark"))]),
+    //     ),
+    // );
 
     let transport = ResendTransport::new(api_key);
     let report = transport.send(&message, &options).await?;

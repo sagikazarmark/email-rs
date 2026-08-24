@@ -36,14 +36,13 @@ See the [crate documentation](https://docs.rs/email-transport-resend/latest/emai
 
 ## Send Options
 
-Use `ResendSendOptions`, `ResendTag`, and `ResendTemplate` for per-send tags and template data. Insert `ResendSendOptions` into `SendOptions::transport_options`; with serde enabled, the same type can cross a queued `transport_options.resend` boundary.
+Use `ResendSendOptions`, `ResendTag`, and `ResendTemplate` for per-send tags and template data. Attach `ResendSendOptions` through `SendOptions::with_transport_option`; with serde enabled, the same type can cross a queued `transport_options.resend` boundary.
 
 ```rust
-use email_transport::TransportOptions;
+use email_transport::SendOptions;
 use email_transport_resend::{ResendSendOptions, ResendTemplate};
 
-let mut transport_options = TransportOptions::default();
-transport_options.insert(
+let options = SendOptions::new().with_transport_option(
     ResendSendOptions::new()
         .with_tags([("env", "prod"), ("tenant", "blue")])
         .with_template(

@@ -1,8 +1,16 @@
 use email_attachment::{
-    AttachmentResolver, FallbackResolver, MapResolver, ResolveErrorKind, SchemeDispatch,
-    SchemeRouter,
+    AttachmentResolver, FallbackResolver, MapResolver, ResolveErrorKind, ResolvedAttachment,
+    SchemeDispatch, SchemeRouter,
 };
 use email_message::AttachmentReference;
+
+#[test]
+fn resolved_attachment_converts_from_bytes() {
+    let resolved = ResolvedAttachment::from(b"pdf bytes".to_vec());
+
+    assert_eq!(resolved, ResolvedAttachment::new(b"pdf bytes"));
+    assert_eq!(resolved.bytes, b"pdf bytes");
+}
 
 #[tokio::test]
 async fn map_resolver_resolves_plain_string_references() {

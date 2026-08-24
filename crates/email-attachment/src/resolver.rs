@@ -41,6 +41,12 @@ impl ResolvedAttachment {
     }
 }
 
+impl From<Vec<u8>> for ResolvedAttachment {
+    fn from(bytes: Vec<u8>) -> Self {
+        Self { bytes }
+    }
+}
+
 /// Classified attachment resolution failure.
 #[derive(Debug)]
 pub struct AttachmentResolveError {
