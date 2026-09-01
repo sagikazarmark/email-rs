@@ -29,7 +29,7 @@ arbitrary = ["dep:arbitrary"]
 rfc5322-string-compat = []
 
 [dependencies]
-addr-spec = { version = "0.9", features = ["literals"] }
+addr-spec = { version = "0.10", features = ["literals"] }
 arbitrary = { version = "1", features = ["derive"], optional = true }
 base64 = { version = "0.23", optional = true }
 mail-parser = "0.11"
