@@ -1,4 +1,0 @@
-name = "restate"
-engineVersion = "v1.0.0"
-runtime.source = "dang"
-include = ["!tests"]
