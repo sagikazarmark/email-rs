@@ -1,0 +1,116 @@
+"""
+End-to-end tests for the Restate email endpoint.
+
+Builds the `restate-email` binary from the workspace and runs it next to a Restate server and a
+Mailpit SMTP sink as Dagger services, registers the endpoint deployment in Restate, then sends an
+email through the Restate ingress and verifies that Mailpit received it.
+"""
+type EndToEnd {
+  let ws: Workspace!
+
+  let rustVersion: String!
+  let restateVersion: String!
+  let mailpitVersion: String!
+  let hurlVersion: String!
+
+  new(
+    ws: Workspace!,
+    """
+    Rust image version (tag) used to build the endpoint binary.
+
+    Keep it in sync with the `rust` module's version so the build is shared between checks.
+    """
+    rustVersion: String! = "latest",
+    """
+    Restate server version (image tag).
+    """
+    restateVersion: String! = "1.7.8",
+    """
+    Mailpit version (image tag).
+    """
+    mailpitVersion: String! = "v1.31.0",
+    """
+    Hurl version (image tag).
+    """
+    hurlVersion: String! = "8.0.1",
+  ) {
+    self.ws = ws
+
+    self.rustVersion = rustVersion
+    self.restateVersion = restateVersion
+    self.mailpitVersion = mailpitVersion
+    self.hurlVersion = hurlVersion
+
+    self
+  }
+
+  """
+  Send an email through the Restate ingress and verify that Mailpit received it.
+  """
+  send: Void @check @cache(policy: FunctionCachePolicy.Never) {
+    let restate = self.restate.service
+    let mailpit = self.mailpit
+
+    let result = Dagger
+      .hurl(version: self.hurlVersion)
+      .withServiceBinding(restate)
+      .withServiceBinding(mailpit)
+      .withVariable("restate_url", restate.endpoint(port: 8080, scheme: "http"))
+      .withVariable("mailpit_url", mailpit.endpoint(port: 8025, scheme: "http"))
+      .withVariable("run_id", Random.string)
+      .run(Dagger.currentModule.source.directory("hurl"), test: true)
+
+    if (result.exitCode != 0) {
+      raise result.stdout + "\n" + result.stderr
+    }
+
+    null
+  }
+
+  """
+  Restate server with the email endpoint registered as a deployment.
+  """
+  let restate: Restate! {
+    Dagger
+      .restate(version: self.restateVersion)
+      .withDeployment(self.endpoint)
+  }
+
+  """
+  The `restate-email` endpoint, configured to deliver through Mailpit.
+  """
+  endpoint: Service! {
+    Dagger
+      .container
+      .from("debian:13-slim")
+      .withFile("/usr/local/bin/restate-email", self.binary, permissions: 755)
+      .withFile("/etc/restate-email/restate-email.toml", Dagger.currentModule.source.file("config/endpoint.toml"))
+      .withEnvVariable("CONFIG_FILE", "/etc/restate-email/restate-email.toml")
+      .withEnvVariable("RUST_LOG", "info")
+      .withServiceBinding("mailpit", self.mailpit)
+      .withExposedPort(9080)
+      .asService(args: ["restate-email"])
+  }
+
+  """
+  Mailpit SMTP sink (port 1025) with its HTTP UI and API (port 8025).
+  """
+  mailpit: Service! {
+    Dagger
+      .container
+      .from("axllent/mailpit:" + self.mailpitVersion)
+      .withExposedPort(1025, description: "smtp")
+      .withExposedPort(8025, description: "http")
+      .asService
+  }
+
+  """
+  The `restate-email` binary built from the workspace.
+  """
+  binary: File! {
+    Dagger
+      .rust(ws: self.ws, version: self.rustVersion)
+      .build
+      .file("restate-email")
+  }
+}

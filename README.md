@@ -56,6 +56,19 @@ The configured Dagger module exposes its complete local check set through:
 dagger check
 ```
 
+This includes an end-to-end test of the Restate email endpoint ([`.dagger/modules/end-to-end`](.dagger/modules/end-to-end)):
+it builds the `restate-email` binary, runs it alongside a Restate server and a [Mailpit](https://mailpit.axllent.org/) SMTP
+sink as Dagger services, registers the deployment, then sends an email through the Restate ingress and asserts that Mailpit
+received it (a [Hurl](https://hurl.dev/) scenario). Run it on its own with:
+
+```bash
+dagger check end-to-end:send
+```
+
+The `restate` and `hurl` Dagger modules under [`.dagger/modules`](.dagger/modules) are vendored copies from
+[daggerverse-beta](https://github.com/sagikazarmark/daggerverse-beta) carrying fixes that are yet to be upstreamed; see the
+header comment in each module.
+
 ## License
 
 Licensed under either of

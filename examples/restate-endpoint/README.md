@@ -68,6 +68,11 @@ curl http://localhost:8080/Email/send --json '{
 
 The response reports the delivery, e.g. `{"report":{"provider":"smtp","accepted":["recipient@example.com"], ...}}`.
 
+> [!TIP]
+> The same send-and-verify flow (without the RustFS attachment part) runs automatically in CI against
+> Restate and Mailpit as Dagger services: `dagger check end-to-end:send`. See
+> [`.dagger/modules/end-to-end`](../../.dagger/modules/end-to-end).
+
 ### 3. Check the delivery in Mailpit
 
 Open the Mailpit UI at <http://localhost:8025>; the message should be there with `hello.txt`

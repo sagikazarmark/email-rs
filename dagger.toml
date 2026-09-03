@@ -7,3 +7,8 @@ settings.version = "1.98-slim-trixie"
 
 [modules.dagger-gha]
 source = "github.com/sagikazarmark/daggerverse-beta/dagger-gha"
+
+[modules.end-to-end]
+source = ".dagger/modules/end-to-end"
+
+settings.rustVersion = "1.98-slim-trixie"
