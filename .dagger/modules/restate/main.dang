@@ -1,0 +1,340 @@
+# Vendored from github.com/sagikazarmark/daggerverse-beta/restate@ce82b8575ccc2273a7e3b332424962ff1e744f82
+# with local changes to be upstreamed:
+#
+# - `service` is cached per session (like `client`), so the deployment registration performed
+#   during initialization runs again in every session instead of a stale Service ID being
+#   returned against a fresh, empty Restate server.
+
+type Restate {
+  let container: Container!
+
+  """
+  Currently registered deployments.
+  """
+  deployments: [Deployment!]! = []
+
+  new(
+    """
+    Version (image tag) to use from the official image repository.
+    """
+    version: String! = "latest",
+    """
+    Custom container to use as a base container.
+    """
+    container: Container! = Dagger.container.from("ghcr.io/restatedev/restate:" + version),
+  ) {
+    self.container = container
+
+    self
+  }
+
+  """
+  Register a deployment in Restate.
+  """
+  withDeployment(
+    """
+    The service to register as a deployment.
+    """
+    service: Service!,
+    """
+    Optional port if the service exposes multiple ports.
+    """
+    port: Int,
+    """
+    Force overwriting the deployment if it already exists or if incompatible changes were detected during discovery.
+    When set, implies `breaking`.
+    """
+    force: Boolean! = false,
+    """
+    Allow performing incompatible changes to services, detected during discovery.
+    """
+    breaking: Boolean! = false,
+    """
+    Additional headers (in `name=value` format) that will be sent to the endpoint during the discovery request.
+    """
+    extraHeaders: [String!]! = [],
+    """
+    Metadata registered together with the discovery request (in `name=value` format).
+    """
+    metadata: [String!]! = [],
+    """
+    Attempt discovery using a client that defaults to HTTP1.1 instead of a prior-knowledge HTTP2 client.
+    This may be necessary if you see `META0014` discovering local dev servers like `wrangler dev`.
+    """
+    useHttp11: Boolean! = false,
+  ): Restate! {
+    self.deployments += [Deployment(service, port, force, breaking, extraHeaders, metadata, useHttp11)]
+
+    self
+  }
+
+  """
+  Service endpoint for the Restate server.
+
+  Deployments are registered while the service is initialized, so the result must not be
+  reused across sessions: a cached Service ID would come without the registration side effect.
+  """
+  service: Service! @cache(policy: FunctionCachePolicy.PerSession) {
+    self.init.service
+  }
+
+  """
+  Client to interact with the Restate server.
+  """
+  client(
+    """
+    Table output style to use.
+
+    Possible values:
+    - compact: No borders, condensed layout
+    - borders: UTF8 borders, good for multiline text
+    """
+    tableStyle: ClientTableStyle! = ClientTableStyle.COMPACT,
+    """
+    Time format to use.
+
+    Possible values:
+    - human:   Human friendly timestamps and durations
+    - iso8601: RFC-3339/ISO-8601 formatted (1996-12-19T16:39:57-08:00)
+    - rfc2822: RFC-2822 formatted (Tue, 1 Jul 2003 10:52:37 +0200)
+    """
+    timeFormat: ClientTimeFormat! = ClientTimeFormat.HUMAN,
+    """
+    Increase logging verbosity.
+    """
+    verbose: Boolean! = false,
+  ): Client! @cache(policy: FunctionCachePolicy.PerSession) {
+    Client(self.init.client, tableStyle, timeFormat, verbose)
+  }
+
+  let init: Initialized! { initialize(self.container, self.deployments) }
+
+  """
+  Returns the version of the Restate server.
+  """
+  version: String! {
+    self.container.withExec(["restate-server", "--version"]).stdout.trimPrefix("restate-server ")
+  }
+}
+
+type Deployment {
+  """
+  The deployment service.
+  """
+  service: Service!
+
+  """
+  Optional port if the service exposes multiple ports.
+  """
+  port: Int
+
+  """
+  Whether to force the deployment, even if the service is already running.
+  """
+  force: Boolean!
+
+  """
+  Whether the deployment is breaking (incompatible) with the existing service.
+  """
+  breaking: Boolean!
+
+  """
+  Additional headers (in `name=value` format) that will be sent to the endpoint during the discovery request.
+  """
+  extraHeaders: [String!]!
+
+  """
+  Metadata registered together with the discovery request (in `name=value` format).
+  """
+  metadata: [String!]!
+
+  """
+  Attempt discovery using a client that defaults to HTTP1.1 instead of a prior-knowledge HTTP2 client.
+  This may be necessary if you see `META0014` discovering local dev servers like `wrangler dev`.
+  """
+  useHttp11: Boolean!
+
+  """
+  The endpoint that clients can use to reach this deployment.
+  """
+  endpoint: String! {
+    self.service.endpoint(self.port, "http")
+  }
+
+  let hostname: String! { self.service.hostname }
+
+  let registerArgs: [String!]! {
+    let args = []
+
+    if (self.force) {
+      args += ["--force"]
+    }
+
+    if (self.breaking) {
+      args += ["--breaking"]
+    }
+
+    self.extraHeaders.reduce(args) { args, extraHeader => args += ["--extra-header", extraHeader] }
+    self.metadata.reduce(args) { args, metadata => args += ["--metadata", metadata] }
+
+    if (self.useHttp11) {
+      args += ["--use-http1.1"]
+    }
+
+    args += [self.endpoint]
+  }
+}
+
+type Client {
+  """
+  Client container configured to access the Restate service.
+  """
+  container: Container!
+
+  let tableStyle: ClientTableStyle!
+  let timeFormat: ClientTimeFormat!
+  let verbose: Boolean!
+
+  """
+  Run SQL queries against the data fusion service.
+  """
+  sql(
+    """
+    SQL query to run against the data fusion service.
+    """
+    query: String!,
+    """
+    Format of the SQL result.
+    """
+    format: SqlResultFormat! = SqlResultFormat.DEFAULT,
+  ): SqlResult! @cache(policy: FunctionCachePolicy.Never) {
+    let fileName = sqlFormatToFileName(format)
+
+    let args = ["sql", query]
+
+    args += case (format) {
+      SqlResultFormat.JSON => ["--json"]
+      SqlResultFormat.JSONL => ["--jsonl"]
+      else => []
+    }
+
+    let file = self
+      .exec(args, redirectStdout: fileName)
+      .file(fileName)
+
+    SqlResult(format, file)
+  }
+
+  """
+  General information about the configured environment.
+  """
+  whoami: Container! @cache(policy: FunctionCachePolicy.Never) {
+    self.exec(["whoami"])
+  }
+
+  let exec(args: [String!]!, redirectStdout: String = null): Container! {
+    self
+      .container
+      .withEnvVariable("__DAGGER_CACHE_BUST", Random.string)
+      .withExec(self.cmd(args), redirectStdout: redirectStdout)
+  }
+
+  cmd(args: [String!]!): [String!]! {
+    let _args = ["restate", "--yes"]
+
+    if (self.tableStyle != null) {
+      _args += ["--table-style", toString(self.tableStyle).toLower]
+    }
+
+    if (self.timeFormat != null) {
+      _args += ["--time-format", toString(self.timeFormat).toLower]
+    }
+
+    if (self.verbose) {
+      _args += ["--verbose"]
+    }
+
+    _args + args
+  }
+}
+
+enum ClientTableStyle {
+  COMPACT
+  BORDERS
+}
+
+enum ClientTimeFormat {
+  HUMAN
+  ISO8601
+  RFC2822
+}
+
+type SqlResult {
+  """
+  The format of the SQL result.
+  """
+  format: SqlResultFormat!
+
+  """
+  Result of the SQL query as a File.
+  """
+  file: File!
+
+  """
+  Result of the SQL query as a string.
+  """
+  output: String! { self.file.contents }
+}
+
+enum SqlResultFormat {
+  DEFAULT
+  JSON
+  JSONL
+}
+
+let sqlFormatToFileName(format: SqlResultFormat!): String! {
+  "result" + (
+    case (format) {
+      SqlResultFormat.JSON => ".json"
+      SqlResultFormat.JSONL => ".jsonl"
+      else => ""
+    }
+  )
+}
+
+type Initialized {
+  let service: Service!
+  let client: Container!
+}
+
+let initialize(container: Container!, deployments: [Deployment!]!): Initialized! {
+  let serviceContainer = container
+    .withExposedPort(8080)
+    .withExposedPort(9070)
+
+  let service = deployments
+    .reduce(serviceContainer) { container, deployment =>
+      container.withServiceBinding(deployment.hostname, deployment.service)
+    }
+    .asService(args: ["restate-server", "--node-name", "restate"])
+
+  let clientContainer = container
+    .withEnvVariable("CI", "true")
+    .withServiceBinding(service.hostname, service)
+    .withEnvVariable("RESTATE_ADMIN_URL", service.endpoint(scheme: "http", port: 9070))
+    .withEnvVariable("__DAGGER_CACHE_BUST", Random.string)
+
+  clientContainer = deployments
+    .reduce(clientContainer) { container, deployment =>
+      container.withExec(
+        [
+          "restate",
+          "deployments", "register",
+          "--yes",
+        ] + deployment.registerArgs,
+      )
+    }
+    .sync # This is IMPORTANT
+
+  Initialized(service, clientContainer)
+}

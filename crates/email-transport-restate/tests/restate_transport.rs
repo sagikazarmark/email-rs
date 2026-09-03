@@ -93,6 +93,8 @@ async fn queued_send_posts_wire_options_and_reports_the_invocation() {
         .with_idempotency_key(IdempotencyKey::new("enqueue-42").expect("valid key"))
         .with_correlation_id(CorrelationId::new("trace-42").expect("valid id"));
 
+    // The idempotency key travels at both hops: as Restate's header and in the
+    // queued options for the worker's provider (ADR 0004).
     Mock::given(method("POST"))
         .and(path(SEND_PATH))
         .and(header("idempotency-key", "enqueue-42"))
@@ -108,6 +110,7 @@ async fn queued_send_posts_wire_options_and_reports_the_invocation() {
                     "provider": {"campaign": "launch"}
                 },
                 "timeout": {"secs": 3, "nanos": 25},
+                "idempotency_key": "enqueue-42",
                 "correlation_id": "trace-42"
             }
         })))
@@ -462,6 +465,64 @@ async fn invocation_error_is_terminal_and_preserves_worker_code() {
 }
 
 #[tokio::test]
+async fn unknown_transport_key_rejected_by_worker_is_validation() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(CALL_PATH))
+        .respond_with(
+            ResponseTemplate::new(404)
+                .insert_header("x-restate-error-source", "invocation")
+                .set_body_json(serde_json::json!({
+                    "code": 404,
+                    "message": "transport key `transactional` is not configured",
+                    "source": "invocation"
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    let error = waiting_transport(&server)
+        .send(&message(), &SendOptions::default())
+        .await
+        .expect_err("unknown transport key should propagate");
+
+    assert_eq!(error.kind, ErrorKind::Validation);
+    assert!(error.is_terminal());
+    assert_eq!(error.http_status, Some(404));
+    assert_eq!(error.provider_error_code.as_deref(), Some("404"));
+    assert_eq!(
+        error.message,
+        "transport key `transactional` is not configured"
+    );
+}
+
+/// Restate 1.7.0 through 1.7.3 emit neither the `x-restate-error-source`
+/// header nor the `source` body field, so the transport falls back to the
+/// HTTP status and cannot recognise the worker's `404` as a validation error.
+#[tokio::test]
+async fn worker_error_without_source_discriminator_is_classified_by_status() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(CALL_PATH))
+        .respond_with(ResponseTemplate::new(404).set_body_json(serde_json::json!({
+            "code": 404,
+            "message": "transport key `transactional` is not configured",
+        })))
+        .mount(&server)
+        .await;
+
+    let error = waiting_transport(&server)
+        .send(&message(), &SendOptions::default())
+        .await
+        .expect_err("worker error should propagate");
+
+    assert_eq!(error.kind, ErrorKind::PermanentProvider);
+    assert!(error.is_terminal());
+    assert_eq!(error.http_status, Some(404));
+    assert_eq!(error.provider_error_code.as_deref(), Some("404"));
+}
+
+#[tokio::test]
 async fn ingress_service_failure_is_retryable() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
@@ -502,6 +563,34 @@ async fn connection_failure_is_retryable() {
         .send(&message(), &SendOptions::default())
         .await
         .expect_err("connection should fail");
+
+    assert_eq!(error.kind, ErrorKind::TransientNetwork);
+    assert!(error.is_retryable());
+}
+
+#[tokio::test]
+async fn connection_closed_before_response_is_retryable() {
+    // Accept the connection and hang up without answering. reqwest reports
+    // this as a request error that is *not* a connect error; it must still be
+    // classified as a transient network failure, not a validation error.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("port binds");
+    let address = listener.local_addr().expect("address available");
+    tokio::spawn(async move {
+        while let Ok((socket, _)) = listener.accept().await {
+            drop(socket);
+        }
+    });
+    let transport = RestateTransport::new(
+        transport_key(),
+        format!("http://{address}").parse().expect("URL parses"),
+    );
+
+    let error = transport
+        .send(&message(), &SendOptions::default())
+        .await
+        .expect_err("closed connection should fail");
 
     assert_eq!(error.kind, ErrorKind::TransientNetwork);
     assert!(error.is_retryable());

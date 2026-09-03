@@ -1,0 +1,3 @@
+[transports.transactional]
+provider = "smtp"
+url = "smtp://mailpit:1025"

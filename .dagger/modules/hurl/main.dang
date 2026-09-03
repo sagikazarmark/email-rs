@@ -1,0 +1,518 @@
+# Vendored from github.com/sagikazarmark/daggerverse-beta/hurl@ce82b8575ccc2273a7e3b332424962ff1e744f82
+# with local changes to be upstreamed:
+#
+# - `withVariable` and `withSecretVariable` apply every entry: the reduce lambdas used the
+#   enclosing block's `_` instead of the accumulator, so only the last variable survived.
+
+type Hurl {
+  let baseContainer: Container!
+
+  let variablesFile: File
+  let secretsFile: Secret
+  let cookie: File
+
+  let serviceBindings: [ServiceBinding!]! = []
+  let envVariables: [EnvVariable!]! = []
+  let variables: Map[String!]! = [:]
+  let secretVariables: Map[Secret!] = [:]
+
+  new(
+    """
+    Version (image tag) to use from the official image repository.
+    """
+    version: String! = "latest",
+    """
+    Custom container to use as a base container.
+    """
+    container: Container! = Dagger.container.from("ghcr.io/orange-opensource/hurl:" + version),
+    """
+    Default properties file containing Hurl variables.
+    """
+    variablesFile: File,
+    """
+    Default secret containing Hurl secrets file content.
+    """
+    secretsFile: Secret,
+    """
+    Default Netscape cookie file to read.
+    """
+    cookie: File,
+  ) {
+    self.baseContainer = container
+    self.variablesFile = variablesFile
+    self.secretsFile = secretsFile
+    self.cookie = cookie
+
+    self
+  }
+
+  """
+  Bind a service into the container.
+  """
+  withServiceBinding(
+    """
+    Service for to bind into the container.
+    """
+    service: Service!,
+    """
+    Port of the service to use (in case the service has multiple ports exposed).
+    """
+    port: Int,
+  ): Hurl! {
+    self.serviceBindings += [ServiceBinding(service, port)]
+
+    self
+  }
+
+  """
+  Set an environment variable in the container.
+  """
+  withEnvVariable(
+    name: String!,
+    value: String!,
+    expand: Boolean,
+  ): Hurl! {
+    self.envVariables += [EnvVariable(name: name, value: value, expand: expand)]
+
+    self
+  }
+
+  """
+  Set a Hurl variable.
+
+  Hurl reads it from HURL_VARIABLE_<name>, so it does not need to be passed on
+  the command line.
+  """
+  withVariable(name: String!, value: String!): Hurl! {
+    self.variables = self.variables.with(name, value)
+
+    self
+  }
+
+  """
+  Add a secret to the container.
+
+  Hurl reads it from HURL_SECRET_<name>, so the secret is not passed on the
+  command line and remains redacted in logs.
+  """
+  withSecretVariable(name: String!, secret: Secret!): Hurl! {
+    self.secretVariables = self.secretVariables.with(name, secret)
+
+    self
+  }
+
+  """
+  Configured container.
+  """
+  container(
+    """
+    Source directory containing Hurl files and any referenced files.
+    """
+    source: Directory! = Dagger.directory,
+    """
+    Properties file containing Hurl variables.
+    """
+    variablesFile: File,
+    """
+    Secret containing Hurl secrets file content.
+    """
+    secretsFile: Secret,
+    """
+    Netscape cookie file to read.
+    """
+    cookie: File,
+  ): Container! {
+    let container = self
+      .baseContainer
+      .withWorkdir("/work/src")
+      .withDirectory(".", source)
+      .withDirectory("/work/out", Dagger.directory)
+      .{
+        let variablesFile = variablesFile ?? self.variablesFile
+        if (variablesFile != null) {
+          _
+            .withEnvVariable("HURL_VARIABLES_FILE", "/work/variables")
+            .withMountedFile("/work/variables", variablesFile)
+        } else _
+      }
+      .{
+        let secretsFile = secretsFile ?? self.secretsFile
+        if (secretsFile != null) {
+          _
+            .withEnvVariable("HURL_SECRETS_FILE", "/work/secrets.env")
+            .withMountedSecret("/work/secrets.env", secretsFile)
+        } else _
+      }
+      .{
+        let cookie = cookie ?? self.cookie
+        if (cookie != null) {
+          _
+            .withEnvVariable("HURL_COOKIE", "/work/cookie")
+            .withMountedFile("/work/cookie", cookie)
+        } else _
+      }
+      .{ self.envVariables.reduce(_) { container, env => env.apply(container) } }
+      .{
+        self.variables.keys.reduce(_) { container, name =>
+          container.withEnvVariable("HURL_VARIABLE_" + name, self.variables[name]!)
+        }
+      }
+      .{
+        self.secretVariables.keys.reduce(_) { container, name =>
+          container.withSecretVariable("HURL_SECRET_" + name, self.secretVariables[name]!)
+        }
+      }
+      .{ self.serviceBindings.reduce(_) { container, binding => binding.apply(container) } }
+  }
+
+  """
+  Run Hurl.
+  """
+  run(
+    """
+    Source directory containing Hurl files and any referenced files.
+    """
+    source: Directory!,
+    """
+    Run Hurl in test mode (--test).
+    """
+    test: Boolean! = false,
+    """
+    Hurl --glob patterns.
+    """
+    globs: [String!]! = [],
+    """
+    Input file or directory paths, relative to /work/src unless absolute.
+
+    When no input or glob is configured, Hurl runs against the current source directory.
+    """
+    inputs: [String!]! = [],
+    """
+    Extra HTTP headers for every Hurl entry.
+    """
+    headers: [String!]! = [],
+    """
+    Basic authentication credentials in USER:PASSWORD form.
+    """
+    user: String,
+    """
+    User-Agent header used by Hurl.
+    """
+    userAgent: String,
+    """
+    Follow redirects.
+    """
+    location: Boolean! = false,
+    """
+    Maximum number of redirects to follow.
+    """
+    maxRedirs: Int,
+    """
+    Allow insecure TLS connections.
+    """
+    insecure: Boolean! = false,
+    """
+    Request and decompress compressed responses.
+    """
+    compressed: Boolean! = false,
+    """
+    HTTP version used by Hurl.
+    """
+    httpVersion: HttpVersion,
+    """
+    Maximum request/response time, for example "10s" or "5000ms".
+    """
+    maxTime: String,
+    """
+    Maximum connection time, for example "2s" or "500ms".
+    """
+    connectTimeout: String,
+    """
+    Number of retries for failed requests/assertions.
+    """
+    retry: Int,
+    """
+    Duration between retries, for example "250ms" or "1s".
+    """
+    retryInterval: String,
+    """
+    Delay before each request, for example "250ms" or "1s".
+    """
+    delay: String,
+    """
+    Run Hurl files in parallel.
+    """
+    parallel: Boolean! = false,
+    """
+    Maximum number of parallel jobs.
+    """
+    jobs: Int,
+    """
+    Continue executing entries in a file after an assertion error.
+    """
+    continueOnError: Boolean! = false,
+    """
+    Ignore asserts in Hurl files.
+    """
+    noAssert: Boolean! = false,
+    """
+    Suppress response output.
+    """
+    noOutput: Boolean! = false,
+    """
+    Emit JSON output for each Hurl file result.
+    """
+    jsonOutput: Boolean! = false,
+    """
+    Include response headers in output.
+    """
+    include: Boolean! = false,
+    """
+    Response error format.
+    """
+    errorFormat: ErrorFormat,
+    """
+    Hurl output verbosity.
+    """
+    verbosity: Verbosity,
+    """
+    Properties file containing Hurl variables.
+    """
+    variablesFile: File,
+    """
+    Secret containing Hurl secrets file content.
+    """
+    secretsFile: Secret,
+    """
+    Netscape cookie file to read.
+    """
+    cookie: File,
+    """
+    Write cookies to /work/out/cookies.jar after running.
+    """
+    cookieJar: Boolean! = false,
+  ): Result! {
+    let variablesFile = variablesFile ?? self.variablesFile
+    let secretsFile = secretsFile ?? self.secretsFile
+    let cookie = cookie ?? self.cookie
+
+    let args = ["hurl"]
+
+    if (test) {
+      args += [
+        "--test",
+        "--report-html", "/work/out/reports/html/",
+        "--report-json", "/work/out/reports/json/",
+        "--report-junit", "/work/out/reports/junit.xml",
+        "--report-tap", "/work/out/reports/report.tap",
+      ]
+    }
+
+    headers.each { header => args += ["--header", header] }
+    if (user != null and user != "") { args += ["--user", user] }
+    if (userAgent != null and userAgent != "") { args += ["--user-agent", userAgent] }
+    if (location) { args += ["--location"] }
+    if (maxRedirs != null) { args += ["--max-redirs", toString(maxRedirs)] }
+    if (insecure) { args += ["--insecure"] }
+    if (compressed) { args += ["--compressed"] }
+    if (httpVersion != null) { args += httpVersionArgs(httpVersion) }
+    if (maxTime != null and maxTime != "") { args += ["--max-time", maxTime] }
+    if (connectTimeout != null and connectTimeout != "") { args += ["--connect-timeout", connectTimeout] }
+    if (retry != null) { args += ["--retry", toString(retry)] }
+    if (retryInterval != null and retryInterval != "") { args += ["--retry-interval", retryInterval] }
+    if (delay != null and delay != "") { args += ["--delay", delay] }
+    if (parallel) { args += ["--parallel"] }
+    if (jobs != null) { args += ["--jobs", toString(jobs)] }
+    if (continueOnError) { args += ["--continue-on-error"] }
+    if (noAssert) { args += ["--ignore-asserts"] }
+    if (noOutput) { args += ["--no-output"] }
+    if (jsonOutput) { args += ["--json"] }
+    if (include) { args += ["--include"] }
+    if (errorFormat != null) { args += errorFormatArgs(errorFormat) }
+    if (verbosity != null) { args += verbosityArgs(verbosity) }
+    if (variablesFile != null) { args += ["--variables-file", "/work/variables"] }
+    if (secretsFile != null) { args += ["--secrets-file", "/work/secrets.env"] }
+    if (cookie != null) { args += ["--cookie", "/work/cookie"] }
+    if (cookieJar) { args += ["--cookie-jar", "/work/out/cookies.jar"] }
+
+    globs.each { glob => args += ["--glob", glob] }
+
+    if (inputs.length == 0 and globs.length == 0) {
+      args += ["."]
+    } else {
+      args += inputs
+    }
+
+    Result(
+      self
+        .container(source, variablesFile, secretsFile, cookie)
+        .withExec(
+          args,
+          expect: ReturnType.ANY,
+          redirectStdout: "/work/out/stdout.log",
+          redirectStderr: "/work/out/stderr.log",
+        ),
+    )
+  }
+}
+
+type Result {
+  let container: Container!
+
+  """
+  Hurl exit code.
+  """
+  exitCode: Int! {
+    self.container.exitCode
+  }
+
+  """
+  Captured standard output.
+  """
+  stdout: String! {
+    self.stdoutFile.contents
+  }
+
+  """
+  Captured standard error.
+  """
+  stderr: String! {
+    self.stderrFile.contents
+  }
+
+  """
+  Captured standard output as a file.
+  """
+  stdoutFile: File! {
+    self.container.file("/work/out/stdout.log")
+  }
+
+  """
+  Captured standard error as a file.
+  """
+  stderrFile: File! {
+    self.container.file("/work/out/stderr.log")
+  }
+
+  """
+  Hurl output directory.
+  """
+  outputDirectory: Directory! {
+    self.container.directory("/work/out")
+  }
+
+  """
+  Hurl report directory.
+  """
+  reportDirectory: Directory! {
+    self.container.directory("/work/out/reports")
+  }
+
+  """
+  Cookie jar written by Hurl.
+  """
+  cookieJar: File! {
+    self.container.file("/work/out/cookies.jar")
+  }
+
+  """
+  HTML report file.
+  """
+  html: File! {
+    self.container.file("/work/out/reports/html/index.html")
+  }
+
+  """
+  JSON report file.
+  """
+  json: File! {
+    self.container.file("/work/out/reports/json/report.json")
+  }
+
+  """
+  JUnit report file.
+  """
+  junit: File! {
+    self.container.file("/work/out/reports/junit.xml")
+  }
+
+  """
+  TAP report file.
+  """
+  tap: File! {
+    self.container.file("/work/out/reports/report.tap")
+  }
+}
+
+type ServiceBinding {
+  let service: Service!
+  let port: Int
+
+  let apply(container: Container!): Container! {
+    container.withServiceBinding(self.service.hostname, self.service)
+  }
+}
+
+type EnvVariable {
+  let name: String!
+  let value: String!
+  let expand: Boolean
+
+  let apply(container: Container!): Container! {
+    container.withEnvVariable(name: self.name, value: self.value, expand: self.expand)
+  }
+}
+
+enum HttpVersion {
+  HTTP_1_0
+  HTTP_1_1
+  HTTP_2
+  HTTP_3
+}
+
+enum ErrorFormat {
+  SHORT
+  LONG
+}
+
+enum Verbosity {
+  BRIEF
+  VERBOSE
+  DEBUG
+}
+
+let httpVersionArgs(version: HttpVersion!): [String!]! {
+  let args: [String!]! = []
+
+  case (version) {
+    HttpVersion.HTTP_1_0 => { args += ["--http1.0"] }
+    HttpVersion.HTTP_1_1 => { args += ["--http1.1"] }
+    HttpVersion.HTTP_2 => { args += ["--http2"] }
+    HttpVersion.HTTP_3 => { args += ["--http3"] }
+  }
+
+  args
+}
+
+let errorFormatArgs(format: ErrorFormat!): [String!]! {
+  let args: [String!]! = []
+
+  case (format) {
+    ErrorFormat.SHORT => { args += ["--error-format", "short"] }
+    ErrorFormat.LONG => { args += ["--error-format", "long"] }
+  }
+
+  args
+}
+
+let verbosityArgs(verbosity: Verbosity!): [String!]! {
+  let args: [String!]! = []
+
+  case (verbosity) {
+    Verbosity.BRIEF => { args += [] }
+    Verbosity.VERBOSE => { args += ["--verbose"] }
+    Verbosity.DEBUG => { args += ["--very-verbose"] }
+  }
+
+  args
+}

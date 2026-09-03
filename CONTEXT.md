@@ -38,6 +38,12 @@ Restate, the report carries the invocation id) or `Sent` (handed to the provider
 the worker's). It is a Restate-specific transport option, not a message property.
 _Avoid_: sync/async, blocking, fire-and-forget, one-way/request-response
 
+**Hop**:
+One handoff on a send's path: caller to Restate ingress, worker to provider. A queued send has two
+hops, a direct send has one. Retry-safety controls such as the idempotency key apply per hop; each
+hop deduplicates the retries that originate immediately before it.
+_Avoid_: leg, stage, layer
+
 ### Attachments
 
 **Attachment reference**:

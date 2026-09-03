@@ -53,6 +53,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Request body:\n{}", serde_json::to_string_pretty(&request)?);
 
     let mut request_builder = reqwest::Client::new().post(&request_url).json(&request);
+    // The idempotency key travels at both hops: Restate deduplicates the
+    // ingress call through this header, and the worker forwards the body copy
+    // to its provider.
+    if let Some(idempotency_key) = request.options.idempotency_key.as_ref() {
+        request_builder = request_builder.header("idempotency-key", idempotency_key.as_str());
+    }
     // Restate Cloud ingress requires an API key as a bearer token.
     if let Ok(auth_token) = std::env::var("RESTATE_AUTH_TOKEN") {
         request_builder = request_builder.bearer_auth(auth_token);

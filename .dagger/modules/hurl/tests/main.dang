@@ -1,0 +1,494 @@
+type Tests {
+  """
+  Hurl variables are exposed through HURL_VARIABLE_<name> environment variables.
+  """
+  variable: String! @check {
+    let value = Dagger
+      .hurl(container: Dagger.container.from("alpine:3.23.4"))
+      .withVariable("base_url", "http://api:8000")
+      .container
+      .envVariable("HURL_VARIABLE_base_url")
+
+    assert { value == "http://api:8000" }
+
+    value!
+  }
+
+  """
+  Every Hurl variable is exposed, not only the last one.
+  """
+  variables: [String!]! @check {
+    let container = Dagger
+      .hurl(container: Dagger.container.from("alpine:3.23.4"))
+      .withVariable("base_url", "http://api:8000")
+      .withVariable("first", "1")
+      .withVariable("second", "2")
+      .container
+
+    assert { container.envVariable("HURL_VARIABLE_base_url") == "http://api:8000" }
+    assert { container.envVariable("HURL_VARIABLE_first") == "1" }
+    assert { container.envVariable("HURL_VARIABLE_second") == "2" }
+
+    [
+      container.envVariable("HURL_VARIABLE_base_url")!,
+      container.envVariable("HURL_VARIABLE_first")!,
+      container.envVariable("HURL_VARIABLE_second")!,
+    ]
+  }
+
+  """
+  Dagger file and secret integrations configure fixed internal paths.
+  """
+  fileOptionEnv: [String!]! @check {
+    let file = Dagger.directory.withNewFile("data", "x").file("data")
+    let container = Dagger
+      .hurl
+      .container(
+        variablesFile: file,
+        secretsFile: Dagger.setSecret("hurl-secrets-file-env", "token=abc"),
+        cookie: file,
+      )
+
+    let paths = [
+      container.envVariable("HURL_VARIABLES_FILE")!,
+      container.envVariable("HURL_SECRETS_FILE")!,
+      container.envVariable("HURL_COOKIE")!,
+    ]
+
+    assert { paths.contains("/work/variables") }
+    assert { paths.contains("/work/secrets.env") }
+    assert { paths.contains("/work/cookie") }
+
+    paths
+  }
+
+  """
+  Constructor-level file integrations configure fixed internal paths.
+  """
+  constructorFileOptionEnv: [String!]! @check {
+    let file = Dagger.directory.withNewFile("data", "x").file("data")
+
+    let container = Dagger
+      .hurl(
+        variablesFile: file,
+        secretsFile: Dagger.setSecret("hurl-constructor-secrets-file-env", "token=abc"),
+        cookie: file,
+      )
+      .container
+
+    let paths = [
+      container.envVariable("HURL_VARIABLES_FILE")!,
+      container.envVariable("HURL_SECRETS_FILE")!,
+      container.envVariable("HURL_COOKIE")!,
+    ]
+
+    assert { paths.contains("/work/variables") }
+    assert { paths.contains("/work/secrets.env") }
+    assert { paths.contains("/work/cookie") }
+
+    paths
+  }
+
+  """
+  Environment variables can be configured like on Dagger containers.
+  """
+  envVariable: String! @check {
+    let value = Dagger
+      .hurl(container: Dagger.container.from("alpine:3.23.4"))
+      .withEnvVariable("HURL_ENV_TEST", "ok")
+      .container
+      .envVariable("HURL_ENV_TEST")
+
+    assert { value == "ok" }
+
+    value!
+  }
+
+  """
+  Invalid variable names are rejected before running Hurl.
+  """
+  invalidVariable: Void @check {
+    try {
+      Dagger.hurl.withVariable("missing-equals", "value").container.envVariable("HURL_VARIABLE_missing-equals")
+
+      raise "expected invalid variable to be rejected"
+    } catch {
+      err => assert { err.message.containsMatch(`.*invalid.*variable.*`) }
+    }
+  }
+
+  """
+  Globs select the intended Hurl files and skip other files in the source tree.
+  """
+  glob: Int! @check @cache(policy: FunctionCachePolicy.Never) {
+    let result = Dagger
+      .hurl
+      .withServiceBinding(self.api, port: 8000)
+      .withVariable("base_url", self.api.endpoint(scheme: "http", port: 8000))
+      .run(
+        source: self.source,
+        test: true,
+        globs: ["tests/ok.hurl"],
+        retry: 10,
+        retryInterval: "250ms",
+      )
+
+    assert { result.exitCode == 0 }
+
+    result.exitCode
+  }
+
+  """
+  Service bindings can be used together with variables to reach a Dagger service.
+  """
+  serviceBinding: Int! @check @cache(policy: FunctionCachePolicy.Never) {
+    let result = Dagger
+      .hurl
+      .withServiceBinding(self.api, port: 8000)
+      .withVariable("base_url", self.api.endpoint(scheme: "http", port: 8000))
+      .run(
+        source: self.source,
+        test: true,
+        inputs: ["tests/ok.hurl"],
+        retry: 10,
+        retryInterval: "250ms",
+      )
+
+    assert { result.exitCode == 0 }
+
+    result.exitCode
+  }
+
+  """
+  Test reports are returned from the Result.
+  """
+  reports: [String!]! @check @cache(policy: FunctionCachePolicy.Never) {
+    let result = Dagger
+      .hurl
+      .withServiceBinding(self.api, port: 8000)
+      .withVariable("base_url", self.api.endpoint(scheme: "http", port: 8000))
+      .run(
+        source: self.source,
+        test: true,
+        globs: ["tests/ok.hurl"],
+        retry: 10,
+        retryInterval: "250ms",
+      )
+
+    let entries = result.reportDirectory.entries
+
+    assert { result.html.contents.contains("<html") }
+    assert { result.json.contents.contains("tests/ok.hurl") }
+    assert { result.junit.contents.contains("tests/ok.hurl") }
+    assert { result.tap.contents.contains("tests/ok.hurl") }
+    assert { entries.contains("html/") }
+    assert { entries.contains("json/") }
+    assert { entries.contains("junit.xml") }
+    assert { entries.contains("report.tap") }
+
+    entries
+  }
+
+  """
+  Dagger secrets can be exposed to Hurl as secret variables.
+  """
+  secretVariable: Int! @check @cache(policy: FunctionCachePolicy.Never) {
+    let result = Dagger
+      .hurl
+      .withServiceBinding(self.api, port: 8000)
+      .withVariable("base_url", self.api.endpoint(scheme: "http", port: 8000))
+      .withSecretVariable("token", Dagger.setSecret("hurl-token", "abc"))
+      .run(
+        source: self.source,
+        test: true,
+        inputs: ["tests/secret.hurl"],
+        retry: 10,
+        retryInterval: "250ms",
+      )
+
+    assert { result.exitCode == 0 }
+
+    result.exitCode
+  }
+
+  """
+  Every secret variable is exposed to Hurl, not only the last one.
+  """
+  secretVariables: Int! @check @cache(policy: FunctionCachePolicy.Never) {
+    let result = Dagger
+      .hurl
+      .withServiceBinding(self.api, port: 8000)
+      .withVariable("base_url", self.api.endpoint(scheme: "http", port: 8000))
+      .withSecretVariable("token", Dagger.setSecret("hurl-secret-variables-token", "abc"))
+      .withSecretVariable("other", Dagger.setSecret("hurl-secret-variables-other", "def"))
+      .run(
+        source: self.source,
+        test: true,
+        inputs: ["tests/secrets.hurl"],
+        retry: 10,
+        retryInterval: "250ms",
+      )
+
+    assert { result.exitCode == 0 }
+
+    result.exitCode
+  }
+
+  """
+  A Dagger File can be mounted and used as Hurl's variables file.
+  """
+  variablesFile: Int! @check @cache(policy: FunctionCachePolicy.Never) {
+    let variablesFile = Dagger
+      .directory
+      .withNewFile("variables.env", "base_url=" + self.api.endpoint(scheme: "http", port: 8000))
+      .file("variables.env")
+
+    let result = Dagger
+      .hurl
+      .withServiceBinding(self.api, port: 8000)
+      .run(
+        source: self.source,
+        test: true,
+        inputs: ["tests/ok.hurl"],
+        variablesFile: variablesFile,
+        retry: 10,
+        retryInterval: "250ms",
+      )
+
+    assert { result.exitCode == 0 }
+
+    result.exitCode
+  }
+
+  """
+  A constructor-level variables file is used by default.
+  """
+  constructorVariablesFile: Int! @check @cache(policy: FunctionCachePolicy.Never) {
+    let variablesFile = Dagger
+      .directory
+      .withNewFile("variables.env", "base_url=" + self.api.endpoint(scheme: "http", port: 8000))
+      .file("variables.env")
+
+    let result = Dagger
+      .hurl(variablesFile: variablesFile)
+      .withServiceBinding(self.api, port: 8000)
+      .run(
+        source: self.source,
+        test: true,
+        inputs: ["tests/ok.hurl"],
+        retry: 10,
+        retryInterval: "250ms",
+      )
+
+    assert { result.exitCode == 0 }
+
+    result.exitCode
+  }
+
+  """
+  A function-level variables file overrides the constructor default.
+  """
+  variablesFileOverride: Int! @check @cache(policy: FunctionCachePolicy.Never) {
+    let defaultVariablesFile = Dagger
+      .directory
+      .withNewFile("variables.env", "base_url=http://invalid.invalid")
+      .file("variables.env")
+    let variablesFile = Dagger
+      .directory
+      .withNewFile("variables.env", "base_url=" + self.api.endpoint(scheme: "http", port: 8000))
+      .file("variables.env")
+
+    let result = Dagger
+      .hurl(variablesFile: defaultVariablesFile)
+      .withServiceBinding(self.api, port: 8000)
+      .run(
+        source: self.source,
+        test: true,
+        inputs: ["tests/ok.hurl"],
+        variablesFile: variablesFile,
+        retry: 10,
+        retryInterval: "250ms",
+      )
+
+    assert { result.exitCode == 0 }
+
+    result.exitCode
+  }
+
+  """
+  A Dagger Secret can be mounted and used as Hurl's secrets file.
+  """
+  secretsFile: Int! @check @cache(policy: FunctionCachePolicy.Never) {
+    let result = Dagger
+      .hurl
+      .withServiceBinding(self.api, port: 8000)
+      .withVariable("base_url", self.api.endpoint(scheme: "http", port: 8000))
+      .run(
+        source: self.source,
+        test: true,
+        inputs: ["tests/secret.hurl"],
+        secretsFile: Dagger.setSecret("hurl-secrets-file", "token=abc"),
+        retry: 10,
+        retryInterval: "250ms",
+      )
+
+    assert { result.exitCode == 0 }
+
+    result.exitCode
+  }
+
+  """
+  A constructor-level secrets file is used by default.
+  """
+  constructorSecretsFile: Int! @check @cache(policy: FunctionCachePolicy.Never) {
+    let result = Dagger
+      .hurl(secretsFile: Dagger.setSecret("hurl-constructor-secrets-file", "token=abc"))
+      .withServiceBinding(self.api, port: 8000)
+      .withVariable("base_url", self.api.endpoint(scheme: "http", port: 8000))
+      .run(
+        source: self.source,
+        test: true,
+        inputs: ["tests/secret.hurl"],
+        retry: 10,
+        retryInterval: "250ms",
+      )
+
+    assert { result.exitCode == 0 }
+
+    result.exitCode
+  }
+
+  """
+  Cookie jars are exposed by the Result.
+  """
+  cookieJarOutput: String! @check @cache(policy: FunctionCachePolicy.Never) {
+    let cookies = Dagger
+      .hurl
+      .withServiceBinding(self.cookieApi, port: 8000)
+      .withVariable("base_url", self.cookieApi.endpoint(scheme: "http", port: 8000))
+      .run(
+        source: self.source,
+        test: true,
+        inputs: ["tests/cookie.hurl"],
+        cookieJar: true,
+        retry: 10,
+        retryInterval: "250ms",
+      )
+      .cookieJar
+      .contents
+
+    assert { cookies.contains("session") }
+
+    cookies
+  }
+
+  """
+  Stderr is captured by Result and exposed as a file.
+  """
+  stderrOutput: String! @check @cache(policy: FunctionCachePolicy.Never) {
+    let result = Dagger
+      .hurl
+      .withServiceBinding(self.api, port: 8000)
+      .withVariable("base_url", self.api.endpoint(scheme: "http", port: 8000))
+      .run(
+        source: self.source,
+        test: true,
+        inputs: ["tests/ok.hurl"],
+        retry: 10,
+        retryInterval: "250ms",
+      )
+    let stderr = result.stderr
+
+    assert { stderr.contains("Success tests/ok.hurl") }
+    assert { result.stderrFile.contents == stderr }
+
+    stderr
+  }
+
+  """
+  Stdout is captured by Result and exposed as a file.
+  """
+  stdoutOutput: String! @check @cache(policy: FunctionCachePolicy.Never) {
+    let result = Dagger
+      .hurl
+      .withServiceBinding(self.api, port: 8000)
+      .withVariable("base_url", self.api.endpoint(scheme: "http", port: 8000))
+      .run(
+        source: self.source,
+        inputs: ["tests/ok.hurl"],
+        retry: 10,
+        retryInterval: "250ms",
+      )
+    let stdout = result.stdout
+
+    assert { stdout.contains("ok") }
+    assert { result.stdoutFile.contents == stdout }
+
+    stdout
+  }
+
+  let source: Directory! {
+    Dagger
+      .directory
+      .withNewFile("tests/ok.hurl", self.okHurl)
+      .withNewFile("tests/fail.hurl", self.failHurl)
+      .withNewFile("tests/secret.hurl", self.secretHurl)
+      .withNewFile("tests/secrets.hurl", self.secretsHurl)
+      .withNewFile("tests/cookie.hurl", self.cookieHurl)
+  }
+
+  let api: Service! {
+    Dagger
+      .container
+      .from("python:3.13-alpine")
+      .withWorkdir("/srv")
+      .withNewFile("ok.json", `{"ok":true}`)
+      .withExposedPort(8000)
+      .asService(["python", "-m", "http.server", "8000"])
+      .withHostname("api")
+  }
+
+  let cookieApi: Service! {
+    Dagger
+      .container
+      .from("python:3.13-alpine")
+      .withWorkdir("/srv")
+      .withNewFile("server.py", """from http.server import BaseHTTPRequestHandler, HTTPServer
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Set-Cookie", "session=abc; Path=/")
+        self.end_headers()
+        self.wfile.write(b'{"ok":true}')
+
+    def log_message(self, format, *args):
+        pass
+
+HTTPServer(("0.0.0.0", 8000), Handler).serve_forever()
+""")
+      .withExposedPort(8000)
+      .asService(["python", "server.py"])
+  }
+
+  let okHurl: String! = """GET {{base_url}}/ok.json
+HTTP 200
+"""
+
+  let failHurl: String! = """GET {{base_url}}/missing.json
+HTTP 204
+"""
+
+  let secretHurl: String! = """GET {{base_url}}/ok.json?token={{token}}
+HTTP 200
+"""
+
+  let secretsHurl: String! = """GET {{base_url}}/ok.json?token={{token}}&other={{other}}
+HTTP 200
+"""
+
+  let cookieHurl: String! = """GET {{base_url}}/cookie
+HTTP 200
+"""
+}

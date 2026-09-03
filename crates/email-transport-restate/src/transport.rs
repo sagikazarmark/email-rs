@@ -26,10 +26,12 @@ const SERVICE_PATH: [&str; 2] = ["Email", "send"];
 ///
 /// The worker's capabilities cannot be discovered through ingress. The
 /// defaults describe the ingress hop itself: structured sends are the only
-/// thing `Email.send` accepts, and `SendOptions::idempotency_key` is consumed
-/// as Restate's `idempotency-key` header in both modes. Everything about the
-/// worker (attachment references, custom envelopes, and so on) is a deployment
-/// assertion made through [`RestateTransportBuilder`].
+/// thing `Email.send` accepts, and `SendOptions::idempotency_key` is honored
+/// at both hops in both modes: it is sent as Restate's `idempotency-key`
+/// header so Restate deduplicates caller retries, and it stays in the queued
+/// payload so the worker's transport can deduplicate provider retries.
+/// Everything about the worker (attachment references, custom envelopes, and
+/// so on) is a deployment assertion made through [`RestateTransportBuilder`].
 ///
 /// # Authentication
 ///
@@ -389,28 +391,18 @@ impl std::fmt::Debug for RestateTransportBuilder {
     }
 }
 
+/// Borrowed `Email.send` request body.
+///
+/// Serializes exactly like [`restate_email::SendRequest`] without cloning the
+/// message. `options.idempotency_key` stays in the body so the worker can
+/// forward it to the provider; the same key is also sent as Restate's
+/// `idempotency-key` header (see ADR 0004).
+#[derive(Serialize)]
+#[serde(rename = "SendRequest")]
 struct IngressSendRequest<'a> {
     transport: &'a TransportKey,
     message: &'a OutboundMessage,
     options: &'a SendOptions,
-}
-
-impl Serialize for IngressSendRequest<'_> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeStruct as _;
-
-        let mut state = serializer.serialize_struct("SendRequest", 3)?;
-        state.serialize_field("transport", self.transport)?;
-        state.serialize_field("message", self.message)?;
-        state.serialize_field(
-            "options",
-            &self.options.serializable_without_idempotency_key(),
-        )?;
-        state.end()
-    }
 }
 
 /// Body of a Restate `202 Accepted` response to a one-way send.
@@ -505,9 +497,17 @@ fn ingress_error_kind(status: u16) -> ErrorKind {
     }
 }
 
+/// Map a worker-originated terminal code back to the transport error kind.
+///
+/// Mirrors the worker's terminal-code mapping in `restate-email`: `400` for
+/// validation and unsupported features (and undecodable requests), `401`/`403`
+/// for credentials, `422` for permanent provider rejections, `500` for
+/// everything else. `404` is the worker rejecting an unknown transport key,
+/// which is the caller naming a transport the deployment does not have, so it
+/// is a validation failure of the request rather than an internal fault.
 fn terminal_invocation_kind(code: u16) -> ErrorKind {
     match code {
-        400 => ErrorKind::Validation,
+        400 | 404 => ErrorKind::Validation,
         401 => ErrorKind::Authentication,
         403 => ErrorKind::Authorization,
         422 => ErrorKind::PermanentProvider,
@@ -516,8 +516,12 @@ fn terminal_invocation_kind(code: u16) -> ErrorKind {
 }
 
 fn map_response_decode_error(error: reqwest::Error) -> TransportError {
-    if let Some(kind) = network_error_kind(&error) {
-        TransportError::new(kind, "failed to read Restate ingress response").with_source(error)
+    if error.is_timeout() {
+        TransportError::new(
+            ErrorKind::Timeout,
+            "failed to read Restate ingress response",
+        )
+        .with_source(error)
     } else if error.is_body() {
         TransportError::new(
             ErrorKind::TransientNetwork,
@@ -533,26 +537,24 @@ fn map_response_decode_error(error: reqwest::Error) -> TransportError {
     }
 }
 
+/// Map a failure to obtain any response at all.
+///
+/// Builder errors are the only terminal case: they mean the request could not
+/// be constructed (an invalid URL or header), which no retry fixes. Every
+/// other error `reqwest` reports before a response arrives is a transport
+/// failure. That includes `is_request()`, which wraps the HTTP client's
+/// connection, send, and (on `wasm32`) fetch errors, of which `is_connect()`
+/// is only the subset that failed during connection establishment.
 fn map_reqwest_error(error: reqwest::Error) -> TransportError {
-    let kind = if let Some(kind) = network_error_kind(&error) {
-        kind
-    } else if error.is_builder() || error.is_request() {
+    let kind = if error.is_timeout() {
+        ErrorKind::Timeout
+    } else if error.is_builder() {
         ErrorKind::Validation
     } else {
         ErrorKind::TransientNetwork
     };
 
     TransportError::new(kind, error.to_string()).with_source(error)
-}
-
-fn network_error_kind(error: &reqwest::Error) -> Option<ErrorKind> {
-    if error.is_timeout() {
-        Some(ErrorKind::Timeout)
-    } else if error.is_connect() {
-        Some(ErrorKind::TransientNetwork)
-    } else {
-        None
-    }
 }
 
 #[cfg(test)]

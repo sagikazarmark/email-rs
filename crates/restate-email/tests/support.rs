@@ -7,7 +7,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use http::Request;
 use http_body_util::{BodyExt as _, Full};
 use prost::Message as ProstMessage;
-use restate_email::{SendRequest, Service, TransportResolver};
+use restate_email::{SendRequest, Service};
 use restate_sdk::endpoint::{Endpoint, HandleOptions, ProtocolMode};
 use restate_sdk::service::IntoServiceDefinition as _;
 use restate_sdk_shared_core::Version;
@@ -59,26 +59,20 @@ const INPUT_COMMAND_MESSAGE_TYPE: u16 = 0x0400;
 const OUTPUT_COMMAND_MESSAGE_TYPE: u16 = 0x0401;
 const RUN_COMMAND_MESSAGE_TYPE: u16 = 0x0411;
 
-pub(crate) fn invoke_protocol_sdk_endpoint<T>(
-    service: &Service<T>,
+pub(crate) fn invoke_protocol_sdk_endpoint(
+    service: &Service,
     request: &SendRequest,
-) -> http::Response<restate_sdk::endpoint::ResponseBody>
-where
-    T: TransportResolver + Send + Sync + 'static,
-{
+) -> http::Response<restate_sdk::endpoint::ResponseBody> {
     invoke_protocol_sdk_endpoint_with_payload(
         service,
         Bytes::from(serde_json::to_vec(request).expect("request should serialize")),
     )
 }
 
-pub(crate) fn invoke_protocol_sdk_endpoint_with_payload<T>(
-    service: &Service<T>,
+pub(crate) fn invoke_protocol_sdk_endpoint_with_payload(
+    service: &Service,
     payload: Bytes,
-) -> http::Response<restate_sdk::endpoint::ResponseBody>
-where
-    T: TransportResolver + Send + Sync + 'static,
-{
+) -> http::Response<restate_sdk::endpoint::ResponseBody> {
     let version = Version::maximum_supported_version();
     let mut body = BytesMut::new();
 

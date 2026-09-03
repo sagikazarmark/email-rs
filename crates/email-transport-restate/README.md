@@ -93,11 +93,13 @@ worker's concern; see the `restate-email` documentation.
 
 ## Idempotency
 
-`RestateTransport` consumes `SendOptions::idempotency_key` as Restate's
-`idempotency-key` ingress header in both modes. The key is omitted from the
-queued `SendOptions`, so it is not forwarded to the provider. This makes
-replaying the enqueue safe without accidentally reusing one key across Restate
-and provider idempotency domains.
+`SendOptions::idempotency_key` is honored at both hops in both modes. The
+transport sends it as Restate's `idempotency-key` ingress header, so retrying
+the enqueue attaches to the existing invocation instead of creating a second
+one, and it stays in the queued `SendOptions`, so the worker's provider
+transport can deduplicate a provider call that Restate re-runs after a worker
+crash. Restate short-circuits caller replays before the worker runs, so the
+provider only ever sees the key from the worker's own attempts.
 
 ## Capabilities
 
@@ -128,6 +130,22 @@ default features to choose `reqwest`'s transport/TLS features explicitly.
 
 - `schemars`: forwards JSON Schema derivation to the re-exported
   `restate-email` queue payload types.
+
+## Compatibility
+
+The transport targets the `/restate/call` and `/restate/send` ingress paths
+introduced in Restate 1.7. Telling a terminal worker error apart from an
+ingress-level failure relies on the `x-restate-error-source` header and the
+`source`/`code` fields of the error body, which Restate emits since 1.7.4.
+Against 1.7.0 through 1.7.3 that discriminator is absent, so every error
+response is classified by its HTTP status alone: `5xx` is reported as a
+retryable `ErrorKind::TransientProvider` and any other status follows
+`ErrorKind::from_http_status`. In particular, a worker's `500` surfaces as
+`TransientProvider` rather than `Internal`, and its `404` for an unknown
+transport key surfaces as `PermanentProvider` rather than `Validation`.
+
+The crate compiles for native and `wasm32` targets supported by the selected
+`reqwest` backend.
 
 ## License
 
