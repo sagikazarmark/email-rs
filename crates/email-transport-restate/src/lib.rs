@@ -54,6 +54,20 @@
 //! - `schemars`: forwards JSON Schema derivation to the re-exported
 //!   `restate-email` queue payload types.
 //!
+//! # Compatibility
+//!
+//! The transport targets the `/restate/call` and `/restate/send` ingress
+//! paths introduced in Restate 1.7. Telling a terminal worker error apart
+//! from an ingress-level failure relies on the `x-restate-error-source`
+//! header and the `source`/`code` fields of the error body, which Restate
+//! emits since 1.7.4; against 1.7.0 through 1.7.3 a terminal worker failure
+//! is reported as a retryable [`email_transport::ErrorKind::TransientProvider`].
+//!
+//! # Platform support
+//!
+//! The transport can be compiled for native and `wasm32` targets supported by
+//! the selected `reqwest` backend.
+//!
 //! # Example programs
 //!
 //! - [`invoke_local_worker`](https://github.com/sagikazarmark/email-rs/blob/main/crates/email-transport-restate/examples/invoke_local_worker.rs)

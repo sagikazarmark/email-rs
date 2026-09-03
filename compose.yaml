@@ -1,7 +1,7 @@
 services:
   restate:
     hostname: restate
-    image: docker.restate.dev/restatedev/restate:latest
+    image: docker.restate.dev/restatedev/restate:1.7.8
     ports:
       - 127.0.0.1:9070:9070
       - 127.0.0.1:9071:9071

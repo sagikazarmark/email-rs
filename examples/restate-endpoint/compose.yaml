@@ -3,7 +3,7 @@ name: restate-email-example
 services:
   restate:
     hostname: restate
-    image: docker.restate.dev/restatedev/restate:latest
+    image: docker.restate.dev/restatedev/restate:1.7.8
     ports:
       - 127.0.0.1:8080:8080 # ingress
       - 127.0.0.1:9070:9070 # admin API + UI
