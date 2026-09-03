@@ -4,11 +4,11 @@ runtime.source = "dang"
 
 [[dependencies]]
 name = "hurl"
-source = "../hurl"
+source = "github.com/sagikazarmark/daggerverse-beta/hurl"
 
 [[dependencies]]
 name = "restate"
-source = "../restate"
+source = "github.com/sagikazarmark/daggerverse-beta/restate"
 
 [[dependencies]]
 name = "rust"
