@@ -60,8 +60,14 @@
 //! paths introduced in Restate 1.7. Telling a terminal worker error apart
 //! from an ingress-level failure relies on the `x-restate-error-source`
 //! header and the `source`/`code` fields of the error body, which Restate
-//! emits since 1.7.4; against 1.7.0 through 1.7.3 a terminal worker failure
-//! is reported as a retryable [`email_transport::ErrorKind::TransientProvider`].
+//! emits since 1.7.4. Against 1.7.0 through 1.7.3 that discriminator is
+//! absent, so every error response is classified by its HTTP status alone:
+//! `5xx` is reported as a retryable
+//! [`email_transport::ErrorKind::TransientProvider`] and any other status
+//! follows [`email_transport::ErrorKind::from_http_status`]. In particular,
+//! a worker's `500` surfaces as `TransientProvider` rather than `Internal`,
+//! and its `404` for an unknown transport key surfaces as
+//! `PermanentProvider` rather than `Validation`.
 //!
 //! # Platform support
 //!

@@ -496,6 +496,32 @@ async fn unknown_transport_key_rejected_by_worker_is_validation() {
     );
 }
 
+/// Restate 1.7.0 through 1.7.3 emit neither the `x-restate-error-source`
+/// header nor the `source` body field, so the transport falls back to the
+/// HTTP status and cannot recognise the worker's `404` as a validation error.
+#[tokio::test]
+async fn worker_error_without_source_discriminator_is_classified_by_status() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(CALL_PATH))
+        .respond_with(ResponseTemplate::new(404).set_body_json(serde_json::json!({
+            "code": 404,
+            "message": "transport key `transactional` is not configured",
+        })))
+        .mount(&server)
+        .await;
+
+    let error = waiting_transport(&server)
+        .send(&message(), &SendOptions::default())
+        .await
+        .expect_err("worker error should propagate");
+
+    assert_eq!(error.kind, ErrorKind::PermanentProvider);
+    assert!(error.is_terminal());
+    assert_eq!(error.http_status, Some(404));
+    assert_eq!(error.provider_error_code.as_deref(), Some("404"));
+}
+
 #[tokio::test]
 async fn ingress_service_failure_is_retryable() {
     let server = MockServer::start().await;
