@@ -1,0 +1,81 @@
+# The Cloudflare transport uses the structured send API and drops platform-owned headers
+
+`CloudflareTransport` maps an `email_message::Message` to Cloudflare's structured `send()` API
+(`EmailMessageBuilder`) and dispatches it through the `worker` crate's `SendEmail` binding. It
+builds the JS object by hand from a plain-Rust payload, forwards only the message's custom
+headers, exposes no provider option type, and is surfaced through `email-kit` under
+`transport-all-wasm` only.
+
+The structured API is the one path that carries what the kernel models: a single call delivers to
+every `To`/`Cc`/`Bcc` recipient, display names travel as `{ name, email }` objects, byte
+attachments go as typed arrays, and Cloudflare returns exactly one `messageId`, which becomes
+`SendReport::provider_message_id`. The legacy raw `EmailMessage` path cannot do this (see below).
+
+The `worker` 0.8 generated builder (`SendEmailBuilder::builder*`) types recipients as bare
+`&str`/`&[String]` and requires a `to` value, whereas the platform's documented Workers API accepts
+`(string | EmailAddress)[]` for `to`/`cc`/`bcc` and permits cc/bcc-only sends. The transport
+therefore constructs the object with `js_sys::Object`/`Reflect::set` and casts it to
+`SendEmailBuilder` for `send_with_builder`. `to` is always emitted as an array (possibly empty) so
+the field the TypeScript type marks required is never absent; the platform decides whether an empty
+list is acceptable and its answer is mapped like any other code. Named addresses use
+`worker::EmailAddress`; unnamed ones stay strings.
+
+The kernel's `standard_message_headers` helper is deliberately not used. Cloudflare rejects `Date`
+and `Message-ID` with `E_HEADER_NOT_ALLOWED`, stamps its own `Message-ID`, and runs an allowlist
+for everything else. The message's `date`, `message_id` and `sender` are dropped, and the drop is
+documented rather than validated: a caller who sets `message_id` on a message destined for
+several transports should not have the Cloudflare hop fail because Resend would have accepted it.
+
+There is no `CloudflareSendOptions`. The send API carries nothing per-send beyond what
+`email_message::Message` already models, so a provider option type would be an empty struct with
+a `serde` feature to forward and a registry entry to maintain. The `"cloudflare"` provider key is
+reserved for `SendReport::provider` and any future option type (ADR 0001).
+
+## Considered options
+
+- **The legacy raw `EmailMessage` path** (`new EmailMessage(from, to, raw)`), rendering RFC 822
+  with `email-message-wire`. Rejected: it takes a single envelope recipient per call, so a
+  multi-recipient message becomes N sends with N message ids and no single
+  `provider_message_id`; `Cc`/`Bcc` recipients are not delivered unless each is fanned out; and
+  the envelope `from` must equal the header `From`, so `Sender`/`Return-Path` semantics are lost.
+  A `RawTransport` over this path remains possible later.
+- **The generated typed builder as-is.** Compiles without `js_sys` glue. Rejected: it loses
+  display names on every recipient field and forbids cc/bcc-only sends, both of which the
+  platform supports and both of which every other structured transport in the workspace honours.
+- **Passing `Name <addr>` strings** into the generated builder to keep display names. Rejected:
+  the Workers API documents `string` as a bare address and `EmailAddress` as the named form;
+  RFC 5322 name-addr strings are undocumented for this API and may be rejected or mangled.
+- **Forwarding `Date`/`Message-ID`/`Sender` and letting the platform reject them.** Rejected: the
+  kernel emits them for every message that sets the fields, so the default outcome would be
+  `E_HEADER_NOT_ALLOWED` on messages that succeed everywhere else.
+- **Including the transport in `email-kit/transport-all`.** Rejected: the transport is
+  runtime-bound to Cloudflare Workers, and `transport-all` is the default feature of
+  `restate-email-endpoint`; including it would compile `worker`, `wasm-bindgen`, `js-sys` and
+  `web-sys` into every native consumer for a transport that can never send there.
+
+## Consequences
+
+- `Capabilities` advertises structured send, custom headers, attachments and inline attachments;
+  `idempotency_key` and `timeout` are false and the options are accepted and ignored per the
+  capability contract (ADR 0004). `custom_envelope` is false because the platform controls
+  `Return-Path`.
+- The crate compiles on native targets so `cargo test --workspace` stays green; `send` returns
+  `ErrorKind::UnsupportedFeature` there instead of reaching wasm-bindgen's panicking extern
+  stubs. The wasm-bindgen glue and the `Env` lookup behind `from_env` are the only code not
+  exercised by host tests; they are type-checked for `wasm32-unknown-unknown` in CI.
+- Whether the platform accepts an empty `to` array for cc/bcc-only sends is unverified from the
+  host. The transport forwards such messages rather than rejecting them locally, so the worst
+  case is a platform `Validation` error, not a transport rule stricter than the platform's.
+- Error classification is owned by a single code table keyed on the JS error's `code` property,
+  read directly rather than through `worker::Error`, so the upstream `RCPT_NOT_ALLOWED` vs
+  `E_RECIPIENT_NOT_ALLOWED` spelling is handled in one place. Unknown codes are
+  `PermanentProvider`; a code-less JS error is `Internal`; `http_status` is never set.
+- No JS value is attached as a `TransportError` source; code and message are carried instead,
+  because `JsValue` is not reliably `Send + Sync` across wasm-bindgen configurations.
+- Cloudflare requires a filename on every attachment; the transport rejects a filename-less byte
+  attachment with `Validation` locally rather than synthesising one. Repeated custom header
+  names collapse to the last value because Cloudflare's `headers` field is a plain object, the
+  same behaviour Resend has today.
+- `restate-email/transport-cloudflare` is a passthrough that enables `service` and forwards to
+  `email-kit/transport-cloudflare`. `restate-email` does not build for `wasm32` today, so no wasm
+  CI check covers that feature yet.

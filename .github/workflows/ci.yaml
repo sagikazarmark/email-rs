@@ -63,6 +63,7 @@ jobs:
             email-message \
             email-message-wire \
             email-transport \
+            email-transport-cloudflare \
             email-transport-lettre \
             email-transport-resend \
             email-transport-restate \
@@ -87,6 +88,7 @@ jobs:
             email-kit/tracing \
             email-kit/transport-all \
             email-kit/transport-all-wasm \
+            email-kit/transport-cloudflare \
             email-kit/transport-lettre \
             email-kit/transport-resend \
             email-kit/wire \
@@ -104,6 +106,7 @@ jobs:
             email-transport-resend/serde \
             email-transport-restate/schemars \
             email-transport-test/conformance \
+            restate-email/transport-cloudflare \
             restate-email/transport-resend \
             restate-email/rfc5322-string-compat \
             restate-email/schemars \
@@ -137,6 +140,7 @@ jobs:
       - name: Check Wasm packages
         run: |
           cargo check -p email-message-wire --target wasm32-unknown-unknown --locked
+          cargo check -p email-transport-cloudflare --target wasm32-unknown-unknown --locked
           cargo check -p email-transport-resend --target wasm32-unknown-unknown --locked
           cargo check -p email-transport-restate --target wasm32-unknown-unknown --locked
           cargo check -p email-kit --features transport-all-wasm --target wasm32-unknown-unknown --locked

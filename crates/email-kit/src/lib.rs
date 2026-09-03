@@ -8,6 +8,8 @@
 //!   `email-attachment-opendal`.
 //! - `message` re-exports `email-message`.
 //! - `transport` re-exports `email-transport`.
+//! - Enable `transport-cloudflare` for `transport::cloudflare`, which
+//!   re-exports `email-transport-cloudflare`.
 //! - Enable `transport-lettre` for `transport::lettre`, which re-exports
 //!   `email-transport-lettre`.
 //! - Enable `transport-resend` for `transport::resend`, which re-exports
@@ -38,9 +40,11 @@
 //!
 //! - `attachment-opendal`: the `OpenDAL` resolver at `attachment::opendal`.
 //! - `wire`: RFC 822/MIME parsing and rendering through `wire`.
+//! - `transport-cloudflare`: the Cloudflare Workers `send_email` adapter at
+//!   `transport::cloudflare`.
 //! - `transport-lettre`: the Lettre SMTP adapter at `transport::lettre`.
 //! - `transport-resend`: the Resend adapter at `transport::resend`.
-//! - `transport-all`: all transport adapters.
+//! - `transport-all`: all transport adapters that run on native targets.
 //! - `transport-all-wasm`: all transport adapters that support
 //!   `wasm32-unknown-unknown`.
 //! - `serde`, `schemars`, and `arbitrary`: forward the corresponding data-model
@@ -54,7 +58,11 @@
 //! `wasm32` targets. The Lettre adapter, and therefore `transport-all`, does not
 //! support `wasm32-unknown-unknown`; use `transport-all-wasm` to enable every
 //! adapter that does. The Resend adapter supports that target, but advertises
-//! and enforces per-send timeouts only on non-`wasm32` targets.
+//! and enforces per-send timeouts only on non-`wasm32` targets. The Cloudflare
+//! adapter is runtime-bound to Cloudflare Workers: it compiles everywhere but
+//! only sends on `wasm32-unknown-unknown` inside `workerd`, so it is part of
+//! `transport-all-wasm` and deliberately excluded from `transport-all` to keep
+//! the `worker` dependency tree out of native binaries.
 //!
 //! Namespaced access stays available when that is clearer:
 //!
@@ -119,6 +127,18 @@
 //! # #[cfg(not(any(feature = "transport-lettre", feature = "transport-all")))]
 //! # fn lettre_example() -> Result<(), Box<dyn std::error::Error>> { Ok(()) }
 //! # lettre_example().expect("Lettre transport example should build");
+//! ```
+//!
+//! With the `transport-cloudflare` or `transport-all-wasm` feature enabled, the
+//! Cloudflare Workers transport is available through
+//! `email_kit::transport::cloudflare`. Construct it from a `worker::Env` inside
+//! a Worker handler; the snippet is not compiled here because the facade does
+//! not depend on `worker` itself:
+//!
+//! ```rust,ignore
+//! use email_kit::transport::cloudflare::CloudflareTransport;
+//!
+//! let transport = CloudflareTransport::from_env(&env, "EMAIL")?;
 //! ```
 
 pub mod attachment;

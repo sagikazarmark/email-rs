@@ -24,6 +24,8 @@ schemars = [
 service = ["dep:bytes", "dep:email-kit", "dep:restate-sdk", "dep:serde_path_to_error"]
 # Forward email-message's RFC 5322 string address compatibility into queue schemas.
 rfc5322-string-compat = ["email-message/rfc5322-string-compat"]
+# Cloudflare Workers transport passthrough; there is no provider option type to hydrate.
+transport-cloudflare = ["email-kit/transport-cloudflare", "service"]
 # Provider-option deserialization is delegated to email-kit.
 transport-resend = ["email-kit/transport-resend", "service"]
 

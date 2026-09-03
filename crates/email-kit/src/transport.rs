@@ -2,6 +2,9 @@
 
 pub use email_transport::*;
 
+#[cfg(feature = "transport-cloudflare")]
+pub use email_transport_cloudflare as cloudflare;
+
 #[cfg(feature = "transport-lettre")]
 pub use email_transport_lettre as lettre;
 
