@@ -20,33 +20,30 @@ use crate::{SendRequest, SendRequestSeed, SendResponse, TransportLookupError, Tr
 /// more transports in a [`StaticTransportRegistry`](crate::StaticTransportRegistry),
 /// and bind it to a Restate endpoint through
 /// [`IntoServiceDefinition`](restate_sdk::service::IntoServiceDefinition).
-pub struct Service<T> {
-    transports: Arc<T>,
+///
+/// The resolver is held behind `dyn TransportResolver`: resolution already
+/// returns a type-erased transport, so a static resolver type would only leak
+/// worker configuration into the generated [`ServiceClient`] used by other
+/// Restate services.
+#[derive(Clone)]
+pub struct Service {
+    transports: Arc<dyn TransportResolver>,
     transport_options: Arc<TransportOptionRegistry>,
 }
 
-impl<T> Clone for Service<T> {
-    fn clone(&self) -> Self {
-        Self {
-            transports: Arc::clone(&self.transports),
-            transport_options: Arc::clone(&self.transport_options),
-        }
-    }
-}
-
-impl<T> Service<T>
-where
-    T: TransportResolver + Send + Sync + 'static,
-{
+impl Service {
     /// Build a service around an owned transport resolver.
     #[must_use]
-    pub fn new(transports: T) -> Self {
+    pub fn new<T>(transports: T) -> Self
+    where
+        T: TransportResolver + 'static,
+    {
         Self::from_shared(Arc::new(transports))
     }
 
     /// Build a service around a shared transport resolver.
     #[must_use]
-    pub fn from_shared(transports: Arc<T>) -> Self {
+    pub fn from_shared(transports: Arc<dyn TransportResolver>) -> Self {
         Self {
             transports,
             transport_options: Arc::new(transport_option_registry()),
@@ -93,10 +90,7 @@ where
 /// are not running behind Restate should use [`Service::send_request`] to
 /// exercise the same dispatch path without the service protocol.
 #[restate_sdk::service(name = "Email")]
-impl<T> Service<T>
-where
-    T: TransportResolver + Send + Sync + 'static,
-{
+impl Service {
     /// Dispatch one queued email request through its selected transport.
     ///
     /// # Errors
@@ -347,7 +341,7 @@ mod tests {
             }),
         });
 
-        let discovery = <Service<StubRegistry> as Discoverable>::discover();
+        let discovery = <Service as Discoverable>::discover();
         assert_eq!(discovery.name.as_str(), "Email");
         assert_eq!(discovery.ty, RestateServiceType::Service);
         assert_eq!(discovery.handlers.len(), 1);
