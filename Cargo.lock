@@ -4,9 +4,9 @@ version = 4
 
 [[package]]
 name = "addr-spec"
-version = "0.10.0"
+version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36cff8ee2ea844fd2e7842bef7fba9fc5f7c88f36a6799cd9b1d03e4a44e8790"
+checksum = "7e5642e95c25abcb7599955a4240a1952168432a45ea7f23f7e77ad683f3dc1b"
 dependencies = [
  "rustc_version",
  "unicode-normalization",
