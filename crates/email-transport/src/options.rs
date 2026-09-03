@@ -136,57 +136,6 @@ impl SendOptions {
         self.correlation_id = Some(correlation_id);
         self
     }
-
-    /// Return a serializable view that omits the provider idempotency key.
-    ///
-    /// Queue adapters can use this when the idempotency key belongs to the
-    /// queue invocation rather than the eventual provider request.
-    #[cfg(feature = "serde")]
-    #[must_use]
-    pub fn serializable_without_idempotency_key(&self) -> impl serde::Serialize + '_ {
-        SendOptionsWithoutIdempotencyKey(self)
-    }
-}
-
-#[cfg(feature = "serde")]
-struct SendOptionsWithoutIdempotencyKey<'a>(&'a SendOptions);
-
-#[cfg(feature = "serde")]
-impl serde::Serialize for SendOptionsWithoutIdempotencyKey<'_> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeStruct as _;
-
-        let SendOptions {
-            envelope,
-            transport_options,
-            timeout,
-            idempotency_key: _,
-            correlation_id,
-        } = self.0;
-        let field_count = usize::from(envelope.is_some())
-            + usize::from(!transport_options.is_empty())
-            + usize::from(timeout.is_some())
-            + usize::from(correlation_id.is_some());
-        let mut state = serializer.serialize_struct("SendOptions", field_count)?;
-
-        if let Some(envelope) = envelope {
-            state.serialize_field("envelope", envelope)?;
-        }
-        if !transport_options.is_empty() {
-            state.serialize_field("transport_options", transport_options)?;
-        }
-        if let Some(timeout) = timeout {
-            state.serialize_field("timeout", timeout)?;
-        }
-        if let Some(correlation_id) = correlation_id {
-            state.serialize_field("correlation_id", correlation_id)?;
-        }
-
-        state.end()
-    }
 }
 
 crate::string_newtype! {

@@ -26,10 +26,12 @@ const SERVICE_PATH: [&str; 2] = ["Email", "send"];
 ///
 /// The worker's capabilities cannot be discovered through ingress. The
 /// defaults describe the ingress hop itself: structured sends are the only
-/// thing `Email.send` accepts, and `SendOptions::idempotency_key` is consumed
-/// as Restate's `idempotency-key` header in both modes. Everything about the
-/// worker (attachment references, custom envelopes, and so on) is a deployment
-/// assertion made through [`RestateTransportBuilder`].
+/// thing `Email.send` accepts, and `SendOptions::idempotency_key` is honored
+/// at both hops in both modes: it is sent as Restate's `idempotency-key`
+/// header so Restate deduplicates caller retries, and it stays in the queued
+/// payload so the worker's transport can deduplicate provider retries.
+/// Everything about the worker (attachment references, custom envelopes, and
+/// so on) is a deployment assertion made through [`RestateTransportBuilder`].
 ///
 /// # Authentication
 ///
@@ -389,28 +391,18 @@ impl std::fmt::Debug for RestateTransportBuilder {
     }
 }
 
+/// Borrowed `Email.send` request body.
+///
+/// Serializes exactly like [`restate_email::SendRequest`] without cloning the
+/// message. `options.idempotency_key` stays in the body so the worker can
+/// forward it to the provider; the same key is also sent as Restate's
+/// `idempotency-key` header (see ADR 0004).
+#[derive(Serialize)]
+#[serde(rename = "SendRequest")]
 struct IngressSendRequest<'a> {
     transport: &'a TransportKey,
     message: &'a OutboundMessage,
     options: &'a SendOptions,
-}
-
-impl Serialize for IngressSendRequest<'_> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeStruct as _;
-
-        let mut state = serializer.serialize_struct("SendRequest", 3)?;
-        state.serialize_field("transport", self.transport)?;
-        state.serialize_field("message", self.message)?;
-        state.serialize_field(
-            "options",
-            &self.options.serializable_without_idempotency_key(),
-        )?;
-        state.end()
-    }
 }
 
 /// Body of a Restate `202 Accepted` response to a one-way send.

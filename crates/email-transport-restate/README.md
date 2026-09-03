@@ -93,11 +93,13 @@ worker's concern; see the `restate-email` documentation.
 
 ## Idempotency
 
-`RestateTransport` consumes `SendOptions::idempotency_key` as Restate's
-`idempotency-key` ingress header in both modes. The key is omitted from the
-queued `SendOptions`, so it is not forwarded to the provider. This makes
-replaying the enqueue safe without accidentally reusing one key across Restate
-and provider idempotency domains.
+`SendOptions::idempotency_key` is honored at both hops in both modes. The
+transport sends it as Restate's `idempotency-key` ingress header, so retrying
+the enqueue attaches to the existing invocation instead of creating a second
+one, and it stays in the queued `SendOptions`, so the worker's provider
+transport can deduplicate a provider call that Restate re-runs after a worker
+crash. Restate short-circuits caller replays before the worker runs, so the
+provider only ever sees the key from the worker's own attempts.
 
 ## Capabilities
 

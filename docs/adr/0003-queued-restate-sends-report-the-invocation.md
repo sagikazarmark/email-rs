@@ -36,6 +36,6 @@ recoverable (`RestateTransport::invocation_id`) without changing any kernel type
 - `delay` lives in the provider slice as scheduling behaviour, per ADR 0001: dropping it delivers
   now rather than later, which relaxes nothing that constrains delivery. If scheduling becomes
   cross-provider it moves to core `SendOptions` then.
-- `Capabilities` are mode-independent: `idempotency_key` is handled by ingress for both paths,
-  and `timeout` stays unadvertised because bounding the caller's wait would not bound the
-  invocation Restate keeps running.
+- `Capabilities` are mode-independent: `idempotency_key` is honored at both hops in both modes
+  (see ADR 0004), and `timeout` stays unadvertised because bounding the caller's wait would not
+  bound the invocation Restate keeps running.
