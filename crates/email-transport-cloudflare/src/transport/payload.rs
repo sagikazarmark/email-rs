@@ -137,10 +137,7 @@ fn map_body(body: &Body) -> Result<(Option<String>, Option<String>), TransportEr
         Body::Text(text) => Ok((non_empty(text), None)),
         Body::Html(html) => Ok((None, non_empty(html))),
         Body::TextAndHtml { text, html } => Ok((non_empty(text), non_empty(html))),
-        #[allow(
-            unreachable_patterns,
-            reason = "Body is non-exhaustive and future variants must fail explicitly"
-        )]
+        // `Body::Mime` and any future variant fail explicitly.
         _ => Err(transport_error(
             ErrorKind::UnsupportedFeature,
             "non-text/html body is not supported by the cloudflare structured send API",
@@ -214,9 +211,10 @@ fn transport_error(kind: ErrorKind, message: impl Into<String>) -> TransportErro
     TransportError::new(kind, message)
 }
 
-/// Backstops that `OutboundMessage`'s typestate makes unreachable through
-/// `Transport::send`; every other mapping rule is asserted at the public seam
-/// in `transport::tests`.
+/// Backstop for the one check `OutboundMessage`'s typestate makes unreachable
+/// through `Transport::send`; every other mapping rule, including the
+/// no-recipients rejection (reachable via an empty group), is asserted at the
+/// public seam in `transport::tests`.
 #[cfg(test)]
 mod tests {
     use email_message::{Address, Body, Mailbox, Message};
@@ -226,18 +224,6 @@ mod tests {
 
     fn mailbox(input: &str) -> Mailbox {
         input.parse().expect("valid mailbox fixture")
-    }
-
-    #[test]
-    fn missing_recipients_fail_validation() {
-        let message = Message::builder(Body::text("Body"))
-            .from_mailbox(mailbox("sender@example.com"))
-            .build_unchecked();
-
-        let error = build_payload(&message).expect_err("missing recipients should be rejected");
-
-        assert_eq!(error.kind, ErrorKind::Validation);
-        assert!(error.message.contains("recipient"));
     }
 
     #[test]

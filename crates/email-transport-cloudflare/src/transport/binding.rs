@@ -104,12 +104,16 @@ mod wasm {
     /// means the error did not come from the platform's send pipeline. The JS
     /// value itself is not attached as an error source because `JsValue` is
     /// not reliably `Send + Sync` across wasm-bindgen configurations.
+    ///
+    /// The `catch` glue wraps whatever the promise rejected with in
+    /// `js_sys::Error` unchecked, so the value may not actually be an `Error`;
+    /// `describe` tolerates that instead of trapping on a missing `message`.
     pub(super) fn decode_error(error: &js_sys::Error) -> SenderError {
         let code = Reflect::get(error, &JsValue::from_str("code"))
             .ok()
             .and_then(|value| value.as_string())
             .filter(|code| !code.is_empty());
-        let message = String::from(error.message());
+        let message = describe(error);
         SenderError::Binding { code, message }
     }
 

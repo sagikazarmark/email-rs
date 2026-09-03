@@ -541,6 +541,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn empty_group_with_no_other_recipients_fails_validation() {
+        // An empty group satisfies `OutboundMessage`'s recipient check (the
+        // `to` list is non-empty) but flattens to zero mailboxes, so this is
+        // the one way a message with no recipients reaches the transport.
+        let message = Message::builder(Body::text("Body"))
+            .from_mailbox(mailbox("sender@example.com"))
+            .to(vec![
+                "Undisclosed recipients:;"
+                    .parse::<Address>()
+                    .expect("valid empty group address"),
+            ])
+            .build_outbound()
+            .expect("an empty group passes message validation");
+
+        let error = send_err(&message).await;
+
+        assert_eq!(error.kind, ErrorKind::Validation);
+        assert!(error.message.contains("recipient"));
+    }
+
+    #[tokio::test]
     async fn multiple_reply_to_mailboxes_are_unsupported() {
         let message = Message::builder(Body::text("Body"))
             .from_mailbox(mailbox("sender@example.com"))
