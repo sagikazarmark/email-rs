@@ -465,6 +465,38 @@ async fn invocation_error_is_terminal_and_preserves_worker_code() {
 }
 
 #[tokio::test]
+async fn unknown_transport_key_rejected_by_worker_is_validation() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(CALL_PATH))
+        .respond_with(
+            ResponseTemplate::new(404)
+                .insert_header("x-restate-error-source", "invocation")
+                .set_body_json(serde_json::json!({
+                    "code": 404,
+                    "message": "transport key `transactional` is not configured",
+                    "source": "invocation"
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    let error = waiting_transport(&server)
+        .send(&message(), &SendOptions::default())
+        .await
+        .expect_err("unknown transport key should propagate");
+
+    assert_eq!(error.kind, ErrorKind::Validation);
+    assert!(error.is_terminal());
+    assert_eq!(error.http_status, Some(404));
+    assert_eq!(error.provider_error_code.as_deref(), Some("404"));
+    assert_eq!(
+        error.message,
+        "transport key `transactional` is not configured"
+    );
+}
+
+#[tokio::test]
 async fn ingress_service_failure_is_retryable() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
@@ -505,6 +537,34 @@ async fn connection_failure_is_retryable() {
         .send(&message(), &SendOptions::default())
         .await
         .expect_err("connection should fail");
+
+    assert_eq!(error.kind, ErrorKind::TransientNetwork);
+    assert!(error.is_retryable());
+}
+
+#[tokio::test]
+async fn connection_closed_before_response_is_retryable() {
+    // Accept the connection and hang up without answering. reqwest reports
+    // this as a request error that is *not* a connect error; it must still be
+    // classified as a transient network failure, not a validation error.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("port binds");
+    let address = listener.local_addr().expect("address available");
+    tokio::spawn(async move {
+        while let Ok((socket, _)) = listener.accept().await {
+            drop(socket);
+        }
+    });
+    let transport = RestateTransport::new(
+        transport_key(),
+        format!("http://{address}").parse().expect("URL parses"),
+    );
+
+    let error = transport
+        .send(&message(), &SendOptions::default())
+        .await
+        .expect_err("closed connection should fail");
 
     assert_eq!(error.kind, ErrorKind::TransientNetwork);
     assert!(error.is_retryable());

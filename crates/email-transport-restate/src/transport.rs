@@ -497,9 +497,17 @@ fn ingress_error_kind(status: u16) -> ErrorKind {
     }
 }
 
+/// Map a worker-originated terminal code back to the transport error kind.
+///
+/// Mirrors the worker's terminal-code mapping in `restate-email`: `400` for
+/// validation and unsupported features (and undecodable requests), `401`/`403`
+/// for credentials, `422` for permanent provider rejections, `500` for
+/// everything else. `404` is the worker rejecting an unknown transport key,
+/// which is the caller naming a transport the deployment does not have, so it
+/// is a validation failure of the request rather than an internal fault.
 fn terminal_invocation_kind(code: u16) -> ErrorKind {
     match code {
-        400 => ErrorKind::Validation,
+        400 | 404 => ErrorKind::Validation,
         401 => ErrorKind::Authentication,
         403 => ErrorKind::Authorization,
         422 => ErrorKind::PermanentProvider,
@@ -508,8 +516,12 @@ fn terminal_invocation_kind(code: u16) -> ErrorKind {
 }
 
 fn map_response_decode_error(error: reqwest::Error) -> TransportError {
-    if let Some(kind) = network_error_kind(&error) {
-        TransportError::new(kind, "failed to read Restate ingress response").with_source(error)
+    if error.is_timeout() {
+        TransportError::new(
+            ErrorKind::Timeout,
+            "failed to read Restate ingress response",
+        )
+        .with_source(error)
     } else if error.is_body() {
         TransportError::new(
             ErrorKind::TransientNetwork,
@@ -525,26 +537,24 @@ fn map_response_decode_error(error: reqwest::Error) -> TransportError {
     }
 }
 
+/// Map a failure to obtain any response at all.
+///
+/// Builder errors are the only terminal case: they mean the request could not
+/// be constructed (an invalid URL or header), which no retry fixes. Every
+/// other error `reqwest` reports before a response arrives is a transport
+/// failure. That includes `is_request()`, which wraps the HTTP client's
+/// connection, send, and (on `wasm32`) fetch errors, of which `is_connect()`
+/// is only the subset that failed during connection establishment.
 fn map_reqwest_error(error: reqwest::Error) -> TransportError {
-    let kind = if let Some(kind) = network_error_kind(&error) {
-        kind
-    } else if error.is_builder() || error.is_request() {
+    let kind = if error.is_timeout() {
+        ErrorKind::Timeout
+    } else if error.is_builder() {
         ErrorKind::Validation
     } else {
         ErrorKind::TransientNetwork
     };
 
     TransportError::new(kind, error.to_string()).with_source(error)
-}
-
-fn network_error_kind(error: &reqwest::Error) -> Option<ErrorKind> {
-    if error.is_timeout() {
-        Some(ErrorKind::Timeout)
-    } else if error.is_connect() {
-        Some(ErrorKind::TransientNetwork)
-    } else {
-        None
-    }
 }
 
 #[cfg(test)]
