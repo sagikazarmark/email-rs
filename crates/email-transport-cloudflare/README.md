@@ -46,9 +46,9 @@ See the [crate documentation](https://docs.rs/email-transport-cloudflare/latest/
 
 ## What Reaches Cloudflare
 
-- `From`, `To`, `Cc`, `Bcc` and `Reply-To` keep their display names; address groups are flattened. A cc-only or bcc-only message is forwarded with an empty `to` list rather than rejected locally; the platform decides whether to accept it. Cloudflare accepts a single `Reply-To`.
+- `From`, `To`, `Cc`, `Bcc` and `Reply-To` keep their display names; address groups are flattened. Cc-only and bcc-only messages are sent: the platform requires at least one of the three recipient lists, not `To` specifically. Cloudflare accepts a single `Reply-To`.
 - `Body::Text`, `Body::Html` and `Body::TextAndHtml` map to `text`/`html`. At least one must be non-empty.
-- Byte-backed attachments (regular and inline) are sent as binary typed arrays with filename, content type, disposition and content id. Cloudflare requires a filename on every attachment. Attachment references must be materialised first (for example with `email_attachment::AttachmentResolvingTransport`).
+- Byte-backed attachments are sent as binary typed arrays with filename, content type and disposition. Cloudflare requires a filename on every attachment, so a regular attachment without one is named `attachment-N` (its 1-based position) and an inline one takes its content id. Inline attachments must carry a content id; a content id on a regular attachment is dropped because the platform accepts none there. Attachment references must be materialised first (for example with `email_attachment::AttachmentResolvingTransport`).
 - Custom headers (`X-*`, `List-Unsubscribe`, `In-Reply-To`, ...) are forwarded verbatim; repeated header names collapse to the last value.
 - **`date`, `message_id` and `sender` set on the message are dropped.** Cloudflare rejects `Date` and `Message-ID` with `E_HEADER_NOT_ALLOWED` and stamps its own `Message-ID`, which comes back as `SendReport::provider_message_id`.
 

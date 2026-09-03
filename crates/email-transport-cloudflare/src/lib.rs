@@ -36,19 +36,22 @@
 //!
 //! - `From`, `To`, `Cc`, `Bcc` and `Reply-To` keep their display names.
 //!   Address groups are flattened to their member mailboxes. At least one
-//!   `To`/`Cc`/`Bcc` recipient is required. The transport does not impose a
-//!   stricter rule than that: a cc-only or bcc-only message is forwarded with
-//!   an empty `to` list and the platform decides whether to accept it.
-//!   Cloudflare accepts a single `Reply-To`; more than one fails with
-//!   [`email_transport::ErrorKind::UnsupportedFeature`].
+//!   `To`/`Cc`/`Bcc` recipient is required; cc-only and bcc-only messages are
+//!   sent (the platform requires at least one of the three lists, not `To`
+//!   specifically). Cloudflare accepts a single `Reply-To`; more than one
+//!   fails with [`email_transport::ErrorKind::UnsupportedFeature`].
 //! - `Body::Text`, `Body::Html` and `Body::TextAndHtml` map to Cloudflare's
 //!   `text`/`html` fields. At least one must be non-empty; a hand-built MIME
 //!   body is unsupported.
-//! - Byte-backed attachments (regular and inline) are forwarded with their
-//!   filename, content type, disposition and content id. Cloudflare requires a
-//!   filename on every attachment. Content is passed as a typed array, not
-//!   base64. Attachment references must be materialised first, for example
-//!   with `email_attachment::AttachmentResolvingTransport`.
+//! - Byte-backed attachments are forwarded with their filename, content type
+//!   and disposition, and content is passed as a typed array, not base64.
+//!   Cloudflare requires a filename on every attachment: a regular attachment
+//!   without one is named `attachment-N` by its 1-based position, an inline
+//!   one takes its content id. Inline attachments must carry a content id
+//!   (`Validation` otherwise); a content id on a regular attachment is dropped
+//!   because the platform accepts none there. Attachment references must be
+//!   materialised first, for example with
+//!   `email_attachment::AttachmentResolvingTransport`.
 //! - Custom headers (`X-*`, `List-Unsubscribe`, `In-Reply-To`, ...) are
 //!   forwarded verbatim; repeated header names collapse to the last value
 //!   because Cloudflare's `headers` field is a plain object. **The message's

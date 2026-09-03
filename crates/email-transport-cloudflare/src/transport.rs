@@ -185,7 +185,7 @@ mod tests {
     use wasm_bindgen::{JsCast as _, JsValue};
     use worker::SendEmail;
 
-    use super::payload::{EmailPayload, PayloadAddress};
+    use super::payload::{EmailPayload, PayloadAddress, PayloadDisposition};
     use super::{CloudflareTransport, EmailSender, PROVIDER, SenderError};
 
     /// Records the payload handed to the binding and answers with a canned
@@ -699,8 +699,7 @@ mod tests {
         let attachment = &payload.attachments[0];
         assert_eq!(attachment.filename, "report.bin");
         assert_eq!(attachment.content_type, "application/octet-stream");
-        assert!(!attachment.inline);
-        assert_eq!(attachment.content_id, None);
+        assert_eq!(attachment.disposition, PayloadDisposition::Attachment);
         assert_eq!(attachment.content, content);
     }
 
@@ -721,21 +720,88 @@ mod tests {
         let attachment = &payload.attachments[0];
         assert_eq!(attachment.filename, "logo.png");
         assert_eq!(attachment.content_type, "image/png");
-        assert!(attachment.inline);
-        assert_eq!(attachment.content_id.as_deref(), Some("logo"));
+        assert_eq!(
+            attachment.disposition,
+            PayloadDisposition::Inline {
+                content_id: String::from("logo")
+            }
+        );
     }
 
     #[tokio::test]
-    async fn attachment_without_filename_fails_validation() {
-        let message = message_with_attachment(Attachment::bytes(
-            ContentType::try_from("application/pdf").expect("content type parses"),
-            b"%PDF".to_vec(),
-        ));
+    async fn regular_attachment_without_filename_is_named_by_position() {
+        let pdf = ContentType::try_from("application/pdf").expect("content type parses");
+        let message = Message::builder(Body::text("Body"))
+            .from_mailbox(mailbox("sender@example.com"))
+            .to(vec![Address::Mailbox(mailbox("recipient@example.com"))])
+            .add_attachment(Attachment::bytes(pdf.clone(), b"%PDF-1".to_vec()))
+            .add_attachment(
+                Attachment::bytes(pdf.clone(), b"%PDF-2".to_vec()).with_filename("named.pdf"),
+            )
+            .add_attachment(Attachment::bytes(pdf, b"%PDF-3".to_vec()))
+            .build_outbound()
+            .expect("message should validate");
+
+        let (payload, _) = send_ok(&message).await;
+
+        let filenames: Vec<&str> = payload
+            .attachments
+            .iter()
+            .map(|attachment| attachment.filename.as_str())
+            .collect();
+        assert_eq!(filenames, vec!["attachment-1", "named.pdf", "attachment-3"]);
+    }
+
+    #[tokio::test]
+    async fn inline_attachment_without_filename_is_named_by_content_id() {
+        let message = message_with_attachment(
+            Attachment::bytes(
+                ContentType::try_from("image/png").expect("content type parses"),
+                vec![0x89, b'P', b'N', b'G'],
+            )
+            .with_content_id("logo@example.com")
+            .with_disposition(Disposition::Inline),
+        );
+
+        let (payload, _) = send_ok(&message).await;
+
+        assert_eq!(payload.attachments[0].filename, "logo@example.com");
+    }
+
+    #[tokio::test]
+    async fn inline_attachment_without_content_id_fails_validation() {
+        let message = message_with_attachment(
+            Attachment::bytes(
+                ContentType::try_from("image/png").expect("content type parses"),
+                vec![0x89, b'P', b'N', b'G'],
+            )
+            .with_filename("logo.png")
+            .with_disposition(Disposition::Inline),
+        );
 
         let error = send_err(&message).await;
 
         assert_eq!(error.kind, ErrorKind::Validation);
-        assert!(error.message.contains("filename"));
+        assert!(error.message.contains("content id"));
+    }
+
+    #[tokio::test]
+    async fn content_id_on_regular_attachment_is_dropped() {
+        let message = message_with_attachment(
+            Attachment::bytes(
+                ContentType::try_from("application/pdf").expect("content type parses"),
+                b"%PDF".to_vec(),
+            )
+            .with_filename("report.pdf")
+            .with_content_id("report"),
+        );
+
+        let (payload, _) = send_ok(&message).await;
+
+        assert_eq!(
+            payload.attachments[0].disposition,
+            PayloadDisposition::Attachment
+        );
     }
 
     #[tokio::test]

@@ -43,21 +43,25 @@ mod wasm {
     use worker::{EmailAddress, EmailAttachment, SendEmailBuilder};
 
     use super::super::SenderError;
-    use super::super::payload::{EmailPayload, PayloadAddress, PayloadAttachment};
+    use super::super::payload::{
+        EmailPayload, PayloadAddress, PayloadAttachment, PayloadDisposition,
+    };
 
     /// Build the `EmailMessageBuilder` object by hand.
     ///
     /// The `worker` crate's generated builder types recipients as bare
-    /// strings and requires `to`, whereas the platform accepts
-    /// `(string | EmailAddress)[]` and permits cc/bcc-only sends. Named
-    /// addresses become `{ name, email }` objects; unnamed ones stay strings.
+    /// strings and requires `to`, whereas the runtime's `EmailDestinations`
+    /// type makes each of `to`/`cc`/`bcc` optional and requires at least one
+    /// of them. Empty lists are therefore omitted rather than sent as `[]`.
+    /// Named addresses become `{ name, email }` objects; unnamed ones stay
+    /// strings.
     pub(super) fn build_message(payload: &EmailPayload) -> Result<SendEmailBuilder, SenderError> {
         let message = Object::new();
 
         set(&message, "from", &address_value(&payload.from))?;
-        // `to` is always present as an array so the field the TypeScript type
-        // marks required is never missing; cc/bcc-only sends leave it empty.
-        set(&message, "to", &address_array(&payload.to))?;
+        if !payload.to.is_empty() {
+            set(&message, "to", &address_array(&payload.to))?;
+        }
         if !payload.cc.is_empty() {
             set(&message, "cc", &address_array(&payload.cc))?;
         }
@@ -128,23 +132,20 @@ mod wasm {
         // Binary content is passed as a typed array rather than base64 so the
         // payload is not inflated by a third against the 5 MiB limit.
         let content = Uint8Array::from(attachment.content.as_slice());
-        let value = if attachment.inline {
-            EmailAttachment::new_inline_with_typed_array(
-                attachment.content_id.as_deref().unwrap_or_default(),
-                &attachment.filename,
-                &attachment.content_type,
-                &content,
-            )
-        } else {
-            let mut builder = EmailAttachment::builder_attachment_with_typed_array(
-                &attachment.filename,
-                &attachment.content_type,
-                &content,
-            );
-            if let Some(content_id) = &attachment.content_id {
-                builder = builder.content_id(content_id);
+        let value = match &attachment.disposition {
+            PayloadDisposition::Inline { content_id } => {
+                EmailAttachment::new_inline_with_typed_array(
+                    content_id,
+                    &attachment.filename,
+                    &attachment.content_type,
+                    &content,
+                )
             }
-            builder.build()
+            PayloadDisposition::Attachment => EmailAttachment::new_attachment_with_typed_array(
+                &attachment.filename,
+                &attachment.content_type,
+                &content,
+            ),
         };
         value.into()
     }

@@ -43,9 +43,16 @@ impl From<&Mailbox> for PayloadAddress {
 pub(super) struct PayloadAttachment {
     pub filename: String,
     pub content_type: String,
-    pub inline: bool,
-    pub content_id: Option<String>,
+    pub disposition: PayloadDisposition,
     pub content: Vec<u8>,
+}
+
+/// Cloudflare's attachment disposition union: inline parts carry a content id,
+/// regular attachments never do.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum PayloadDisposition {
+    Attachment,
+    Inline { content_id: String },
 }
 
 /// Map a message to the payload handed to the `send_email` binding.
@@ -55,6 +62,10 @@ pub(super) struct PayloadAttachment {
 /// `E_HEADER_NOT_ALLOWED` and stamps its own `Message-ID`. Cloudflare's
 /// `headers` field is a plain object, so repeated header names collapse to the
 /// last value, as they do for Resend.
+///
+/// The `to`, `cc` and `bcc` lists may each be empty; the binding glue omits
+/// empty ones because the platform requires at least one of the three to be
+/// present, not `to` specifically.
 pub(super) fn build_payload(message: &Message) -> Result<EmailPayload, TransportError> {
     let from = message
         .from_mailbox()
@@ -91,7 +102,8 @@ pub(super) fn build_payload(message: &Message) -> Result<EmailPayload, Transport
     let attachments = message
         .attachments()
         .iter()
-        .map(map_attachment)
+        .enumerate()
+        .map(|(index, attachment)| map_attachment(attachment, index + 1))
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(EmailPayload {
@@ -136,7 +148,19 @@ fn map_body(body: &Body) -> Result<(Option<String>, Option<String>), TransportEr
     }
 }
 
-fn map_attachment(attachment: &Attachment) -> Result<PayloadAttachment, TransportError> {
+/// Map one attachment. `position` is its 1-based index in the message and
+/// names a regular attachment that has no filename.
+///
+/// Cloudflare requires a filename on every attachment and a content id on
+/// every inline one, and accepts no content id on a regular attachment. A
+/// missing filename is synthesised (`attachment-N`, or the content id for an
+/// inline part) rather than rejected, because every other transport in the
+/// workspace treats the filename as optional. A content id on a regular
+/// attachment is dropped; the recipient's client renders it identically.
+fn map_attachment(
+    attachment: &Attachment,
+    position: usize,
+) -> Result<PayloadAttachment, TransportError> {
     let AttachmentBody::Bytes(content) = attachment.body() else {
         return Err(transport_error(
             ErrorKind::UnsupportedFeature,
@@ -146,18 +170,30 @@ fn map_attachment(attachment: &Attachment) -> Result<PayloadAttachment, Transpor
         ));
     };
 
-    let filename = attachment.filename().map(str::to_owned).ok_or_else(|| {
-        transport_error(
-            ErrorKind::Validation,
-            "cloudflare requires a filename on every attachment",
-        )
-    })?;
+    let disposition = if attachment.is_inline() {
+        let content_id = attachment.content_id().ok_or_else(|| {
+            transport_error(
+                ErrorKind::Validation,
+                "cloudflare requires a content id on every inline attachment",
+            )
+        })?;
+        PayloadDisposition::Inline {
+            content_id: content_id.to_owned(),
+        }
+    } else {
+        PayloadDisposition::Attachment
+    };
+
+    let filename = match (attachment.filename(), &disposition) {
+        (Some(filename), _) => filename.to_owned(),
+        (None, PayloadDisposition::Inline { content_id }) => content_id.clone(),
+        (None, PayloadDisposition::Attachment) => format!("attachment-{position}"),
+    };
 
     Ok(PayloadAttachment {
         filename,
         content_type: attachment.content_type().to_string(),
-        inline: attachment.is_inline(),
-        content_id: attachment.content_id().map(str::to_owned),
+        disposition,
         content: content.clone(),
     })
 }

@@ -12,13 +12,24 @@ attachments go as typed arrays, and Cloudflare returns exactly one `messageId`, 
 `SendReport::provider_message_id`. The legacy raw `EmailMessage` path cannot do this (see below).
 
 The `worker` 0.8 generated builder (`SendEmailBuilder::builder*`) types recipients as bare
-`&str`/`&[String]` and requires a `to` value, whereas the platform's documented Workers API accepts
-`(string | EmailAddress)[]` for `to`/`cc`/`bcc` and permits cc/bcc-only sends. The transport
-therefore constructs the object with `js_sys::Object`/`Reflect::set` and casts it to
-`SendEmailBuilder` for `send_with_builder`. `to` is always emitted as an array (possibly empty) so
-the field the TypeScript type marks required is never absent; the platform decides whether an empty
-list is acceptable and its answer is mapped like any other code. Named addresses use
-`worker::EmailAddress`; unnamed ones stay strings.
+`&str`/`&[String]` and requires a `to` value, whereas the runtime's own type definitions
+(`workerd/types/defines/email.d.ts`, `EmailDestinations`) make each of `to`, `cc` and `bcc`
+optional, accept `(string | EmailAddress)[]` for all three, and require only that at least one is
+present; the REST OpenAPI schema says the same (`to`: "Optional if cc or bcc is provided"). The
+transport therefore constructs the object with `js_sys::Object`/`Reflect::set` and casts it to
+`SendEmailBuilder` for `send_with_builder`, omitting whichever recipient lists are empty. Named
+addresses use `worker::EmailAddress`; unnamed ones stay strings.
+
+The same runtime types define attachments as a discriminated union: `disposition: 'inline'`
+requires `contentId`, `disposition: 'attachment'` forbids it, and both require `filename`. The
+transport rejects an inline attachment without a content id locally (`Validation`), drops a
+content id on a regular attachment, and synthesises a missing filename (`attachment-N` from the
+1-based position, or the content id for an inline part) instead of rejecting it. Every other
+transport in the workspace treats the filename as optional, the RFC 822 renderer simply omits the
+parameter, and inline `cid:` images very commonly have none; failing here would make Cloudflare the
+one hop where an otherwise portable message breaks. No extension is guessed: the `type` field
+carries the MIME type, and a partial MIME-to-extension table would be worse than an honest
+placeholder.
 
 The kernel's `standard_message_headers` helper is deliberately not used. Cloudflare rejects `Date`
 and `Message-ID` with `E_HEADER_NOT_ALLOWED`, stamps its own `Message-ID`, and runs an allowlist
@@ -48,6 +59,11 @@ reserved for `SendReport::provider` and any future option type (ADR 0001).
 - **Forwarding `Date`/`Message-ID`/`Sender` and letting the platform reject them.** Rejected: the
   kernel emits them for every message that sets the fields, so the default outcome would be
   `E_HEADER_NOT_ALLOWED` on messages that succeed everywhere else.
+- **Rejecting a filename-less attachment locally.** Explicit, but stricter than SMTP and Resend
+  for a field MIME itself treats as optional. Rejected in favour of a positional placeholder.
+- **Rejecting a content id on a regular attachment.** Would mirror the multi-`Reply-To` rule,
+  but the recipient's client renders the part identically with or without the id, so there is
+  nothing lost to warn about. Rejected in favour of dropping it.
 - **Including the transport in `email-kit/transport-all`.** Rejected: the transport is
   runtime-bound to Cloudflare Workers, and `transport-all` is the default feature of
   `restate-email-endpoint`; including it would compile `worker`, `wasm-bindgen`, `js-sys` and
@@ -63,19 +79,14 @@ reserved for `SendReport::provider` and any future option type (ADR 0001).
   `ErrorKind::UnsupportedFeature` there instead of reaching wasm-bindgen's panicking extern
   stubs. The wasm-bindgen glue and the `Env` lookup behind `from_env` are the only code not
   exercised by host tests; they are type-checked for `wasm32-unknown-unknown` in CI.
-- Whether the platform accepts an empty `to` array for cc/bcc-only sends is unverified from the
-  host. The transport forwards such messages rather than rejecting them locally, so the worst
-  case is a platform `Validation` error, not a transport rule stricter than the platform's.
 - Error classification is owned by a single code table keyed on the JS error's `code` property,
   read directly rather than through `worker::Error`, so the upstream `RCPT_NOT_ALLOWED` vs
   `E_RECIPIENT_NOT_ALLOWED` spelling is handled in one place. Unknown codes are
   `PermanentProvider`; a code-less JS error is `Internal`; `http_status` is never set.
 - No JS value is attached as a `TransportError` source; code and message are carried instead,
   because `JsValue` is not reliably `Send + Sync` across wasm-bindgen configurations.
-- Cloudflare requires a filename on every attachment; the transport rejects a filename-less byte
-  attachment with `Validation` locally rather than synthesising one. Repeated custom header
-  names collapse to the last value because Cloudflare's `headers` field is a plain object, the
-  same behaviour Resend has today.
+- Repeated custom header names collapse to the last value because Cloudflare's `headers` field is
+  a plain object, the same behaviour Resend has today.
 - `restate-email/transport-cloudflare` is a passthrough that enables `service` and forwards to
   `email-kit/transport-cloudflare`. `restate-email` does not build for `wasm32` today, so no wasm
   CI check covers that feature yet.
