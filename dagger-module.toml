@@ -1,6 +1,7 @@
-name = "end-to-end"
+name = "email"
 engineVersion = "v1.0.0"
 runtime.source = "dang"
+include = ["!.devenv", "!target"]
 
 [[dependencies]]
 name = "hurl"

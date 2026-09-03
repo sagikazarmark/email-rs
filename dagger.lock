@@ -12,6 +12,7 @@
 ["","oci-sha",["docker.io/library/debian:13-slim"],"sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132"]
 ["","oci-sha",["docker.io/library/python:3.13-alpine"],"sha256:7415fbc3c9e4979cc717d92377ab2bc7b2b4a2af1ac03cc52b5f3f88efedaf3a"]
 ["","oci-sha",["docker.io/library/rust:1.98-slim-trixie"],"sha256:17d1ba895198f9934c6314ec5346a0d5115372f3243390c3d731e242f35c2f27"]
+["","oci-sha",["docker.io/library/rust:latest"],"sha256:620dbcd124499c59e2406d3741574b5c5838cf9eb9656f0c3a03948f79b02959"]
 ["","oci-sha",["ghcr.io/orange-opensource/hurl:8.0.1"],"sha256:49a02dc39d7084e5a6e8c57e2d4754ef102e4ee3761a02ef6dc0e305ab1a832d"]
 ["","oci-sha",["ghcr.io/orange-opensource/hurl:latest"],"sha256:d7727dcc0166de8aea88916e73ea435ee09bfecb8ba0c281200206b6cf37cf64"]
 ["","oci-sha",["ghcr.io/restatedev/restate:1.7.8"],"sha256:fe23d866cc625a745f73f14e05ee6ca5b26441af3b18df8c54dfda4e1bb1d52d"]
