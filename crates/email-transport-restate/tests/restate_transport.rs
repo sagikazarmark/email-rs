@@ -94,7 +94,7 @@ async fn queued_send_posts_wire_options_and_reports_the_invocation() {
         .with_correlation_id(CorrelationId::new("trace-42").expect("valid id"));
 
     // The idempotency key travels at both hops: as Restate's header and in the
-    // queued options for the worker's provider (ADR 0004).
+    // queued options for the worker's provider.
     Mock::given(method("POST"))
         .and(path(SEND_PATH))
         .and(header("idempotency-key", "enqueue-42"))
