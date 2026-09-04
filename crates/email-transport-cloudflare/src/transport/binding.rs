@@ -6,16 +6,17 @@
 //! native implementation never touches wasm-bindgen's extern stubs, which
 //! panic off-wasm, and reports the target as unsupported instead.
 
+use email_transport::TransportError;
 use worker::SendEmail;
 
-use super::SenderError;
 use super::payload::EmailPayload;
 
+/// Deliver `payload` through the binding, returning Cloudflare's `messageId`.
 #[cfg(target_arch = "wasm32")]
 pub(super) async fn send(
     binding: &SendEmail,
     payload: EmailPayload,
-) -> Result<String, SenderError> {
+) -> Result<String, TransportError> {
     let message = wasm::build_message(&payload)?;
     let result = binding
         .send_with_builder(&message)
@@ -24,6 +25,7 @@ pub(super) async fn send(
     Ok(result.message_id())
 }
 
+/// The binding cannot be invoked on this compilation target.
 #[cfg(not(target_arch = "wasm32"))]
 #[allow(
     clippy::unused_async,
@@ -32,17 +34,22 @@ pub(super) async fn send(
 pub(super) async fn send(
     _binding: &SendEmail,
     _payload: EmailPayload,
-) -> Result<String, SenderError> {
-    Err(SenderError::UnsupportedTarget)
+) -> Result<String, TransportError> {
+    Err(TransportError::new(
+        email_transport::ErrorKind::UnsupportedFeature,
+        "the cloudflare send_email binding is only available on wasm32-unknown-unknown \
+         inside Cloudflare Workers",
+    ))
 }
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
+    use email_transport::TransportError;
     use js_sys::{Array, Object, Reflect, Uint8Array};
     use wasm_bindgen::{JsCast as _, JsValue};
     use worker::{EmailAddress, EmailAttachment, SendEmailBuilder};
 
-    use super::super::SenderError;
+    use super::super::error::map_binding_error;
     use super::super::payload::{
         EmailPayload, PayloadAddress, PayloadAttachment, PayloadDisposition,
     };
@@ -55,7 +62,9 @@ mod wasm {
     /// of them. Empty lists are therefore omitted rather than sent as `[]`.
     /// Named addresses become `{ name, email }` objects; unnamed ones stay
     /// strings.
-    pub(super) fn build_message(payload: &EmailPayload) -> Result<SendEmailBuilder, SenderError> {
+    pub(super) fn build_message(
+        payload: &EmailPayload,
+    ) -> Result<SendEmailBuilder, TransportError> {
         let message = Object::new();
 
         set(&message, "from", &address_value(&payload.from))?;
@@ -97,24 +106,24 @@ mod wasm {
         Ok(message.unchecked_into())
     }
 
-    /// Decode a thrown JS error into Cloudflare's `code` and `message`.
+    /// Decode a thrown JS error into a classified [`TransportError`].
     ///
-    /// Read directly rather than through `worker::Error`'s variant mapping so
-    /// a single code table owns classification. An absent or empty `code`
-    /// means the error did not come from the platform's send pipeline. The JS
-    /// value itself is not attached as an error source because `JsValue` is
-    /// not reliably `Send + Sync` across wasm-bindgen configurations.
+    /// Cloudflare's `code` and `message` properties are read directly rather
+    /// than through `worker::Error`'s variant mapping so a single code table
+    /// owns classification. An absent or empty `code` means the error did not
+    /// come from the platform's send pipeline. The JS value itself is not
+    /// attached as an error source because `JsValue` is not reliably
+    /// `Send + Sync` across wasm-bindgen configurations.
     ///
     /// The `catch` glue wraps whatever the promise rejected with in
     /// `js_sys::Error` unchecked, so the value may not actually be an `Error`;
     /// `describe` tolerates that instead of trapping on a missing `message`.
-    pub(super) fn decode_error(error: &js_sys::Error) -> SenderError {
+    pub(super) fn decode_error(error: &js_sys::Error) -> TransportError {
         let code = Reflect::get(error, &JsValue::from_str("code"))
             .ok()
             .and_then(|value| value.as_string())
             .filter(|code| !code.is_empty());
-        let message = describe(error);
-        SenderError::Binding { code, message }
+        map_binding_error(code.as_deref(), describe(error))
     }
 
     fn address_value(address: &PayloadAddress) -> JsValue {
@@ -154,15 +163,17 @@ mod wasm {
         value.into()
     }
 
-    fn set(target: &Object, key: &str, value: &JsValue) -> Result<(), SenderError> {
+    fn set(target: &Object, key: &str, value: &JsValue) -> Result<(), TransportError> {
         Reflect::set(target, &JsValue::from_str(key), value)
             .map(drop)
-            .map_err(|error| SenderError::Binding {
-                code: None,
-                message: format!(
-                    "failed to set `{key}` on the cloudflare email message: {}",
-                    describe(&error)
-                ),
+            .map_err(|error| {
+                map_binding_error(
+                    None,
+                    format!(
+                        "failed to set `{key}` on the cloudflare email message: {}",
+                        describe(&error)
+                    ),
+                )
             })
     }
 

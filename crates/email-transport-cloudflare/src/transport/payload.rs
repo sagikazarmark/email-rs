@@ -211,19 +211,185 @@ fn transport_error(kind: ErrorKind, message: impl Into<String>) -> TransportErro
     TransportError::new(kind, message)
 }
 
-/// Backstop for the one check `OutboundMessage`'s typestate makes unreachable
-/// through `Transport::send`; every other mapping rule, including the
-/// no-recipients rejection (reachable via an empty group), is asserted at the
-/// public seam in `transport::tests`.
+/// Fixtures are built with `build_outbound()` so every case is a message that
+/// would genuinely reach the transport; the one `build_unchecked()` case is the
+/// missing-From backstop that `OutboundMessage`'s typestate makes unreachable.
 #[cfg(test)]
 mod tests {
-    use email_message::{Address, Body, Mailbox, Message};
-    use email_transport::ErrorKind;
+    use email_message::{
+        Address, Attachment, AttachmentReference, Body, ContentType, Disposition, Header, Mailbox,
+        Message, MimePart, OutboundMessage,
+    };
+    use email_transport::{ErrorKind, TransportError};
+    use email_transport_test::conformance::conformance_message;
 
-    use super::build_payload;
+    use super::{EmailPayload, PayloadAddress, PayloadDisposition, build_payload};
 
     fn mailbox(input: &str) -> Mailbox {
         input.parse().expect("valid mailbox fixture")
+    }
+
+    fn address(name: Option<&str>, email: &str) -> PayloadAddress {
+        PayloadAddress {
+            name: name.map(str::to_owned),
+            email: email.to_owned(),
+        }
+    }
+
+    fn message_with(body: Body) -> OutboundMessage {
+        Message::builder(body)
+            .from_mailbox(mailbox("sender@example.com"))
+            .to(vec![Address::Mailbox(mailbox("recipient@example.com"))])
+            .subject("Hello")
+            .build_outbound()
+            .expect("message should validate")
+    }
+
+    fn minimal_message() -> OutboundMessage {
+        message_with(Body::text("Body"))
+    }
+
+    fn message_with_attachment(attachment: Attachment) -> OutboundMessage {
+        Message::builder(Body::text("Body"))
+            .from_mailbox(mailbox("sender@example.com"))
+            .to(vec![Address::Mailbox(mailbox("recipient@example.com"))])
+            .subject("Hello")
+            .add_attachment(attachment)
+            .build_outbound()
+            .expect("message should validate")
+    }
+
+    fn payload_for(message: &OutboundMessage) -> EmailPayload {
+        build_payload(message.as_message()).expect("message should map to a payload")
+    }
+
+    fn error_for(message: &OutboundMessage) -> TransportError {
+        build_payload(message.as_message()).expect_err("message should be rejected")
+    }
+
+    // --- conformance ------------------------------------------------------
+
+    #[test]
+    fn conforms_to_shared_semantics_and_drops_platform_headers() {
+        let payload = payload_for(&conformance_message());
+
+        assert_eq!(payload.from, address(None, "sender@example.com"));
+        assert_eq!(
+            payload.to,
+            vec![
+                address(None, "a@example.com"),
+                address(None, "b@example.com")
+            ]
+        );
+        assert_eq!(payload.cc, vec![address(None, "cc@example.com")]);
+        assert_eq!(payload.bcc, vec![address(None, "hidden@example.com")]);
+        assert_eq!(payload.reply_to, Some(address(None, "reply@example.com")));
+        assert_eq!(payload.subject, "Conformance");
+        assert_eq!(payload.text.as_deref(), Some("Hello from conformance test"));
+        assert_eq!(
+            payload.headers.get("X-Test").map(String::as_str),
+            Some("demo")
+        );
+        assert!(!payload.headers.contains_key("Date"));
+        assert!(!payload.headers.contains_key("Message-ID"));
+        assert!(!payload.headers.contains_key("Sender"));
+    }
+
+    // --- addresses --------------------------------------------------------
+
+    #[test]
+    fn display_names_are_preserved_on_every_address_field() {
+        let message = Message::builder(Body::text("Body"))
+            .from_mailbox(mailbox("Sender <sender@example.com>"))
+            .to(vec![Address::Mailbox(mailbox("To <to@example.com>"))])
+            .cc(vec![Address::Mailbox(mailbox("Cc <cc@example.com>"))])
+            .bcc(vec![Address::Mailbox(mailbox("Bcc <bcc@example.com>"))])
+            .reply_to(vec![Address::Mailbox(mailbox("Reply <reply@example.com>"))])
+            .build_outbound()
+            .expect("message should validate");
+
+        let payload = payload_for(&message);
+
+        assert_eq!(payload.from, address(Some("Sender"), "sender@example.com"));
+        assert_eq!(payload.to, vec![address(Some("To"), "to@example.com")]);
+        assert_eq!(payload.cc, vec![address(Some("Cc"), "cc@example.com")]);
+        assert_eq!(payload.bcc, vec![address(Some("Bcc"), "bcc@example.com")]);
+        assert_eq!(
+            payload.reply_to,
+            Some(address(Some("Reply"), "reply@example.com"))
+        );
+    }
+
+    #[test]
+    fn groups_are_flattened_to_member_mailboxes() {
+        let message = Message::builder(Body::text("Body"))
+            .from_mailbox(mailbox("sender@example.com"))
+            .to(vec![
+                "Friends: Ada <a@example.com>, b@example.com;"
+                    .parse::<Address>()
+                    .expect("valid group address"),
+            ])
+            .build_outbound()
+            .expect("message should validate");
+
+        let payload = payload_for(&message);
+
+        assert_eq!(
+            payload.to,
+            vec![
+                address(Some("Ada"), "a@example.com"),
+                address(None, "b@example.com")
+            ]
+        );
+    }
+
+    #[test]
+    fn cc_only_message_is_accepted() {
+        let message = Message::builder(Body::text("Body"))
+            .from_mailbox(mailbox("sender@example.com"))
+            .cc(vec![Address::Mailbox(mailbox("cc@example.com"))])
+            .build_outbound()
+            .expect("message should validate");
+
+        let payload = payload_for(&message);
+
+        assert!(payload.to.is_empty());
+        assert_eq!(payload.cc, vec![address(None, "cc@example.com")]);
+    }
+
+    #[test]
+    fn bcc_only_message_is_accepted() {
+        let message = Message::builder(Body::text("Body"))
+            .from_mailbox(mailbox("sender@example.com"))
+            .bcc(vec![Address::Mailbox(mailbox("hidden@example.com"))])
+            .build_outbound()
+            .expect("message should validate");
+
+        let payload = payload_for(&message);
+
+        assert!(payload.to.is_empty());
+        assert_eq!(payload.bcc, vec![address(None, "hidden@example.com")]);
+    }
+
+    #[test]
+    fn empty_group_with_no_other_recipients_fails_validation() {
+        // An empty group satisfies `OutboundMessage`'s recipient check (the
+        // `to` list is non-empty) but flattens to zero mailboxes, so this is
+        // the one way a message with no recipients reaches the transport.
+        let message = Message::builder(Body::text("Body"))
+            .from_mailbox(mailbox("sender@example.com"))
+            .to(vec![
+                "Undisclosed recipients:;"
+                    .parse::<Address>()
+                    .expect("valid empty group address"),
+            ])
+            .build_outbound()
+            .expect("an empty group passes message validation");
+
+        let error = error_for(&message);
+
+        assert_eq!(error.kind, ErrorKind::Validation);
+        assert!(error.message.contains("recipient"));
     }
 
     #[test]
@@ -236,5 +402,284 @@ mod tests {
 
         assert_eq!(error.kind, ErrorKind::Validation);
         assert!(error.message.contains("From"));
+    }
+
+    #[test]
+    fn multiple_reply_to_mailboxes_are_unsupported() {
+        let message = Message::builder(Body::text("Body"))
+            .from_mailbox(mailbox("sender@example.com"))
+            .to(vec![Address::Mailbox(mailbox("recipient@example.com"))])
+            .reply_to(vec![
+                Address::Mailbox(mailbox("a@example.com")),
+                Address::Mailbox(mailbox("b@example.com")),
+            ])
+            .build_outbound()
+            .expect("message should validate");
+
+        let error = error_for(&message);
+
+        assert_eq!(error.kind, ErrorKind::UnsupportedFeature);
+        assert!(error.message.contains("Reply-To"));
+    }
+
+    #[test]
+    fn absent_reply_to_is_omitted() {
+        assert_eq!(payload_for(&minimal_message()).reply_to, None);
+    }
+
+    // --- subject and body -------------------------------------------------
+
+    #[test]
+    fn missing_subject_is_sent_as_empty_string() {
+        let message = Message::builder(Body::text("Body"))
+            .from_mailbox(mailbox("sender@example.com"))
+            .to(vec![Address::Mailbox(mailbox("recipient@example.com"))])
+            .build_outbound()
+            .expect("message should validate");
+
+        assert_eq!(payload_for(&message).subject, "");
+    }
+
+    #[test]
+    fn text_body_maps_to_text() {
+        let payload = payload_for(&message_with(Body::text("Plain")));
+
+        assert_eq!(payload.text.as_deref(), Some("Plain"));
+        assert_eq!(payload.html, None);
+    }
+
+    #[test]
+    fn html_body_maps_to_html() {
+        let payload = payload_for(&message_with(Body::html("<p>Rich</p>")));
+
+        assert_eq!(payload.text, None);
+        assert_eq!(payload.html.as_deref(), Some("<p>Rich</p>"));
+    }
+
+    #[test]
+    fn text_and_html_body_maps_to_both() {
+        let payload = payload_for(&message_with(Body::text_and_html("Plain", "<p>Rich</p>")));
+
+        assert_eq!(payload.text.as_deref(), Some("Plain"));
+        assert_eq!(payload.html.as_deref(), Some("<p>Rich</p>"));
+    }
+
+    #[test]
+    fn empty_text_in_text_and_html_is_dropped() {
+        let payload = payload_for(&message_with(Body::text_and_html("", "<p>Rich</p>")));
+
+        assert_eq!(payload.text, None);
+        assert_eq!(payload.html.as_deref(), Some("<p>Rich</p>"));
+    }
+
+    #[test]
+    fn empty_body_fails_validation() {
+        let error = error_for(&message_with(Body::text("")));
+
+        assert_eq!(error.kind, ErrorKind::Validation);
+        assert!(error.message.contains("body"));
+    }
+
+    #[test]
+    fn mime_body_is_unsupported() {
+        let body = Body::Mime(MimePart::Leaf {
+            content_type: ContentType::try_from("text/plain").expect("content type parses"),
+            content_transfer_encoding: None,
+            content_disposition: None,
+            body: b"Body".to_vec(),
+        });
+
+        let error = error_for(&message_with(body));
+
+        assert_eq!(error.kind, ErrorKind::UnsupportedFeature);
+    }
+
+    // --- headers ----------------------------------------------------------
+
+    #[test]
+    fn custom_headers_are_forwarded() {
+        let message = Message::builder(Body::text("Body"))
+            .from_mailbox(mailbox("sender@example.com"))
+            .to(vec![Address::Mailbox(mailbox("recipient@example.com"))])
+            .add_header(Header::new("X-Campaign", "spring").expect("header validates"))
+            .add_header(
+                Header::new("List-Unsubscribe", "<mailto:unsub@example.com>")
+                    .expect("header validates"),
+            )
+            .add_header(
+                Header::new("In-Reply-To", "<parent@example.com>").expect("header validates"),
+            )
+            .build_outbound()
+            .expect("message should validate");
+
+        let payload = payload_for(&message);
+
+        assert_eq!(payload.headers.len(), 3);
+        assert_eq!(payload.headers["X-Campaign"], "spring");
+        assert_eq!(
+            payload.headers["List-Unsubscribe"],
+            "<mailto:unsub@example.com>"
+        );
+        assert_eq!(payload.headers["In-Reply-To"], "<parent@example.com>");
+    }
+
+    #[test]
+    fn date_message_id_and_sender_are_never_emitted() {
+        let message = Message::builder(Body::text("Body"))
+            .from_mailbox(mailbox("sender@example.com"))
+            .sender(mailbox("bounce@example.com"))
+            .to(vec![Address::Mailbox(mailbox("recipient@example.com"))])
+            .date(time::OffsetDateTime::UNIX_EPOCH)
+            .message_id("<mine@example.com>".parse().expect("message id parses"))
+            .build_outbound()
+            .expect("message should validate");
+
+        let payload = payload_for(&message);
+
+        assert!(payload.headers.is_empty(), "headers: {:?}", payload.headers);
+    }
+
+    // --- attachments ------------------------------------------------------
+
+    #[test]
+    fn byte_attachment_carries_metadata_and_binary_content() {
+        let content = b"hello\xff\0world";
+        let message = message_with_attachment(
+            Attachment::bytes(
+                ContentType::try_from("application/octet-stream").expect("content type parses"),
+                content.to_vec(),
+            )
+            .with_filename("report.bin"),
+        );
+
+        let payload = payload_for(&message);
+
+        assert_eq!(payload.attachments.len(), 1);
+        let attachment = &payload.attachments[0];
+        assert_eq!(attachment.filename, "report.bin");
+        assert_eq!(attachment.content_type, "application/octet-stream");
+        assert_eq!(attachment.disposition, PayloadDisposition::Attachment);
+        assert_eq!(attachment.content, content);
+    }
+
+    #[test]
+    fn inline_attachment_carries_content_id_and_disposition() {
+        let message = message_with_attachment(
+            Attachment::bytes(
+                ContentType::try_from("image/png").expect("content type parses"),
+                vec![0x89, b'P', b'N', b'G'],
+            )
+            .with_filename("logo.png")
+            .with_content_id("logo")
+            .with_disposition(Disposition::Inline),
+        );
+
+        let payload = payload_for(&message);
+
+        let attachment = &payload.attachments[0];
+        assert_eq!(attachment.filename, "logo.png");
+        assert_eq!(attachment.content_type, "image/png");
+        assert_eq!(
+            attachment.disposition,
+            PayloadDisposition::Inline {
+                content_id: String::from("logo")
+            }
+        );
+    }
+
+    #[test]
+    fn regular_attachment_without_filename_is_named_by_position() {
+        let pdf = ContentType::try_from("application/pdf").expect("content type parses");
+        let message = Message::builder(Body::text("Body"))
+            .from_mailbox(mailbox("sender@example.com"))
+            .to(vec![Address::Mailbox(mailbox("recipient@example.com"))])
+            .add_attachment(Attachment::bytes(pdf.clone(), b"%PDF-1".to_vec()))
+            .add_attachment(
+                Attachment::bytes(pdf.clone(), b"%PDF-2".to_vec()).with_filename("named.pdf"),
+            )
+            .add_attachment(Attachment::bytes(pdf, b"%PDF-3".to_vec()))
+            .build_outbound()
+            .expect("message should validate");
+
+        let payload = payload_for(&message);
+
+        let filenames: Vec<&str> = payload
+            .attachments
+            .iter()
+            .map(|attachment| attachment.filename.as_str())
+            .collect();
+        assert_eq!(filenames, vec!["attachment-1", "named.pdf", "attachment-3"]);
+    }
+
+    #[test]
+    fn inline_attachment_without_filename_is_named_by_content_id() {
+        let message = message_with_attachment(
+            Attachment::bytes(
+                ContentType::try_from("image/png").expect("content type parses"),
+                vec![0x89, b'P', b'N', b'G'],
+            )
+            .with_content_id("logo@example.com")
+            .with_disposition(Disposition::Inline),
+        );
+
+        assert_eq!(
+            payload_for(&message).attachments[0].filename,
+            "logo@example.com"
+        );
+    }
+
+    #[test]
+    fn inline_attachment_without_content_id_fails_validation() {
+        let message = message_with_attachment(
+            Attachment::bytes(
+                ContentType::try_from("image/png").expect("content type parses"),
+                vec![0x89, b'P', b'N', b'G'],
+            )
+            .with_filename("logo.png")
+            .with_disposition(Disposition::Inline),
+        );
+
+        let error = error_for(&message);
+
+        assert_eq!(error.kind, ErrorKind::Validation);
+        assert!(error.message.contains("content id"));
+    }
+
+    #[test]
+    fn content_id_on_regular_attachment_is_dropped() {
+        let message = message_with_attachment(
+            Attachment::bytes(
+                ContentType::try_from("application/pdf").expect("content type parses"),
+                b"%PDF".to_vec(),
+            )
+            .with_filename("report.pdf")
+            .with_content_id("report"),
+        );
+
+        assert_eq!(
+            payload_for(&message).attachments[0].disposition,
+            PayloadDisposition::Attachment
+        );
+    }
+
+    #[test]
+    fn attachment_reference_is_unsupported_with_preparation_hint() {
+        let message = message_with_attachment(Attachment::reference(
+            ContentType::try_from("application/pdf").expect("content type parses"),
+            AttachmentReference::new("s3://bucket/key"),
+        ));
+
+        let error = error_for(&message);
+
+        assert_eq!(error.kind, ErrorKind::UnsupportedFeature);
+        assert!(
+            error
+                .message
+                .contains("email_attachment::AttachmentResolvingTransport")
+                && error
+                    .message
+                    .contains("email_attachment::prepare_attachments"),
+            "error should point at attachment preparation: {error}"
+        );
     }
 }

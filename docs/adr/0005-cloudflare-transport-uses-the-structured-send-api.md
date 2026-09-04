@@ -77,8 +77,14 @@ reserved for `SendReport::provider` and any future option type (ADR 0001).
   `Return-Path`.
 - The crate compiles on native targets so `cargo test --workspace` stays green; `send` returns
   `ErrorKind::UnsupportedFeature` there instead of reaching wasm-bindgen's panicking extern
-  stubs. The wasm-bindgen glue and the `Env` lookup behind `from_env` are the only code not
-  exercised by host tests; they are type-checked for `wasm32-unknown-unknown` in CI.
+  stubs. Message mapping and error classification are pure functions unit-tested on the host.
+  `Transport::send` is a thin composition of those around the binding call and deliberately has
+  no seam for a test double: the machinery to inject one (a sender trait, an intermediate error
+  type, a duplicated binding handle) outweighed the value of unit-testing the wrapper. `send`
+  itself, the wasm-bindgen glue and the `Env` lookup behind `from_env` are type-checked for
+  `wasm32-unknown-unknown` in CI only.
+- The transport exposes no accessor for the underlying `SendEmail`; callers that need the
+  binding elsewhere keep their own handle before constructing the transport.
 - Error classification is owned by a single code table keyed on the JS error's `code` property,
   read directly rather than through `worker::Error`, so the upstream `RCPT_NOT_ALLOWED` vs
   `E_RECIPIENT_NOT_ALLOWED` spelling is handled in one place. Unknown codes are
