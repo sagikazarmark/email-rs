@@ -1,0 +1,24 @@
+name = "email-rs-cloudflare-example"
+main = "build/worker/shim.mjs"
+compatibility_date = "2026-06-01"
+
+[build]
+command = "cargo install -q worker-build && worker-build --release"
+
+# The binding `CloudflareTransport::from_env(&env, "EMAIL")` looks up.
+#
+# Restrict it with `allowed_sender_addresses` / `allowed_destination_addresses`
+# once the sending domain is onboarded; see
+# https://developers.cloudflare.com/email-service/configuration/send-bindings/
+#
+# `wrangler dev` cannot serialise binary attachment content through the local
+# simulator; set `remote = true` to exercise `?attachment` locally.
+[[send_email]]
+name = "EMAIL"
+# remote = true
+# allowed_sender_addresses = ["noreply@yourdomain.com"]
+# allowed_destination_addresses = ["you@example.com"]
+
+[vars]
+# Must be an address on a domain onboarded to Cloudflare Email Service.
+EMAIL_FROM = "email-rs example <noreply@yourdomain.com>"

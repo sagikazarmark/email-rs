@@ -1,0 +1,36 @@
+[package]
+name = "email-rs-cloudflare-worker-example"
+version = "0.0.0"
+description = "Cloudflare Worker sending one message through email-transport-cloudflare"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+email-message = { path = "../../crates/email-message" }
+email-transport = { path = "../../crates/email-transport" }
+email-transport-cloudflare = { path = "../../crates/email-transport-cloudflare" }
+
+console_error_panic_hook = "0.1"
+serde = { version = "1", features = ["derive"] }
+worker = "0.8"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
+
+# Standalone so `cargo test --workspace` never builds a `cdylib` Worker on the
+# host; CI checks it for `wasm32-unknown-unknown` separately.
+[workspace]

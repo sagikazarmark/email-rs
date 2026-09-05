@@ -78,6 +78,8 @@ Limits at the time of writing; none are enforced client-side, the platform's err
 
 The binding only functions on `wasm32-unknown-unknown` inside `workerd`. The crate compiles on native targets so workspace tests run everywhere, but `Transport::send` returns an `UnsupportedFeature` error there instead of panicking inside wasm-bindgen stubs.
 
+Because the binding cannot run outside `workerd`, the wasm glue is only type-checked in CI. [`examples/cloudflare-worker`](../../examples/cloudflare-worker) is a deployable Worker that exercises it against the real platform; run it after changing the JS object construction or error decoding.
+
 ## License
 
 Licensed under either of

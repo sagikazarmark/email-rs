@@ -91,7 +91,8 @@ reserved for `SendReport::provider` and any future option type (ADR 0001).
   no seam for a test double: the machinery to inject one (a sender trait, an intermediate error
   type, a duplicated binding handle) outweighed the value of unit-testing the wrapper. `send`
   itself, the wasm-bindgen glue and the `Env` lookup behind `from_env` are type-checked for
-  `wasm32-unknown-unknown` in CI only.
+  `wasm32-unknown-unknown` in CI only; `examples/cloudflare-worker` is the deployable smoke test
+  that exercises them against the real platform.
 - The transport exposes no accessor for the underlying `SendEmail`; callers that need the
   binding elsewhere keep their own handle before constructing the transport.
 - Error classification is owned by a single code table keyed on the JS error's `code` property,

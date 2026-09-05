@@ -35,6 +35,7 @@
 ## Examples
 
 - [`examples/restate-endpoint`](examples/restate-endpoint): Docker Compose stack running the Restate email endpoint against Restate, a Mailpit mock SMTP server, and RustFS-backed attachment resolution.
+- [`examples/cloudflare-worker`](examples/cloudflare-worker): Cloudflare Worker sending through the `send_email` binding with `email-transport-cloudflare`; the runtime smoke test for the crate's `wasm32` glue.
 
 ## Development
 
