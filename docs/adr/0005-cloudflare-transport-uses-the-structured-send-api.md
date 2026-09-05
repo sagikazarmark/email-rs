@@ -101,6 +101,8 @@ reserved for `SendReport::provider` and any future option type (ADR 0001).
 - No JS value is attached as a `TransportError` source; code and message are carried instead,
   because `JsValue` is not reliably `Send + Sync` across wasm-bindgen configurations.
 - Repeated custom header names collapse to the last value because Cloudflare's `headers` field is
-  a plain object, the same behaviour Resend has today.
+  a plain object, the same last-wins rule Resend applies today. Going one step further than Resend,
+  names are compared case-insensitively (RFC 5322 §2.2) and the first spelling is kept, so `X-Foo`
+  and `x-foo` never reach the platform as two properties with undefined precedence.
 - Neither `restate-email` nor `restate-email-endpoint` exposes a Cloudflare feature; the Restate
   worker is native-only and cannot host the binding.

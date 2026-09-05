@@ -53,11 +53,12 @@
 //!   materialised first, for example with
 //!   `email_attachment::AttachmentResolvingTransport`.
 //! - Custom headers (`X-*`, `List-Unsubscribe`, `In-Reply-To`, ...) are
-//!   forwarded verbatim; repeated header names collapse to the last value
-//!   because Cloudflare's `headers` field is a plain object. **The message's
-//!   `date`, `message_id` and `sender` are dropped**: Cloudflare rejects
-//!   `Date` and `Message-ID` with `E_HEADER_NOT_ALLOWED` and stamps its own
-//!   `Message-ID`, which is returned as
+//!   forwarded verbatim. Cloudflare's `headers` field is a plain object that
+//!   admits each name once, so names that repeat (compared case-insensitively,
+//!   per RFC 5322) collapse to the last value under the first spelling seen.
+//!   **The message's `date`, `message_id` and `sender` are dropped**: Cloudflare
+//!   rejects `Date` and `Message-ID` with `E_HEADER_NOT_ALLOWED` and stamps its
+//!   own `Message-ID`, which is returned as
 //!   [`email_transport::SendReport::provider_message_id`].
 //! - A missing subject is sent as an empty string.
 //!
@@ -93,6 +94,13 @@
 //! 32 attachments, 5 MiB total message size, a header allowlist for custom
 //! headers and 16 KB of custom headers in total. None of these limits are
 //! enforced client-side; the platform's error codes are mapped instead.
+//!
+//! A binding may also be restricted in `wrangler.toml` with
+//! `allowed_sender_addresses`, `allowed_destination_addresses` or a single
+//! `destination_address`. Those restrictions are likewise enforced by the
+//! platform and surface as `Authorization` errors. The `destination_address`
+//! form, which lets JavaScript callers omit `to`, is not reachable here: a
+//! message with no recipient mailboxes is rejected locally with `Validation`.
 //!
 //! # Platform support
 //!

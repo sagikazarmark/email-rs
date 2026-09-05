@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use email_message::{Address, Attachment, AttachmentBody, Body, Mailbox, Message};
+use email_message::{Address, Attachment, AttachmentBody, Body, Header, Mailbox, Message};
 use email_transport::{ErrorKind, TransportError};
 
 /// Plain-Rust image of a Cloudflare `EmailMessageBuilder` object.
@@ -61,7 +61,8 @@ pub(super) enum PayloadDisposition {
 /// `Sender` are deliberately dropped: Cloudflare rejects the first two with
 /// `E_HEADER_NOT_ALLOWED` and stamps its own `Message-ID`. Cloudflare's
 /// `headers` field is a plain object, so repeated header names collapse to the
-/// last value, as they do for Resend.
+/// last value, as they do for Resend; see [`collect_headers`] for how names
+/// that differ only in case are folded.
 ///
 /// The `to`, `cc` and `bcc` lists may each be empty; the binding glue omits
 /// empty ones because the platform requires at least one of the three to be
@@ -94,11 +95,7 @@ pub(super) fn build_payload(message: &Message) -> Result<EmailPayload, Transport
         ));
     }
 
-    let headers = message
-        .headers()
-        .iter()
-        .map(|header| (header.name().to_owned(), header.value().to_owned()))
-        .collect();
+    let headers = collect_headers(message.headers());
     let attachments = message
         .attachments()
         .iter()
@@ -201,6 +198,27 @@ fn collect_addresses(addresses: &[Address]) -> Vec<PayloadAddress> {
         .flat_map(Address::mailboxes)
         .map(PayloadAddress::from)
         .collect()
+}
+
+/// Collapse headers into Cloudflare's single-occurrence map.
+///
+/// Header names are case-insensitive (RFC 5322 §2.2) and Cloudflare matches
+/// them that way, but its `headers` field is a plain object keyed by the exact
+/// string, so two spellings of one name would reach the platform as two
+/// properties with undefined precedence. Names are folded here instead: the
+/// first spelling seen is kept and the last value wins, which is the same
+/// last-wins rule an exact duplicate already gets.
+fn collect_headers(headers: &[Header]) -> BTreeMap<String, String> {
+    let mut collected: BTreeMap<String, String> = BTreeMap::new();
+    for header in headers {
+        let name = collected
+            .keys()
+            .find(|existing| existing.eq_ignore_ascii_case(header.name()))
+            .cloned()
+            .unwrap_or_else(|| header.name().to_owned());
+        collected.insert(name, header.value().to_owned());
+    }
+    collected
 }
 
 fn non_empty(value: &str) -> Option<String> {
@@ -521,6 +539,25 @@ mod tests {
             "<mailto:unsub@example.com>"
         );
         assert_eq!(payload.headers["In-Reply-To"], "<parent@example.com>");
+    }
+
+    #[test]
+    fn header_names_fold_case_insensitively_keeping_first_spelling_and_last_value() {
+        let message = Message::builder(Body::text("Body"))
+            .from_mailbox(mailbox("sender@example.com"))
+            .to(vec![Address::Mailbox(mailbox("recipient@example.com"))])
+            .add_header(Header::new("X-Campaign", "spring").expect("header validates"))
+            .add_header(Header::new("x-campaign", "summer").expect("header validates"))
+            .add_header(Header::new("X-CAMPAIGN", "autumn").expect("header validates"))
+            .add_header(Header::new("X-Other", "kept").expect("header validates"))
+            .build_outbound()
+            .expect("message should validate");
+
+        let payload = payload_for(&message);
+
+        assert_eq!(payload.headers.len(), 2, "headers: {:?}", payload.headers);
+        assert_eq!(payload.headers["X-Campaign"], "autumn");
+        assert_eq!(payload.headers["X-Other"], "kept");
     }
 
     #[test]

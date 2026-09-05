@@ -38,6 +38,12 @@ async fn send(env: &worker::Env) -> Result<(), Box<dyn std::error::Error>> {
 
 `CloudflareTransport::new` accepts an already-obtained `worker::SendEmail` when you want to share one binding handle across several transports or decorators. The transport is `Clone`, and `SendReport::provider` is always `PROVIDER` (`"cloudflare"`).
 
+### Binding restrictions
+
+A `[[send_email]]` binding can be restricted in `wrangler.toml` with `allowed_sender_addresses`, `allowed_destination_addresses`, or a single `destination_address`. The transport passes the message through unchanged and lets the platform enforce them: a recipient outside the allowlist fails with `E_RECIPIENT_NOT_ALLOWED`, and both it and the platform's sender codes (`E_SENDER_*`) are classified as `ErrorKind::Authorization`.
+
+The `destination_address` form lets JavaScript callers omit `to` and have the platform fill it in. That path is not reachable from this transport: a message with no `To`/`Cc`/`Bcc` mailboxes is rejected locally with `ErrorKind::Validation`, so always address the message explicitly.
+
 ## Feature Flags
 
 This crate has no Cargo features. Cloudflare's send API carries nothing per-send beyond what `email_message::Message` already models, so there is no provider-specific `TransportOption` type and nothing to serialize.
@@ -49,7 +55,7 @@ See the [crate documentation](https://docs.rs/email-transport-cloudflare/latest/
 - `From`, `To`, `Cc`, `Bcc` and `Reply-To` keep their display names; address groups are flattened. Cc-only and bcc-only messages are sent: the platform requires at least one of the three recipient lists, not `To` specifically. Cloudflare accepts a single `Reply-To`.
 - `Body::Text`, `Body::Html` and `Body::TextAndHtml` map to `text`/`html`. At least one must be non-empty.
 - Byte-backed attachments are sent as binary typed arrays with filename, content type and disposition. Cloudflare requires a filename on every attachment, so a regular attachment without one is named `attachment-N` (its 1-based position) and an inline one takes its content id. Inline attachments must carry a content id; a content id on a regular attachment is dropped because the platform accepts none there. Attachment references must be materialised first (for example with `email_attachment::AttachmentResolvingTransport`).
-- Custom headers (`X-*`, `List-Unsubscribe`, `In-Reply-To`, ...) are forwarded verbatim; repeated header names collapse to the last value.
+- Custom headers (`X-*`, `List-Unsubscribe`, `In-Reply-To`, ...) are forwarded verbatim. Names that repeat (compared case-insensitively) collapse to the last value under the first spelling seen, because Cloudflare's `headers` field admits each name once.
 - **`date`, `message_id` and `sender` set on the message are dropped.** Cloudflare rejects `Date` and `Message-ID` with `E_HEADER_NOT_ALLOWED` and stamps its own `Message-ID`, which comes back as `SendReport::provider_message_id`.
 
 `SendOptions::idempotency_key` and `SendOptions::timeout` are accepted and ignored: the binding has neither, and `Capabilities` says so.
