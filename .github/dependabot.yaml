@@ -10,15 +10,6 @@ updates:
         patterns:
           - "*"
 
-  - package-ecosystem: cargo
-    directory: /examples/cloudflare-worker
-    schedule:
-      interval: daily
-    groups:
-      cargo:
-        patterns:
-          - "*"
-
   - package-ecosystem: docker
     directory: /
     schedule:

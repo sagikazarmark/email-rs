@@ -144,7 +144,7 @@ jobs:
           cargo check -p email-kit --features transport-all-wasm --target wasm32-unknown-unknown --locked
 
       - name: Check Cloudflare Worker example
-        run: cargo check --target wasm32-unknown-unknown --locked
+        run: cargo check --target wasm32-unknown-unknown
         working-directory: examples/cloudflare-worker
 
   benchmarks:

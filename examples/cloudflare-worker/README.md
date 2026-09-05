@@ -75,5 +75,5 @@ If you are changing the transport, the platform-only behaviours worth confirming
 The crate compiles for the target without any Cloudflare credentials, which is what CI runs:
 
 ```sh
-cargo check --target wasm32-unknown-unknown --locked
+cargo check --target wasm32-unknown-unknown
 ```

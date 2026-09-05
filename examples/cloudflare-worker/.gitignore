@@ -1,3 +1,6 @@
 build/
 .wrangler/
 node_modules/
+
+# Resolved fresh on every build so workspace version bumps never invalidate it.
+Cargo.lock
