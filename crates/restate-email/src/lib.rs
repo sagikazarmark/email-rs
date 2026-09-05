@@ -57,9 +57,6 @@
 //! builds. Disable default features to consume only the SDK-free wire contract.
 //!
 //! - `service`: Restate worker service adapter and transport registry.
-//! - `transport-cloudflare`: exposes the Cloudflare Workers transport through
-//!   `email_kit::transport::cloudflare` for Worker-hosted services. It is a
-//!   passthrough: Cloudflare has no provider option type to register.
 //! - `transport-resend`: registers Resend provider options and enables the
 //!   Resend worker example.
 //! - `schemars`: JSON Schema implementations and examples for queue contracts.

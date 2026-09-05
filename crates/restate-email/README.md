@@ -31,7 +31,6 @@ Default features enable the Restate worker service adapter. The SDK-free wire
 contract remains available with default features disabled.
 
 - `service`: enables `Service`, the worker registry, and the `restate-sdk` dependency. This is enabled by default.
-- `transport-cloudflare`: exposes the Cloudflare Workers `send_email` transport through `email-kit`. A passthrough with no provider options to deserialize.
 - `transport-resend`: enables Resend provider-option deserialization through `email-kit`.
 - `schemars`: derives JSON Schema for public queue payload types and forwards schema support to the message and transport crates.
 - `rfc5322-string-compat`: accepts RFC 5322 string addresses in queue payloads and generated schemas in addition to typed address objects.

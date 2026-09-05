@@ -68,6 +68,12 @@ reserved for `SendReport::provider` and any future option type (ADR 0001).
   runtime-bound to Cloudflare Workers, and `transport-all` is the default feature of
   `restate-email-endpoint`; including it would compile `worker`, `wasm-bindgen`, `js-sys` and
   `web-sys` into every native consumer for a transport that can never send there.
+- **A `transport-cloudflare` passthrough on `restate-email` and a `transport-all-wasm` feature
+  on `restate-email-endpoint`.** Both existed briefly. Rejected: `restate-email`'s `Service` and
+  the endpoint binary depend on `restate-sdk`, which does not build for `wasm32`, so neither can
+  ever run inside a Worker. The features only pulled the `worker` dependency tree into native
+  builds where `send` returns `UnsupportedFeature`, and there was no provider option type for
+  them to register. `email-kit/transport-all-wasm` remains the aggregate for Worker-hosted code.
 
 ## Consequences
 
@@ -96,6 +102,5 @@ reserved for `SendReport::provider` and any future option type (ADR 0001).
   because `JsValue` is not reliably `Send + Sync` across wasm-bindgen configurations.
 - Repeated custom header names collapse to the last value because Cloudflare's `headers` field is
   a plain object, the same behaviour Resend has today.
-- `restate-email/transport-cloudflare` is a passthrough that enables `service` and forwards to
-  `email-kit/transport-cloudflare`. `restate-email` does not build for `wasm32` today, so no wasm
-  CI check covers that feature yet.
+- Neither `restate-email` nor `restate-email-endpoint` exposes a Cloudflare feature; the Restate
+  worker is native-only and cannot host the binding.

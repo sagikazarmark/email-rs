@@ -106,12 +106,10 @@ jobs:
             email-transport-resend/serde \
             email-transport-restate/schemars \
             email-transport-test/conformance \
-            restate-email/transport-cloudflare \
             restate-email/transport-resend \
             restate-email/rfc5322-string-compat \
             restate-email/schemars \
-            restate-email-endpoint/transport-all \
-            restate-email-endpoint/transport-all-wasm
+            restate-email-endpoint/transport-all
           do
             package="${package_feature%%/*}"
             feature="${package_feature#*/}"

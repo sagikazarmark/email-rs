@@ -40,11 +40,6 @@ transport-all = [
     "transport-lettre",
     "transport-resend",
 ]
-transport-all-wasm = [
-    "attachment-opendal",
-    "email-kit/transport-all-wasm",
-    "transport-resend",
-]
 transport-lettre = [
     "dep:email-transport-lettre",
     "email-kit/serde",
