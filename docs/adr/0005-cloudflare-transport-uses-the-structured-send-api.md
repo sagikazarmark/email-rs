@@ -77,7 +77,10 @@ reserved for `SendReport::provider` and any future option type (ADR 0001).
   `Return-Path`.
 - The crate compiles on native targets so `cargo test --workspace` stays green; `send` returns
   `ErrorKind::UnsupportedFeature` there instead of reaching wasm-bindgen's panicking extern
-  stubs. Message mapping and error classification are pure functions unit-tested on the host.
+  stubs. The native stub is load-bearing rather than cosmetic: `worker` and the glue would compile
+  off-wasm, but `send_with_builder` awaits a `!Send` `js_sys::JsFuture`, and `Transport::send`
+  requires a `Send` future on native, so without the stub the `Transport` impl could not exist
+  there. Message mapping and error classification are pure functions unit-tested on the host.
   `Transport::send` is a thin composition of those around the binding call and deliberately has
   no seam for a test double: the machinery to inject one (a sender trait, an intermediate error
   type, a duplicated binding handle) outweighed the value of unit-testing the wrapper. `send`
