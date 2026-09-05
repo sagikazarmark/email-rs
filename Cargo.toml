@@ -3,7 +3,7 @@ members = ["crates/*"]
 resolver = "3"
 
 [workspace.package]
-version = "0.9.0"
+version = "0.10.0"
 edition = "2024"
 rust-version = "1.92"
 license = "MIT OR Apache-2.0"
@@ -13,18 +13,18 @@ keywords = ["email", "smtp", "mail", "async", "mailer"]
 categories = ["email", "network-programming", "asynchronous"]
 
 [workspace.dependencies]
-email-attachment = { path = "crates/email-attachment", version = "0.9.0", default-features = false }
-email-attachment-opendal = { path = "crates/email-attachment-opendal", version = "0.9.0", default-features = false }
-email-kit = { path = "crates/email-kit", version = "0.9.0", default-features = false }
-email-message = { path = "crates/email-message", version = "0.9.0", default-features = false }
-email-message-wire = { path = "crates/email-message-wire", version = "0.9.0", default-features = false }
-email-transport = { path = "crates/email-transport", version = "0.9.0", default-features = false }
-email-transport-cloudflare = { path = "crates/email-transport-cloudflare", version = "0.9.0", default-features = false }
-email-transport-lettre = { path = "crates/email-transport-lettre", version = "0.9.0", default-features = false }
-email-transport-resend = { path = "crates/email-transport-resend", version = "0.9.0", default-features = false }
-email-transport-restate = { path = "crates/email-transport-restate", version = "0.9.0", default-features = false }
+email-attachment = { path = "crates/email-attachment", version = "0.10.0", default-features = false }
+email-attachment-opendal = { path = "crates/email-attachment-opendal", version = "0.10.0", default-features = false }
+email-kit = { path = "crates/email-kit", version = "0.10.0", default-features = false }
+email-message = { path = "crates/email-message", version = "0.10.0", default-features = false }
+email-message-wire = { path = "crates/email-message-wire", version = "0.10.0", default-features = false }
+email-transport = { path = "crates/email-transport", version = "0.10.0", default-features = false }
+email-transport-cloudflare = { path = "crates/email-transport-cloudflare", version = "0.10.0", default-features = false }
+email-transport-lettre = { path = "crates/email-transport-lettre", version = "0.10.0", default-features = false }
+email-transport-resend = { path = "crates/email-transport-resend", version = "0.10.0", default-features = false }
+email-transport-restate = { path = "crates/email-transport-restate", version = "0.10.0", default-features = false }
 email-transport-test = { path = "crates/email-transport-test", default-features = false }
-restate-email = { path = "crates/restate-email", version = "0.9.0", default-features = false }
+restate-email = { path = "crates/restate-email", version = "0.10.0", default-features = false }
 
 erased-serde = "0.4"
 futures-util = "0.3"
