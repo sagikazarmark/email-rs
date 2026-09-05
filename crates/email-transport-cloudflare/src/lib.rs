@@ -82,9 +82,9 @@
 //! |---|---|
 //! | `E_VALIDATION_ERROR`, `E_FIELD_MISSING`, `E_TOO_MANY_RECIPIENTS`, `E_TOO_MANY_ATTACHMENTS`, `E_CONTENT_TOO_LARGE`, `E_HEADER*` | `Validation` |
 //! | `E_SENDER_NOT_VERIFIED`, `E_SENDER_DOMAIN_NOT_AVAILABLE`, `E_RECIPIENT_NOT_ALLOWED`, `RCPT_NOT_ALLOWED` | `Authorization` |
-//! | `E_RECIPIENT_SUPPRESSED`, any unrecognised code | `PermanentProvider` |
+//! | `E_RECIPIENT_SUPPRESSED`, `E_DELIVERY_FAILED`, any unrecognised code | `PermanentProvider` |
 //! | `E_RATE_LIMIT_EXCEEDED`, `E_DAILY_LIMIT_EXCEEDED` | `RateLimited` |
-//! | `E_INTERNAL_SERVER_ERROR`, `E_DELIVERY_FAILED` | `TransientProvider` |
+//! | `E_INTERNAL_SERVER_ERROR` | `TransientProvider` |
 //! | JS error without a `code` (or with an empty one) | `Internal` |
 //!
 //! # Platform constraints

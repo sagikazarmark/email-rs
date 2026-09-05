@@ -99,6 +99,23 @@ reserved for `SendReport::provider` and any future option type (ADR 0001).
   read directly rather than through `worker::Error`, so the upstream `RCPT_NOT_ALLOWED` vs
   `E_RECIPIENT_NOT_ALLOWED` spelling is handled in one place. Unknown codes are
   `PermanentProvider`; a code-less JS error is `Internal`; `http_status` is never set.
+- `E_DELIVERY_FAILED` is `PermanentProvider`, not `TransientProvider`. Cloudflare documents the
+  code as "SMTP delivery failure, recipient server rejection", documents that soft bounces (4xx)
+  are retried by the platform with exponential backoff over an extended period while hard bounces
+  (5xx) are never retried and are added to the account suppression list, and on the REST API,
+  which shares the delivery pipeline, reports a first-attempt deferral as `queued` inside a
+  successful response rather than as an error. It does not document which delivery outcomes make
+  the binding throw. `send()` resolves within the request, so the binding can only report a
+  first-attempt verdict; the inference is that a first-attempt 4xx resolves with a `messageId`
+  and is retried platform-side, and that the thrown code is the recipient MTA's 5xx, the same
+  verdict the SMTP transport classifies as `PermanentProvider` and the one that produces
+  `E_RECIPIENT_SUPPRESSED`, itself `PermanentProvider`, on the next attempt. The classification
+  does not rest on that inference alone: the binding is one non-atomic call for every recipient
+  with no idempotency key, so a retry after a mixed outcome re-delivers to every recipient the
+  first attempt already reached, and `SendReport::accepted` cannot express the partial result.
+  Callers that want to retry regardless match `provider_error_code == "E_DELIVERY_FAILED"`. The
+  4xx-throws case has not been observed against the platform; `examples/cloudflare-worker` against
+  a controlled MTA that answers `450` then accepts is the probe that would settle it.
 - No JS value is attached as a `TransportError` source; code and message are carried instead,
   because `JsValue` is not reliably `Send + Sync` across wasm-bindgen configurations.
 - Repeated custom header names collapse to the last value because Cloudflare's `headers` field is

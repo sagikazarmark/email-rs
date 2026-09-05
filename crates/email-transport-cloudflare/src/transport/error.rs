@@ -39,9 +39,13 @@ fn classify(code: &str) -> ErrorKind {
         | "E_SENDER_DOMAIN_NOT_AVAILABLE"
         | "E_RECIPIENT_NOT_ALLOWED"
         | "RCPT_NOT_ALLOWED" => ErrorKind::Authorization,
-        "E_RECIPIENT_SUPPRESSED" => ErrorKind::PermanentProvider,
+        // `E_DELIVERY_FAILED` is the recipient MTA's verdict on a first
+        // attempt; the platform retries soft bounces itself, so what surfaces
+        // is a hard bounce, and the binding is a non-atomic multi-recipient
+        // call with no idempotency key. See ADR 0005.
+        "E_RECIPIENT_SUPPRESSED" | "E_DELIVERY_FAILED" => ErrorKind::PermanentProvider,
         "E_RATE_LIMIT_EXCEEDED" | "E_DAILY_LIMIT_EXCEEDED" => ErrorKind::RateLimited,
-        "E_INTERNAL_SERVER_ERROR" | "E_DELIVERY_FAILED" => ErrorKind::TransientProvider,
+        "E_INTERNAL_SERVER_ERROR" => ErrorKind::TransientProvider,
         // `E_HEADER_*` and `E_HEADERS_*` are all header validation failures.
         _ if code.starts_with("E_HEADER") => ErrorKind::Validation,
         _ => ErrorKind::PermanentProvider,
@@ -89,7 +93,7 @@ mod tests {
                 ErrorKind::TransientProvider,
                 true,
             ),
-            ("E_DELIVERY_FAILED", ErrorKind::TransientProvider, true),
+            ("E_DELIVERY_FAILED", ErrorKind::PermanentProvider, false),
             ("E_SOMETHING_NEW", ErrorKind::PermanentProvider, false),
         ];
 
