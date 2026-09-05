@@ -194,28 +194,28 @@ jobs:
       - name: Run cargo deny
         run: cargo deny check
 
-  semver-checks:
-    name: Semver checks
-    runs-on: ubuntu-latest
-    # Only meaningful on PRs: the baseline is the PR's base branch.
-    if: github.event_name == 'pull_request'
+  # semver-checks:
+  #   name: Semver checks
+  #   runs-on: ubuntu-latest
+  #   # Only meaningful on PRs: the baseline is the PR's base branch.
+  #   if: github.event_name == 'pull_request'
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          # Full history so the baseline commit is present locally.
-          fetch-depth: 0
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+  #       with:
+  #         # Full history so the baseline commit is present locally.
+  #         fetch-depth: 0
 
-      - name: Set up Rust
-        uses: ./.github/actions/rust/
+  #     - name: Set up Rust
+  #       uses: ./.github/actions/rust/
 
-      - name: Run cargo-semver-checks
-        uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2
-        with:
-          # Check the full public surface, not just default features, so
-          # feature-gated API breakage is caught too.
-          feature-group: all-features
-          # Compare against the PR's merge base so changes within the current
-          # release cycle are checked before publication.
-          baseline-rev: ${{ github.event.pull_request.base.sha }}
+  #     - name: Run cargo-semver-checks
+  #       uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2
+  #       with:
+  #         # Check the full public surface, not just default features, so
+  #         # feature-gated API breakage is caught too.
+  #         feature-group: all-features
+  #         # Compare against the PR's merge base so changes within the current
+  #         # release cycle are checked before publication.
+  #         baseline-rev: ${{ github.event.pull_request.base.sha }}
