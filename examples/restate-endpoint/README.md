@@ -70,8 +70,8 @@ The response reports the delivery, e.g. `{"report":{"provider":"smtp","accepted"
 
 > [!TIP]
 > The same send-and-verify flow (without the RustFS attachment part) runs automatically in CI against
-> Restate and Mailpit as Dagger services: `dagger check end-to-end:send`. See
-> [`.dagger/modules/end-to-end`](../../.dagger/modules/end-to-end).
+> Restate and Mailpit as Dagger services: `dagger check email:test-restate-endpoint`. See
+> [`dagger.dang`](../../dagger.dang) and [`tests/restate-endpoint`](../../tests/restate-endpoint).
 
 ### 3. Check the delivery in Mailpit
 
