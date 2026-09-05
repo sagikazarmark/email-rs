@@ -396,7 +396,7 @@ impl std::fmt::Debug for RestateTransportBuilder {
 /// Serializes exactly like [`restate_email::SendRequest`] without cloning the
 /// message. `options.idempotency_key` stays in the body so the worker can
 /// forward it to the provider; the same key is also sent as Restate's
-/// `idempotency-key` header (see ADR 0004).
+/// `idempotency-key` header so it is honored at every hop.
 #[derive(Serialize)]
 #[serde(rename = "SendRequest")]
 struct IngressSendRequest<'a> {

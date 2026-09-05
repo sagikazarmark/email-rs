@@ -63,6 +63,7 @@ jobs:
             email-message \
             email-message-wire \
             email-transport \
+            email-transport-cloudflare \
             email-transport-lettre \
             email-transport-resend \
             email-transport-restate \
@@ -87,6 +88,7 @@ jobs:
             email-kit/tracing \
             email-kit/transport-all \
             email-kit/transport-all-wasm \
+            email-kit/transport-cloudflare \
             email-kit/transport-lettre \
             email-kit/transport-resend \
             email-kit/wire \
@@ -107,8 +109,7 @@ jobs:
             restate-email/transport-resend \
             restate-email/rfc5322-string-compat \
             restate-email/schemars \
-            restate-email-endpoint/transport-all \
-            restate-email-endpoint/transport-all-wasm
+            restate-email-endpoint/transport-all
           do
             package="${package_feature%%/*}"
             feature="${package_feature#*/}"
@@ -137,9 +138,14 @@ jobs:
       - name: Check Wasm packages
         run: |
           cargo check -p email-message-wire --target wasm32-unknown-unknown --locked
+          cargo check -p email-transport-cloudflare --target wasm32-unknown-unknown --locked
           cargo check -p email-transport-resend --target wasm32-unknown-unknown --locked
           cargo check -p email-transport-restate --target wasm32-unknown-unknown --locked
           cargo check -p email-kit --features transport-all-wasm --target wasm32-unknown-unknown --locked
+
+      - name: Check Cloudflare Worker example
+        run: cargo check --target wasm32-unknown-unknown --locked
+        working-directory: examples/cloudflare-worker
 
   benchmarks:
     name: Benchmarks

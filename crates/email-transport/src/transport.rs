@@ -817,7 +817,7 @@ pub fn accepted_recipient_emails(message: &Message) -> Vec<EmailAddress> {
         .collect()
 }
 
-/// Returns the [`SendReport::accepted`] list per the documented spec.
+/// Returns the [`SendReport::accepted`] list for a structured adapter.
 ///
 /// Yields `options.envelope.rcpt_to().to_vec()` only when the caller supplied
 /// an envelope override and `capabilities.custom_envelope` is true; otherwise

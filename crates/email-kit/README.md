@@ -5,7 +5,7 @@
 
 **A convenient facade for the email-rs crate family.**
 
-`email-kit` re-exports `email-attachment` as `email_kit::attachment`, `email-message` as `email_kit::message`, and `email-transport` as `email_kit::transport`. Optional features expose the OpenDAL resolver as `email_kit::attachment::opendal`, `email-message-wire` as `email_kit::wire`, the Lettre SMTP adapter as `email_kit::transport::lettre`, and the Resend adapter as `email_kit::transport::resend`.
+`email-kit` re-exports `email-attachment` as `email_kit::attachment`, `email-message` as `email_kit::message`, and `email-transport` as `email_kit::transport`. Optional features expose the OpenDAL resolver as `email_kit::attachment::opendal`, `email-message-wire` as `email_kit::wire`, the Cloudflare Workers adapter as `email_kit::transport::cloudflare`, the Lettre SMTP adapter as `email_kit::transport::lettre`, and the Resend adapter as `email_kit::transport::resend`.
 
 ## Quick Start
 
@@ -30,13 +30,14 @@ Use `email_kit::prelude::*` for common message types and transport traits. When 
 - `arbitrary`: enables property-test generation support for message types.
 - `attachment-opendal`: exposes OpenDAL attachment resolution through `email_kit::attachment::opendal`.
 - `tracing`: enables transport tracing instrumentation.
-- `transport-all`: enables every transport currently provided by `email-kit`.
+- `transport-all`: enables every transport that runs on native targets.
 - `transport-all-wasm`: enables every transport that supports `wasm32-unknown-unknown`.
+- `transport-cloudflare`: exposes the Cloudflare Workers `send_email` transport through `email_kit::transport::cloudflare`.
 - `transport-lettre`: exposes SMTP support through `email_kit::transport::lettre`.
 - `transport-resend`: exposes Resend support through `email_kit::transport::resend`.
 - `wire`: exposes RFC822 and MIME parsing and rendering through `email_kit::wire`.
 
-The Lettre adapter, and therefore `transport-all`, does not support `wasm32-unknown-unknown`. Use `transport-all-wasm` (or `transport-resend` directly) when targeting Wasm.
+The Lettre adapter, and therefore `transport-all`, does not support `wasm32-unknown-unknown`. Use `transport-all-wasm` (or `transport-resend` / `transport-cloudflare` directly) when targeting Wasm. The Cloudflare adapter only sends from inside a Cloudflare Worker and is excluded from `transport-all` so native binaries do not compile the `worker` dependency tree.
 
 See the [crate documentation](https://docs.rs/email-kit/latest/email_kit/) for API and feature semantics and the [generated feature graph](https://docs.rs/crate/email-kit/latest/features) for activation details.
 

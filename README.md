@@ -13,7 +13,7 @@
 - **Attachment adapters:** resolve attachment paths from any OpenDAL-backed storage service.
 - **Transport abstraction:** send structured messages or rendered RFC822 through a common transport contract.
 - **Wire support:** parse and render RFC822 and MIME messages.
-- **Provider adapters:** deliver through SMTP with Lettre or through Resend.
+- **Provider adapters:** deliver through SMTP with Lettre, through Resend, or through a Cloudflare Workers `send_email` binding.
 - **Durable workers:** expose email delivery through Restate service contracts and a runnable endpoint.
 
 ## Workspace Crates
@@ -24,6 +24,7 @@
 - [`email-message`](crates/email-message): typed outbound message and address model.
 - [`email-message-wire`](crates/email-message-wire): RFC822 and MIME parsing and rendering.
 - [`email-transport`](crates/email-transport): provider-neutral transport traits and send-time options.
+- [`email-transport-cloudflare`](crates/email-transport-cloudflare): Cloudflare Workers `send_email` transport adapter.
 - [`email-transport-lettre`](crates/email-transport-lettre): Lettre SMTP transport adapter.
 - [`email-transport-resend`](crates/email-transport-resend): Resend transport adapter.
 - [`email-transport-restate`](crates/email-transport-restate): Restate ingress transport adapter.
@@ -34,6 +35,7 @@
 ## Examples
 
 - [`examples/restate-endpoint`](examples/restate-endpoint): Docker Compose stack running the Restate email endpoint against Restate, a Mailpit mock SMTP server, and RustFS-backed attachment resolution.
+- [`examples/cloudflare-worker`](examples/cloudflare-worker): Cloudflare Worker sending through the `send_email` binding with `email-transport-cloudflare`; the runtime smoke test for the crate's `wasm32` glue.
 
 ## Development
 
