@@ -68,6 +68,14 @@ own with:
 dagger check email:test-restate-endpoint
 ```
 
+It also builds the [Cloudflare Worker example](examples/cloudflare-worker) into a deployable bundle with
+[`worker-build`](https://github.com/cloudflare/workers-rs/tree/main/worker-build), verifying that the `wasm32-unknown-unknown`
+glue compiles end to end:
+
+```bash
+dagger check email:build-cloudflare-worker-example
+```
+
 ## License
 
 Licensed under either of

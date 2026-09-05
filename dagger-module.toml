@@ -14,3 +14,7 @@ source = "github.com/sagikazarmark/daggerverse-beta/restate"
 [[dependencies]]
 name = "rust"
 source = "github.com/sagikazarmark/daggerverse-beta/rust"
+
+[[dependencies]]
+name = "worker-build"
+source = "github.com/sagikazarmark/daggerverse-beta/worker-build"

@@ -77,3 +77,10 @@ The crate compiles for the target without any Cloudflare credentials, which is w
 ```sh
 cargo check --target wasm32-unknown-unknown
 ```
+
+The root Dagger module goes one step further and runs the full `worker-build` pipeline
+(wasm-bindgen, wasm-opt, esbuild) to produce a deployable bundle:
+
+```sh
+dagger check email:build-cloudflare-worker-example
+```

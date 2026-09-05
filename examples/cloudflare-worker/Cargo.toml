@@ -25,11 +25,14 @@ unsafe_code = "forbid"
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 
+# No `strip`: `strip = true` also drops the `target_features` custom section,
+# without which wasm-bindgen cannot see `reference-types` and fails to generate
+# its `#[wasm_bindgen(catch)]` wrappers ("externref table required for catch
+# wrappers"). worker-build's `wasm-opt` pass strips the final binary anyway.
 [profile.release]
 codegen-units = 1
 lto = true
 opt-level = "s"
-strip = true
 
 # Standalone so `cargo test --workspace` never builds a `cdylib` Worker on the
 # host; CI checks it for `wasm32-unknown-unknown` separately.

@@ -1,5 +1,6 @@
 type Email {
   let rust: Rust!
+  let workerBuild: WorkerBuild!
   let restate: Restate!
   let hurl: Hurl!
   let mailpit: Service!
@@ -28,6 +29,19 @@ type Email {
     hurlVersion: String! = "8.0.1",
   ) {
     self.rust = Dagger.rust(ws: ws, version: rustVersion)
+
+    # Installing worker-build compiles openssl-sys, which needs pkg-config and the
+    # OpenSSL headers that the slim Rust images do not ship.
+    self.workerBuild = Dagger.workerBuild(
+      ws: ws.withWorkdir("examples/cloudflare-worker"),
+      container: Dagger
+        .container
+        .from("rust:" + rustVersion)
+        .withEnvVariable("DEBIAN_FRONTEND", "noninteractive")
+        .withExec(["apt-get", "update"])
+        .withExec(["apt-get", "install", "-y", "--no-install-recommends", "pkg-config", "libssl-dev"]),
+    )
+
     self.restate = Dagger.restate(version: restateVersion)
     self.mailpit = mailpitContainer
       .withExposedPort(1025, description: "smtp")
@@ -36,6 +50,16 @@ type Email {
     self.hurl = Dagger.hurl(version: hurlVersion)
 
     self
+  }
+
+  """
+  Build the Cloudflare Worker example with worker-build.
+
+  The example is a standalone crate depending on the workspace crates by path,
+  so building it verifies that the `wasm32-unknown-unknown` glue compiles.
+  """
+  buildCloudflareWorkerExample: Directory! @check {
+    self.workerBuild.build
   }
 
   """
