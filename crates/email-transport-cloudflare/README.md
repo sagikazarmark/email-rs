@@ -74,6 +74,8 @@ Limits at the time of writing; none are enforced client-side, the platform's err
 
 `wrangler dev` without [remote bindings](https://developers.cloudflare.com/workers/local-development/#remote-bindings) cannot serialize binary attachment content. Use `remote = true` on the binding when testing attachments locally.
 
+A remote binding is the production Email Service: every send from `wrangler dev` is a real delivery that counts against your quota. Point test runs at addresses you control.
+
 ## Platform Support
 
 The binding only functions on `wasm32-unknown-unknown` inside `workerd`. The crate compiles on native targets so workspace tests run everywhere, but `Transport::send` returns an `UnsupportedFeature` error there instead of panicking inside wasm-bindgen stubs.

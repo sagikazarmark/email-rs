@@ -12,7 +12,8 @@ command = "cargo install -q worker-build && worker-build --release"
 # https://developers.cloudflare.com/email-service/configuration/send-bindings/
 #
 # `wrangler dev` cannot serialise binary attachment content through the local
-# simulator; set `remote = true` to exercise `?attachment` locally.
+# simulator; set `remote = true` to exercise `?attachment` locally. A remote
+# binding is the production Email Service: every send is a real delivery.
 [[send_email]]
 name = "EMAIL"
 # remote = true

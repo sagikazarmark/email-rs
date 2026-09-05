@@ -29,7 +29,9 @@ Cloudflare error code, retryable) with a matching HTTP status on failure.
 1. Set `EMAIL_FROM` in [`wrangler.toml`](wrangler.toml) to an address on your onboarded domain.
 
 2. Run locally against the real binding. Remote bindings are needed for the `?attachment` path;
-   without them the local simulator cannot serialise binary attachment content:
+   without them the local simulator cannot serialise binary attachment content. Note that a remote
+   binding is the production Email Service: every send below is a real delivery that counts
+   against your quota, so use recipients you control.
 
    ```sh
    wrangler dev --remote
