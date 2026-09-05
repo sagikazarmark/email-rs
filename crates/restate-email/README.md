@@ -43,7 +43,7 @@ See the [crate documentation](https://docs.rs/restate-email/latest/restate_email
 - `SendRequestSeed`: registry-driven deserializer for queued requests and provider-specific options.
 - `TransportResolver`: resolves a transport key to a configured `Transport`.
 - `StaticTransportRegistry`: owned registry for fixed-key worker setups.
-- `Service`: Restate service wrapper that hydrates provider options and dispatches inside a named, journaled `ctx.run` action.
+- `Service`: Restate service wrapper that hydrates transport options and dispatches inside a named, journaled `ctx.run` action.
 - `SendResponse`: serializable response containing the transport `SendReport`.
 - `InvocationMode` / `RestateSendOptions`: how far a Restate-backed send is followed (`Queued` or `Sent`), as a transport default and as a per-send `"restate"` transport option.
 

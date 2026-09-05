@@ -97,7 +97,7 @@ impl Service {
     ///
     /// Returns [`HandlerError`] when the request cannot be decoded, the
     /// transport key cannot be resolved, or the selected transport fails.
-    /// Unregistered provider option keys are ignored during request decoding.
+    /// Unregistered transport option keys are ignored during request decoding.
     #[handler]
     async fn send(
         &self,

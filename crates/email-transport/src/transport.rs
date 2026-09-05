@@ -343,7 +343,7 @@ pub enum StructuredSendCapability {
     /// Structured messages are not accepted.
     #[default]
     Unsupported,
-    /// Structured messages are accepted without mandatory provider options.
+    /// Structured messages are accepted without mandatory transport options.
     Supported,
     /// Structured messages require a provider-specific [`TransportOption`].
     RequiresTransportOptions,
@@ -505,7 +505,8 @@ impl std::fmt::Display for ErrorKind {
 #[derive(Debug, thiserror::Error)]
 #[error("{kind}: {message}")]
 #[non_exhaustive]
-/// Transport failure with canonical classification and provider metadata.
+/// Transport failure with canonical classification and provider-specific
+/// diagnostic details.
 pub struct TransportError {
     /// Canonical failure category used for retry decisions.
     pub kind: ErrorKind,
@@ -531,7 +532,7 @@ pub struct TransportError {
 }
 
 impl TransportError {
-    /// Create an error with no provider metadata or source.
+    /// Create an error with no provider-specific diagnostic details or source.
     #[must_use]
     pub fn new(kind: ErrorKind, message: impl Into<String>) -> Self {
         Self {

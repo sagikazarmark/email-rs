@@ -42,7 +42,7 @@
 //! # Example program
 //!
 //! The canonical [`resend_send` example](https://github.com/sagikazarmark/email-rs/blob/main/crates/email-transport-resend/examples/resend_send.rs)
-//! constructs a validated message, applies idempotency and provider options,
+//! constructs a validated message, applies idempotency and transport options,
 //! sends it with [`ResendTransport`], and prints the resulting report. It reads
 //! credentials and the recipient from `RESEND_API_KEY` and `RESEND_TO`.
 //!

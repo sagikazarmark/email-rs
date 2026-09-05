@@ -39,7 +39,7 @@ pub struct SendRequest {
 
 /// Registry-driven deserializer for [`SendRequest`].
 ///
-/// Unknown provider option keys are ignored so a queued payload can carry
+/// Unknown transport option keys are ignored so a queued payload can carry
 /// options for transports that are not installed in a particular worker.
 pub struct SendRequestSeed<'a> {
     registry: &'a TransportOptionRegistry,

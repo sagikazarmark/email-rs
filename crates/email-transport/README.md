@@ -5,7 +5,7 @@
 
 **Provider-neutral transport contracts for outbound email delivery.**
 
-`Transport` accepts validated structured messages, while `RawTransport` accepts an explicit envelope and pre-rendered RFC822 bytes. `SendOptions` carries per-send metadata such as envelope overrides, timeouts, idempotency keys, correlation IDs, and typed provider options without coupling the core API to a provider.
+`Transport` accepts validated structured messages, while `RawTransport` accepts an explicit envelope and pre-rendered RFC822 bytes. `SendOptions` carries per-send metadata such as envelope overrides, timeouts, idempotency keys, correlation IDs, and typed transport options without coupling the core API to a provider.
 
 The crate also defines transport capabilities, send reports, structured error kinds, adapter helpers, and `TracingTransport` when tracing support is enabled.
 
