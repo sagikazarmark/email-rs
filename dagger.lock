@@ -5,7 +5,7 @@
 ["","git-latest",["https://github.com/sagikazarmark/daggerverse-beta"],"refs/heads/main",[["tagPrefix","rust"]]]
 ["","git-latest",["https://github.com/sagikazarmark/daggerverse-beta"],"refs/heads/main",[["tagPrefix","worker-build"]]]
 ["","git-sha",["https://github.com/rustsec/advisory-db.git","HEAD"],"5a0ebedfe8bdd2e295b171f4162f8c977bcad9a5"]
-["","git-sha",["https://github.com/sagikazarmark/daggerverse-beta","refs/heads/main"],"7d6b095e5b08b38831ac46b38d0af21c2f71fd68"]
+["","git-sha",["https://github.com/sagikazarmark/daggerverse-beta","refs/heads/main"],"d2330bf872be4c1ab881e4e0194d3e659ce293a5"]
 ["","oci-latest",["docker.io/alpine/curl"],"8.22.0"]
 ["","oci-sha",["docker.io/alpine/curl:8.21.0"],"sha256:a1c44bab54d88e18ea9a6a4ecefab7f2d230b968567b78960fcaff8d51b7f067"]
 ["","oci-sha",["docker.io/alpine/curl:8.22.0"],"sha256:b9c839d47281f6d8ed20138935ca15fea9a1851c5855a04a500caf759bd3ccc4"]
