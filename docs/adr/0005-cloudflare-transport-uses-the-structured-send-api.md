@@ -3,7 +3,7 @@
 `CloudflareTransport` maps an `email_message::Message` to Cloudflare's structured `send()` API
 (`EmailMessageBuilder`) and dispatches it through the `worker` crate's `SendEmail` binding. It
 builds the JS object by hand from a plain-Rust payload, forwards only the message's custom
-headers, exposes no provider option type, and is surfaced through `email-kit` under
+headers, exposes no transport option type, and is surfaced through `email-kit` under
 `transport-all-wasm` only.
 
 The structured API is the one path that carries what the kernel models: a single call delivers to
@@ -38,7 +38,7 @@ documented rather than validated: a caller who sets `message_id` on a message de
 several transports should not have the Cloudflare hop fail because Resend would have accepted it.
 
 There is no `CloudflareSendOptions`. The send API carries nothing per-send beyond what
-`email_message::Message` already models, so a provider option type would be an empty struct with
+`email_message::Message` already models, so a transport option type would be an empty struct with
 a `serde` feature to forward and a registry entry to maintain. The `"cloudflare"` provider key is
 reserved for `SendReport::provider` and any future option type (ADR 0001).
 
@@ -72,7 +72,7 @@ reserved for `SendReport::provider` and any future option type (ADR 0001).
   on `restate-email-endpoint`.** Both existed briefly. Rejected: `restate-email`'s `Service` and
   the endpoint binary depend on `restate-sdk`, which does not build for `wasm32`, so neither can
   ever run inside a Worker. The features only pulled the `worker` dependency tree into native
-  builds where `send` returns `UnsupportedFeature`, and there was no provider option type for
+  builds where `send` returns `UnsupportedFeature`, and there was no transport option type for
   them to register. `email-kit/transport-all-wasm` remains the aggregate for Worker-hosted code.
 
 ## Consequences

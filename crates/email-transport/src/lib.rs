@@ -49,7 +49,7 @@
 //! The default feature set enables `serde`.
 //!
 //! - `serde`: serialization for send metadata plus registry-driven
-//!   deserialization of provider options.
+//!   deserialization of transport options.
 //! - `schemars`: JSON Schema implementations for public wire types.
 //! - `tracing`: the PII-conscious `TracingTransport` wrapper.
 //!

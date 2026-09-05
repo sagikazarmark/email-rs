@@ -89,7 +89,7 @@ impl SendOptions {
         self
     }
 
-    /// Insert or replace the provider option value of type `T`.
+    /// Insert or replace the transport option value of type `T`.
     ///
     /// Slots are keyed by type, exactly like [`TransportOptions::insert`].
     /// Unlike [`Self::with_transport_options`], this keeps options of other
@@ -104,7 +104,7 @@ impl SendOptions {
         self
     }
 
-    /// Insert or replace the provider option value of type `T`.
+    /// Insert or replace the transport option value of type `T`.
     ///
     /// Slots are keyed by type, exactly like [`TransportOptions::insert`].
     /// Unlike [`Self::with_transport_options`], this keeps options of other
@@ -170,7 +170,7 @@ crate::string_newtype! {
 
 /// Marker for typed provider-specific send options.
 ///
-/// Adapters define their own per-provider option structs and implement this
+/// Adapters define their own transport option structs and implement this
 /// trait so the typed slot in [`TransportOptions`] can store them keyed by
 /// [`TypeId`] for in-process lookup.
 ///
@@ -476,7 +476,7 @@ impl TransportOptionRegistry {
         Self::default()
     }
 
-    /// Register a concrete provider option type by its
+    /// Register a concrete transport option type by its
     /// [`TransportOption::provider_key`].
     ///
     /// # Errors
@@ -510,7 +510,7 @@ impl TransportOptionRegistry {
         Ok(())
     }
 
-    /// Return whether a provider option decoder is registered for `provider_key`.
+    /// Return whether a transport option decoder is registered for `provider_key`.
     #[must_use]
     pub fn contains_provider_key(&self, provider_key: &str) -> bool {
         self.decoders.contains_key(provider_key)
@@ -559,7 +559,7 @@ impl TransportOptionRegistry {
     /// # Errors
     ///
     /// Returns the deserializer's native error when the payload shape is
-    /// malformed, a registered provider option fails to deserialize, or
+    /// malformed, a registered transport option fails to deserialize, or
     /// `transport_options` contains an unregistered provider key.
     pub fn deserialize_send_options<'de, D>(&self, deserializer: D) -> Result<SendOptions, D::Error>
     where
@@ -569,7 +569,7 @@ impl TransportOptionRegistry {
         self.send_options_seed().deserialize(deserializer)
     }
 
-    /// Deserialize a single provider option for `provider_key` and overwrite the
+    /// Deserialize a single transport option for `provider_key` and overwrite the
     /// matching typed slot in `options` when the provider key is registered.
     ///
     /// This is the per-key dispatch primitive that callers iterating over a

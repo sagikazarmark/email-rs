@@ -54,7 +54,7 @@ let options = SendOptions::new().with_transport_option(
 
 ## Example
 
-The canonical [`resend_send` example](examples/resend_send.rs) demonstrates credentials, idempotency, provider options, and the resulting send report:
+The canonical [`resend_send` example](examples/resend_send.rs) demonstrates credentials, idempotency, transport options, and the resulting send report:
 
 ```sh
 RESEND_API_KEY=... RESEND_TO=you@example.com cargo run -p email-transport-resend --example resend_send

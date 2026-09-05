@@ -57,7 +57,7 @@
 //! builds. Disable default features to consume only the SDK-free wire contract.
 //!
 //! - `service`: Restate worker service adapter and transport registry.
-//! - `transport-resend`: registers Resend provider options and enables the
+//! - `transport-resend`: registers Resend transport options and enables the
 //!   Resend worker example.
 //! - `schemars`: JSON Schema implementations and examples for queue contracts.
 //! - `rfc5322-string-compat`: accepts the legacy RFC 5322 string address shape

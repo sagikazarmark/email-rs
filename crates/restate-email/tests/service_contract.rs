@@ -386,7 +386,7 @@ async fn unknown_transport_option_keys_are_ignored() {
     service
         .send_request(&request)
         .await
-        .expect("unknown provider options should not prevent delivery");
+        .expect("unknown transport options should not prevent delivery");
 
     let sends = transport.take_sends();
     assert_eq!(sends.len(), 1);

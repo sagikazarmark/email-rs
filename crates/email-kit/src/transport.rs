@@ -11,7 +11,7 @@ pub use email_transport_lettre as lettre;
 #[cfg(feature = "transport-resend")]
 pub use email_transport_resend as resend;
 
-/// Build a [`TransportOptionRegistry`] preloaded with every provider option
+/// Build a [`TransportOptionRegistry`] preloaded with every transport option
 /// type for the adapter features compiled into this crate.
 ///
 /// The registry is what
@@ -54,7 +54,7 @@ pub fn transport_option_registry() -> TransportOptionRegistry {
     registry
 }
 
-/// Register every provider option type for the adapter features compiled into
+/// Register every transport option type for the adapter features compiled into
 /// this crate into `registry`.
 ///
 /// Use this when the host application keeps its own
