@@ -44,7 +44,7 @@ thiserror = { workspace = true }
 http = "1"
 http-body-util = "0.1"
 prost = "0.14"
-restate-sdk-shared-core = "7.0"
+restate-sdk-shared-core = "8.1"
 tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
 
 [lints]
